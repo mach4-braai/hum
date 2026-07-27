@@ -14,7 +14,6 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
-// unreachableSocket points the client at a path where nothing listens.
 func unreachableSocket(t *testing.T) string {
 	t.Helper()
 	socket := filepath.Join(t.TempDir(), "absent.sock")
@@ -86,8 +85,6 @@ func TestRunWithoutArgumentsPrintsUsageToStderrAndExitsTwo(t *testing.T) {
 	}
 }
 
-// The help text is the only place the exit codes are documented, so a caller
-// scripting against them can discover the contract.
 func TestHelpListsEveryDocumentedCommandAndExitCode(t *testing.T) {
 	for _, args := range [][]string{nil, {"help"}} {
 		var stdout, stderr bytes.Buffer
@@ -157,8 +154,6 @@ func TestTrailingOperandsAreRejected(t *testing.T) {
 	}
 }
 
-// Every command that talks to the daemon must report unreachability as 3, not
-// as a generic failure: a CI script uses the difference to skip Hum entirely.
 func TestCommandsExitThreeWhenTheDaemonIsAbsent(t *testing.T) {
 	for _, args := range [][]string{
 		{"ping"}, {"status"}, {"mute"}, {"stop"},
@@ -257,7 +252,6 @@ func TestDaemonFailureExitsOne(t *testing.T) {
 	}
 }
 
-// A failure with no message must still say something actionable.
 func TestSilentDaemonFailureStillExplainsItself(t *testing.T) {
 	serveOne(t, `{"ok":false}`+"\n")
 	var stdout, stderr bytes.Buffer
@@ -333,8 +327,6 @@ func TestMainExitsWithRunCodeAndWritesUsageToStderr(t *testing.T) {
 	}
 }
 
-// Flags read naturally on either side of the command, so neither spelling is a
-// usage error the user has to discover.
 func TestFlagsAreAcceptedAfterTheCommand(t *testing.T) {
 	for _, args := range [][]string{
 		{"--json", "ping"},
@@ -367,7 +359,6 @@ func TestTimeoutAfterTheCommandIsParsed(t *testing.T) {
 	}
 }
 
-// The multiword forms take flags in every position a user might type them.
 func TestThemeAcceptsFlagsAroundItsSubcommand(t *testing.T) {
 	for _, args := range [][]string{
 		{"theme", "--json", "list"},
@@ -410,8 +401,6 @@ func TestUnknownFlagsAreUsageErrors(t *testing.T) {
 	}
 }
 
-// An envelope that cannot be marshalled must never reach the socket, and the
-// caller must not be told the request succeeded.
 func TestSendRefusesAnUnmarshallableRequest(t *testing.T) {
 	await := serveOne(t, `{"ok":true}`+"\n")
 	var stdout, stderr bytes.Buffer
@@ -426,8 +415,6 @@ func TestSendRefusesAnUnmarshallableRequest(t *testing.T) {
 	}
 }
 
-// Valid JSON that is not a response object: the decode of the envelope fails
-// after the raw message has already been read.
 func TestNonObjectResponseIsUnreachable(t *testing.T) {
 	serveOne(t, "42\n")
 	var stdout, stderr bytes.Buffer

@@ -48,8 +48,6 @@ func TestRequestDecodesTheCommandForm(t *testing.T) {
 	}
 }
 
-// Decoding stays separate from validation so a caller can answer a malformed
-// message and a contract breach differently.
 func TestRequestDecodingDoesNotValidate(t *testing.T) {
 	var got Request
 	if err := json.Unmarshal([]byte(`{"event":"session.started","id":"1","command":"status"}`), &got); err != nil {

@@ -1,5 +1,9 @@
-// Package protocol defines Hum's wire contract: generic work-session events and
-// their framing. Nothing here may name an AI tool, agent framework or client.
+// Package protocol defines Hum's wire contract: newline-delimited JSON for
+// work-session events and daemon control. It is public, so shapes change
+// additively or not at all, and nothing here may name an AI tool, agent
+// framework, or client.
+//
+// The contract is specified in docs/protocol.md.
 package protocol
 
 import (
@@ -7,7 +11,6 @@ import (
 	"fmt"
 )
 
-// EventType identifies a work-session lifecycle transition. The set is closed.
 type EventType string
 
 const (
@@ -18,8 +21,6 @@ const (
 	SessionCancelled EventType = "session.cancelled"
 )
 
-// Event is a single lifecycle message about one work session. Every field except
-// Event and ID is omitempty, so a message carries only what the client knows.
 type Event struct {
 	Event     EventType         `json:"event"`
 	ID        string            `json:"id"`
@@ -29,15 +30,10 @@ type Event struct {
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
-// MaxIDLen bounds a session id in bytes, not runes: bytes are what cap wire size
-// and retained memory.
 const MaxIDLen = 128
 
-// ErrUnknownEvent reports an event type outside the closed set. Callers match it
-// with errors.Is to tell a newer client from a malformed message.
 var ErrUnknownEvent = errors.New("unknown event type")
 
-// Known reports whether t is one of the five documented event types.
 func (t EventType) Known() bool {
 	switch t {
 	case SessionStarted, SessionUpdated, SessionCompleted, SessionFailed, SessionCancelled:
@@ -46,8 +42,8 @@ func (t EventType) Known() bool {
 	return false
 }
 
-// Validate checks an event against the wire contract. It is a trust boundary: an
-// empty id would become an unaddressable session whose drone never stops.
+// Trust boundary: an empty id would become an unaddressable session whose drone
+// never stops.
 func (e Event) Validate() error {
 	if !e.Event.Known() {
 		return fmt.Errorf("%w: %q", ErrUnknownEvent, e.Event)
@@ -61,8 +57,8 @@ func (e Event) Validate() error {
 	return nil
 }
 
-// ParseEventType converts a wire string to an EventType. The comparison is exact:
-// accepting case variants or padding would make the closed set a suggestion.
+// The comparison is exact: accepting case variants or padding would make the
+// closed set a suggestion.
 func ParseEventType(s string) (EventType, error) {
 	t := EventType(s)
 	if !t.Known() {

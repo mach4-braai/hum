@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// repoRoot finds the directory holding go.mod, so tests run from anywhere.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()

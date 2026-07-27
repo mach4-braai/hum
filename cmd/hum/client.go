@@ -11,9 +11,6 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
-// send performs one control round trip: dial, write one request, read one
-// response. The connection is not reused, so a wedged daemon cannot leave the
-// CLI holding a half-consumed stream.
 func send(request protocol.Request, timeout time.Duration, asJSON bool, stdout, stderr io.Writer) int {
 	socket := paths.SocketPath()
 	conn, err := net.DialTimeout("unix", socket, timeout)
@@ -60,8 +57,6 @@ func send(request protocol.Request, timeout time.Duration, asJSON bool, stdout, 
 	return exitOK
 }
 
-// responseError keeps a failing response from printing an empty line when the
-// daemon reports failure without saying why.
 func responseError(response protocol.Response) string {
 	if response.Error == "" {
 		return "the daemon reported a failure without an error message"

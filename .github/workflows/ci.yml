@@ -5,7 +5,7 @@ on:
     branches: [master]
   pull_request:
 
-# Supersede stale runs, so an older one cannot report after a fresher one.
+# Cancel superseded runs, so an older one cannot report after a fresher one.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -25,8 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Installs the Go toolchain pinned in mise.toml, and trusts the config.
-      # actions/setup-go is avoided: an independent Go version would defeat the pin.
+      # Not actions/setup-go: an independently declared version defeats the pin.
       - uses: jdx/mise-action@v4
 
       - name: Cache Go modules
@@ -48,8 +47,8 @@ jobs:
 
       - run: mise run check
 
-  # A separate job, so coverage reports as its own status check. Single-platform:
-  # the total is identical on both, and check already covers cross-platform builds.
+  # Single-platform: the total is identical on both, and check already covers
+  # cross-platform builds.
   coverage:
     runs-on: ubuntu-latest
     permissions:
@@ -75,8 +74,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config
 
-      # The per-function table lands in the job summary either way, so a failing
-      # check names the under-covered functions without reopening the log.
       - name: Enforce the coverage minimum
         id: measure
         run: |
@@ -100,10 +97,8 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           exit $status
 
-      # Supplemental display only: the job above is the gate. A commit status is
-      # the only check that carries a description, which is where the numbers
-      # belong, but a fork's token is read-only and cannot post one, so this must
-      # never decide whether the pull request can merge.
+      # Supplemental display only, never the gate: a fork's token is read-only
+      # and cannot post a status, so requiring this would block every fork.
       - name: Publish the measured total
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         continue-on-error: true

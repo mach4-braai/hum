@@ -192,7 +192,6 @@ func TestDecoderRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-// countingReader reports how much of an oversized line the decoder consumed.
 type countingReader struct {
 	src  io.Reader
 	read int

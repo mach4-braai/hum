@@ -27,7 +27,6 @@ var buildHum = sync.OnceValues(func() (string, error) {
 	return binary, nil
 })
 
-// runBinary reports the process exit code and combined output.
 func runBinary(t *testing.T, socket string, args ...string) (int, string) {
 	t.Helper()
 	binary, err := buildHum()
@@ -74,8 +73,6 @@ func TestBinaryExitCodes(t *testing.T) {
 	}
 }
 
-// Distinguishing 3 from 1 is what lets a CI script tell "Hum is not running"
-// from "the work failed", so the message must be actionable, not a dial error.
 func TestBinaryReportsAnAbsentDaemonActionably(t *testing.T) {
 	absent := filepath.Join(t.TempDir(), "absent.sock")
 
