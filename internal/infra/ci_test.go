@@ -44,7 +44,9 @@ func TestCIDerivesToolchainFromMise(t *testing.T) {
 	if !strings.Contains(workflow, "jdx/mise-action") {
 		t.Error("ci workflow does not install the toolchain with jdx/mise-action")
 	}
-	if strings.Contains(workflow, "actions/setup-go") {
+	// Matches actual usage rather than any mention: a comment explaining why
+	// setup-go is avoided is desirable, and must not trip this assertion.
+	if strings.Contains(workflow, "uses: actions/setup-go") {
 		t.Error("ci workflow uses actions/setup-go, which declares a Go version independently of mise.toml")
 	}
 	if !strings.Contains(workflow, "mise run check") {
