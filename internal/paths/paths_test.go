@@ -135,3 +135,29 @@ func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
 		t.Errorf(`ProjectConfigFile("cmd/deep") = %q, want %q`, got, want)
 	}
 }
+
+// The daemon binds this path and every client dials it, so the two must derive
+// it identically. HUM_SOCKET is the documented escape hatch for home
+// directories deep enough to exceed the platform's sun_path limit.
+func TestSocketPathResolution(t *testing.T) {
+	t.Run("prefers HUM_SOCKET", func(t *testing.T) {
+		want := filepath.Join(t.TempDir(), "custom.sock")
+		t.Setenv("HUM_SOCKET", want)
+		t.Setenv("HUM_HOME", t.TempDir())
+
+		if got := SocketPath(); got != want {
+			t.Errorf("SocketPath() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("defaults inside the config dir", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HUM_SOCKET", "")
+		t.Setenv("HUM_HOME", home)
+		want := filepath.Join(home, "humd.sock")
+
+		if got := SocketPath(); got != want {
+			t.Errorf("SocketPath() = %q, want %q", got, want)
+		}
+	})
+}
