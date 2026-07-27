@@ -79,3 +79,21 @@ func absClean(p string) string {
 	}
 	return filepath.Clean(p)
 }
+
+// EnvSocket overrides the control socket path.
+const EnvSocket = "HUM_SOCKET"
+
+// SocketFileName is the daemon's control socket, kept inside the global config
+// directory so a single HUM_HOME relocates all of Hum's state.
+const SocketFileName = "humd.sock"
+
+// SocketPath returns the path of the daemon's control socket: $HUM_SOCKET when
+// set, otherwise humd.sock inside the global config directory. HUM_SOCKET
+// exists because a deep home directory can push the default past the platform's
+// sun_path limit, which is 104 bytes on macOS and 108 on Linux.
+func SocketPath() string {
+	if p := os.Getenv(EnvSocket); p != "" {
+		return p
+	}
+	return filepath.Join(GlobalConfigDir(), SocketFileName)
+}
