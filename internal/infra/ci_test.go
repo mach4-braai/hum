@@ -150,3 +150,23 @@ func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
 		t.Error("the coverage job does not run `mise run coverage`, so the minimum is enforced nowhere")
 	}
 }
+
+// The measured total reaches the pull request as a commit status description,
+// the only check text that can carry it.
+func TestCIPublishesTheMeasuredCoverageTotal(t *testing.T) {
+	workflow := readWorkflow(t)
+
+	if !strings.Contains(workflow, "context=coverage/total") {
+		t.Error("the coverage job publishes no commit status, so the pull request shows a bare pass or fail")
+	}
+	if !strings.Contains(workflow, "statuses: write") {
+		t.Error("the coverage job cannot post a status without statuses: write")
+	}
+	// A fork's token is read-only, so posting must never gate the merge.
+	if !strings.Contains(workflow, "continue-on-error: true") {
+		t.Error("a failed status post would fail the required coverage job")
+	}
+	if !strings.Contains(workflow, "head.repo.full_name == github.repository") {
+		t.Error("the status post is not skipped for forks, whose token cannot write statuses")
+	}
+}
