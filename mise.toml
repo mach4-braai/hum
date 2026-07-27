@@ -26,6 +26,27 @@ go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
 description = "Run the unit test suite"
 run = "go test ./..."
 
+# A ratchet, not a floor: the minimum tracks the measured total, so untested new
+# code fails CI. Lowering it is a deliberate edit, reviewed like any other.
+[tasks.coverage]
+description = "Run the unit tests under coverage and enforce the minimum"
+run = '''
+set -eu
+MINIMUM=90
+# -coverpkg attributes cross-package execution, so a package covered only by
+# another package's test still counts.
+go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+go tool cover -func=coverage.out
+total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
+awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
+  if (total + 0 < minimum + 0) {
+    printf "coverage %s%% is below the %s%% minimum\n", total, minimum > "/dev/stderr"
+    exit 1
+  }
+  printf "coverage %s%% meets the %s%% minimum\n", total, minimum
+}'
+'''
+
 [tasks.vet]
 description = "Run go vet"
 run = "go vet ./..."
@@ -62,4 +83,4 @@ install -m 0755 bin/humd "$DESTDIR$PREFIX/bin/humd"
 
 [tasks.clean]
 description = "Remove build output"
-run = "rm -rf bin dist"
+run = "rm -rf bin dist coverage.out"

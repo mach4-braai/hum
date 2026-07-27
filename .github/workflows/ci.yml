@@ -47,3 +47,42 @@ jobs:
           sudo apt-get install -y libasound2-dev pkg-config
 
       - run: mise run check
+
+  # A separate job, so coverage reports as its own status check. Single-platform:
+  # the total is identical on both, and check already covers cross-platform builds.
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: jdx/mise-action@v4
+
+      - name: Cache Go modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      # Same cgo ALSA dependency as the check job; removed alongside #39.
+      - name: Install Linux audio build dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      # The per-function table lands in the job summary either way, so a failing
+      # check names the uncovered lines without reopening the log.
+      - name: Enforce the coverage minimum
+        run: |
+          status=0
+          mise run coverage >coverage.txt 2>&1 || status=$?
+          {
+            echo '### Coverage'
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+          cat coverage.txt
+          exit $status
