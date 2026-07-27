@@ -34,3 +34,26 @@ const ConfigFileName = "config.yaml"
 func GlobalConfigFile() string {
 	return filepath.Join(GlobalConfigDir(), ConfigFileName)
 }
+
+// ProjectDirName is the per-project configuration directory, per PRD.md
+// section 12.
+const ProjectDirName = ".hum"
+
+// ProjectConfigFile walks upward from startDir looking for a project
+// configuration file, returning the first match and whether one was found.
+// Clients run from anywhere inside a project, so discovery mirrors the way git
+// locates its root.
+func ProjectConfigFile(startDir string) (string, bool) {
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, ProjectDirName, ConfigFileName)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
