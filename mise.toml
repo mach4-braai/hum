@@ -39,12 +39,15 @@ MINIMUM=98
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
+# The last stdout line is the contract CI publishes verbatim as the description
+# of the coverage status, so it states both numbers and is printed either way.
 awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
-  if (total + 0 < minimum + 0) {
+  below = (total + 0 < minimum + 0)
+  if (below) {
     printf "coverage %s%% is below the %s%% minimum\n", total, minimum > "/dev/stderr"
-    exit 1
   }
-  printf "coverage %s%% meets the %s%% minimum\n", total, minimum
+  printf "%s%% of statements, minimum %s%%\n", total, minimum
+  exit below
 }'
 '''
 

@@ -52,6 +52,9 @@ jobs:
   # the total is identical on both, and check already covers cross-platform builds.
   coverage:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@v7
 
@@ -75,14 +78,45 @@ jobs:
       # The per-function table lands in the job summary either way, so a failing
       # check names the under-covered functions without reopening the log.
       - name: Enforce the coverage minimum
+        id: measure
         run: |
           status=0
-          mise run coverage >coverage.txt 2>&1 || status=$?
+          mise run coverage >coverage.log 2>coverage.err || status=$?
+          summary=$(tail -n 1 coverage.log)
+          case "$summary" in
+            *"of statements, minimum"*) ;;
+            *) summary="coverage could not be measured" ;;
+          esac
           {
             echo '### Coverage'
             echo '```'
-            cat coverage.txt
+            cat coverage.log coverage.err
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
-          cat coverage.txt
+          cat coverage.log coverage.err
+          {
+            echo "summary=$summary"
+            echo "state=$(test "$status" -eq 0 && echo success || echo failure)"
+          } >>"$GITHUB_OUTPUT"
           exit $status
+
+      # Supplemental display only: the job above is the gate. A commit status is
+      # the only check that carries a description, which is where the numbers
+      # belong, but a fork's token is read-only and cannot post one, so this must
+      # never decide whether the pull request can merge.
+      - name: Publish the measured total
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          STATE: ${{ steps.measure.outputs.state || 'failure' }}
+          SUMMARY: ${{ steps.measure.outputs.summary || 'coverage could not be measured' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api "repos/$REPO/statuses/$SHA" \
+            -f state="$STATE" \
+            -f context=coverage/total \
+            -f description="$SUMMARY" \
+            -f target_url="$RUN_URL"
