@@ -44,3 +44,30 @@ func TestGlobalConfigFileLivesInsideConfigDir(t *testing.T) {
 		t.Errorf("GlobalConfigFile() = %q, want %q", got, want)
 	}
 }
+
+// Clients are invoked from wherever the developer happens to be inside a
+// project, so discovery walks upward like git does. Requiring the exact project
+// root would make project config unusable in practice.
+func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".hum"), 0o755); err != nil {
+		t.Fatalf("mkdir .hum: %v", err)
+	}
+	want := filepath.Join(root, ".hum", "config.yaml")
+	if err := os.WriteFile(want, []byte("project:\n  name: demo\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	nested := filepath.Join(root, "cmd", "deep", "deeper")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+
+	got, ok := ProjectConfigFile(nested)
+
+	if !ok {
+		t.Fatalf("ProjectConfigFile(%q) reported not found, want %q", nested, want)
+	}
+	if got != want {
+		t.Errorf("ProjectConfigFile(%q) = %q, want %q", nested, got, want)
+	}
+}
