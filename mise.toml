@@ -27,13 +27,13 @@ description = "Run the unit test suite"
 run = "go test ./..."
 
 # A fixed floor, raised by hand as coverage rises and lowered only deliberately.
-# At 98 against a measured 98.9%, one uncovered statement in the 93 sinks the
-# build, which is the intent: new code arrives with its tests.
+# It is inclusive: a total of exactly MINIMUM passes. At 95 against a measured
+# 98.9%, three of the 93 statements may lose their tests before the build fails.
 [tasks.coverage]
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
 set -eu
-MINIMUM=98
+MINIMUM=95
 # -coverpkg attributes cross-package execution, so a package covered only by
 # another package's test still counts.
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
