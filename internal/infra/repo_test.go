@@ -1,5 +1,4 @@
-// Package infra holds executable assertions about repository configuration.
-// These files are contracts too, and an unexecuted contract rots.
+// Package infra asserts repository configuration that would otherwise go unchecked.
 package infra
 
 import (
@@ -9,8 +8,7 @@ import (
 	"testing"
 )
 
-// repoRoot walks up from the test's working directory to the directory holding
-// go.mod, so tests can read repository files regardless of where they run from.
+// repoRoot finds the directory holding go.mod, so tests run from anywhere.
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -29,8 +27,7 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-// Entries are leading-slash anchored: an unanchored "hum" would also match the
-// cmd/hum source directory and hide the source tree from git.
+// Anchored entries: unanchored "hum" would also hide the cmd/hum source tree.
 func TestGitignoreExcludesBuildArtefacts(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".gitignore"))
 	if err != nil {

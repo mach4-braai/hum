@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// Usage goes to stderr; stdout stays reserved for output callers capture.
 func TestRunWithoutArgumentsPrintsUsageToStderrAndExitsTwo(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

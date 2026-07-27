@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// HUM_HOME must win over the home directory, so no test can reach a real ~/.hum.
 func TestGlobalConfigDirPrefersHumHome(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HUM_HOME", dir)
@@ -16,8 +15,6 @@ func TestGlobalConfigDirPrefersHumHome(t *testing.T) {
 	}
 }
 
-// With no override, configuration lives at ~/.hum so that Hum behaves like a
-// conventional Unix tool and needs no setup on a fresh machine.
 func TestGlobalConfigDirFallsBackToHomeDotHum(t *testing.T) {
 	t.Setenv("HUM_HOME", "")
 	home, err := os.UserHomeDir()
@@ -31,8 +28,6 @@ func TestGlobalConfigDirFallsBackToHomeDotHum(t *testing.T) {
 	}
 }
 
-// The filename is part of the documented layout in PRD.md section 12, so it is
-// asserted rather than left to the caller to join.
 func TestGlobalConfigFileLivesInsideConfigDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HUM_HOME", dir)
@@ -43,7 +38,6 @@ func TestGlobalConfigFileLivesInsideConfigDir(t *testing.T) {
 	}
 }
 
-// Discovery walks upward like git: clients run from anywhere inside a project.
 func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hum"), 0o755); err != nil {
@@ -68,9 +62,6 @@ func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
 	}
 }
 
-// Global config lives at ~/.hum/config.yaml, exactly the shape discovery seeks.
-// Unguarded, a client under $HOME applies it as project config, so one file
-// occupies two layers of the precedence chain.
 func TestProjectConfigFileReportsNotFound(t *testing.T) {
 	t.Run("no project config anywhere above", func(t *testing.T) {
 		if got, ok := ProjectConfigFile(t.TempDir()); ok {
@@ -99,8 +90,6 @@ func TestProjectConfigFileReportsNotFound(t *testing.T) {
 	})
 }
 
-// An unnormalised walk terminates at "." and never examines absolute ancestors,
-// so project config one level up would be missed.
 func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HUM_HOME", filepath.Join(root, "unrelated-home"))
@@ -127,8 +116,6 @@ func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
 	}
 }
 
-// The daemon binds this path and every client dials it, so both must derive it
-// identically.
 func TestSocketPathResolution(t *testing.T) {
 	t.Run("prefers HUM_SOCKET", func(t *testing.T) {
 		want := filepath.Join(t.TempDir(), "custom.sock")
@@ -152,8 +139,7 @@ func TestSocketPathResolution(t *testing.T) {
 	})
 }
 
-// maxSocketPathLen is the conservative sun_path budget: 104 bytes on macOS, 108 on
-// Linux. Exceeding it fails at bind() with an undiagnosable "invalid argument".
+// Conservative sun_path budget: 104 bytes on macOS, 108 on Linux.
 const maxSocketPathLen = 100
 
 func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
@@ -165,7 +151,6 @@ func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
 	}
 }
 
-// Anything able to open the socket can drive the user's audio output.
 func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HUM_SOCKET", "")
@@ -188,8 +173,6 @@ func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
 	}
 }
 
-// Creating a directory that already exists is the normal case on every start
-// after the first, so it must not be an error.
 func TestEnsureRuntimeDirIsIdempotent(t *testing.T) {
 	t.Setenv("HUM_SOCKET", "")
 	t.Setenv("HUM_HOME", t.TempDir())

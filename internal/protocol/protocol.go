@@ -1,8 +1,5 @@
-// Package protocol defines Hum's wire contract: the generic work-session events
-// clients emit and the framing they travel in.
-//
-// Nothing here may reference an AI tool, an agent framework or a specific client
-// (PRD.md section 3). A field only one integration would set belongs in Metadata.
+// Package protocol defines Hum's wire contract: generic work-session events and
+// their framing. Nothing here may name an AI tool, agent framework or client.
 package protocol
 
 import (

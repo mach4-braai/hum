@@ -9,12 +9,10 @@ import (
 	"testing"
 )
 
-// requiredTasks is the build contract CI and the release pipeline depend on.
 var requiredTasks = []string{"build", "check", "clean", "fmt", "install", "test", "vet"}
 
-// Listing goes through mise itself: it proves mise can read the file, and avoids
-// spending a dependency on a TOML parser. Skip only when mise is absent; other
-// failures may mean a malformed mise.toml.
+// Via mise itself, proving mise can read the file. Skip only when mise is absent;
+// other failures may mean a malformed mise.toml.
 func TestMiseDefinesRequiredTasks(t *testing.T) {
 	if _, err := exec.LookPath("mise"); err != nil {
 		t.Skip("mise is not installed; skipping the task-list assertion")
@@ -47,8 +45,7 @@ func TestMiseDefinesRequiredTasks(t *testing.T) {
 	}
 }
 
-// GoReleaser and the Homebrew formula cannot use mise, so they duplicate these
-// flags; this assertion is what makes the duplication detectable when it drifts.
+// GoReleaser and the formula duplicate these flags; this detects the drift.
 func TestMiseBuildTaskStampsVersionAndTrimsPaths(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {
@@ -63,7 +60,6 @@ func TestMiseBuildTaskStampsVersionAndTrimsPaths(t *testing.T) {
 	}
 }
 
-// The toolchain is pinned here so contributors, CI and releases share a compiler.
 func TestMisePinsGoToolchain(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {

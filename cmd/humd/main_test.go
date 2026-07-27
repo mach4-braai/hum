@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// A mis-invoked daemon must fail loudly, not start with implicit defaults.
 func TestRunWithoutArgumentsPrintsUsageToStderrAndExitsTwo(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
