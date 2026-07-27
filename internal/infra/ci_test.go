@@ -138,7 +138,6 @@ func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
 	}
 }
 
-// Its own job, so branch protection can require it independently of check.
 func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -151,8 +150,6 @@ func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
 	}
 }
 
-// The measured total reaches the pull request as a commit status description,
-// the only check text that can carry it.
 func TestCIPublishesTheMeasuredCoverageTotal(t *testing.T) {
 	workflow := readWorkflow(t)
 

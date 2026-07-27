@@ -98,7 +98,6 @@ func TestEncoderWritesOneLinePerEvent(t *testing.T) {
 	}
 }
 
-// eventLineOfLength builds an event whose JSON is exactly n bytes.
 func eventLineOfLength(t *testing.T, n int) string {
 	t.Helper()
 	probe, err := json.Marshal(Event{Event: SessionStarted, ID: "1", Title: "x"})
@@ -218,7 +217,6 @@ func TestDecoderRejectsAnOversizedLineBeforeTheStreamEnds(t *testing.T) {
 	}
 }
 
-// errWriter fails every write, as a peer that has closed the connection does.
 type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) {

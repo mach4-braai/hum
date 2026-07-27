@@ -1,15 +1,12 @@
 // Command hum is the client CLI for the Hum auditory display daemon.
 //
-// Exit codes: 0 success, 1 daemon error, 2 usage, 3 unreachable. Code 3 must
-// never collapse into 1; a CI script uses the distinction to skip Hum entirely
-// when the daemon is not running, rather than treating its absence as a failure.
+// Exit code 3, the daemon being unreachable, must never collapse into 1. A CI
+// script uses the distinction to skip Hum entirely when it is not running
+// rather than treating its absence as a failure. `hum help` lists the codes.
 //
-// Only bare control requests (ping, status, mute, stop, theme) are wired here.
-// Commands carrying a payload or acting locally (init, start, complete, fail,
-// doctor) arrive with their own issues.
-//
-// Flags are accepted on either side of the command; both orderings are natural
-// and rejecting one is a papercut.
+// Only bare control requests are dispatched today. The absent commands are a
+// deliberate omission, not an oversight: those carrying a payload or acting
+// locally arrive with their own issues.
 package main
 
 import (

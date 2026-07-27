@@ -5,8 +5,8 @@
 // caller to validate, and the default must stay within the sun_path field of
 // sockaddr_un: 104 bytes on macOS, 108 on Linux.
 //
-// ProjectConfigFile walks upward as git locates its root, skipping the global
-// config file, which a client running under $HOME would otherwise match.
+// ProjectConfigFile skips the global config file, which a client running under
+// $HOME would otherwise match as its project config.
 package paths
 
 import (
