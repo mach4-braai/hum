@@ -105,3 +105,33 @@ func TestProjectConfigFileReportsNotFound(t *testing.T) {
 		}
 	})
 }
+
+// The signature accepts any directory, so a caller may reasonably pass a
+// cwd-relative path. An unnormalised walk terminates at "." and never examines
+// absolute ancestors, so the project config one level up would be missed
+// entirely and the client would silently fall back to global config.
+func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HUM_HOME", filepath.Join(root, "unrelated-home"))
+	if err := os.MkdirAll(filepath.Join(root, ".hum"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	want := filepath.Join(root, ".hum", "config.yaml")
+	if err := os.WriteFile(want, []byte("project:\n  name: demo\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	nested := filepath.Join(root, "cmd", "deep")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Chdir(root)
+
+	got, ok := ProjectConfigFile(filepath.Join("cmd", "deep"))
+
+	if !ok {
+		t.Fatalf(`ProjectConfigFile("cmd/deep") reported not found, want %q`, want)
+	}
+	if got != want {
+		t.Errorf(`ProjectConfigFile("cmd/deep") = %q, want %q`, got, want)
+	}
+}
