@@ -2,7 +2,9 @@ package protocol
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -59,4 +61,78 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 			t.Errorf("re-encoded = %s, want %s", out, wire)
 		}
 	})
+}
+
+// The daemon accepts messages from any local process, so validation is a trust
+// boundary rather than a convenience. An event that reaches the registry with an
+// empty or unbounded id becomes an unkillable voice: nothing can address it to
+// complete it, and the drone sustains forever.
+func TestEventValidation(t *testing.T) {
+	valid := Event{Event: SessionStarted, ID: "123"}
+	if err := valid.Validate(); err != nil {
+		t.Errorf("Validate() on a minimal valid event = %v, want nil", err)
+	}
+
+	for _, e := range []Event{
+		{Event: SessionUpdated, ID: "a"},
+		{Event: SessionCompleted, ID: "a"},
+		{Event: SessionFailed, ID: "a"},
+		{Event: SessionCancelled, ID: "a"},
+	} {
+		if err := e.Validate(); err != nil {
+			t.Errorf("Validate() on %s = %v, want nil", e.Event, err)
+		}
+	}
+
+	t.Run("rejects an unknown event type", func(t *testing.T) {
+		err := Event{Event: "session.exploded", ID: "1"}.Validate()
+		if !errors.Is(err, ErrUnknownEvent) {
+			t.Errorf("Validate() = %v, want it to wrap ErrUnknownEvent", err)
+		}
+	})
+
+	t.Run("rejects an empty event type", func(t *testing.T) {
+		if err := (Event{ID: "1"}).Validate(); err == nil {
+			t.Error("Validate() = nil, want an error for a missing event type")
+		}
+	})
+
+	t.Run("rejects a missing id", func(t *testing.T) {
+		if err := (Event{Event: SessionStarted}).Validate(); err == nil {
+			t.Error("Validate() = nil, want an error for a missing id")
+		}
+	})
+
+	// An unbounded id would be echoed back by `hum status` and stored per
+	// session, so it is a cheap memory-amplification vector from any local
+	// process.
+	t.Run("rejects an id longer than the documented limit", func(t *testing.T) {
+		if err := (Event{Event: SessionStarted, ID: strings.Repeat("x", MaxIDLen+1)}).Validate(); err == nil {
+			t.Errorf("Validate() = nil, want an error for an id of %d bytes", MaxIDLen+1)
+		}
+	})
+
+	t.Run("accepts an id at exactly the documented limit", func(t *testing.T) {
+		if err := (Event{Event: SessionStarted, ID: strings.Repeat("x", MaxIDLen)}).Validate(); err != nil {
+			t.Errorf("Validate() on an id of exactly %d bytes = %v, want nil", MaxIDLen, err)
+		}
+	})
+}
+
+// The limit is a byte limit, because it bounds what travels on the wire and what
+// the daemon stores. Counting runes instead would let a multibyte id consume up
+// to four times the intended budget.
+func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
+	// 65 two-byte runes: only 65 characters, but 130 bytes.
+	id := strings.Repeat("é", MaxIDLen/2+1)
+	if len([]rune(id)) > MaxIDLen {
+		t.Fatalf("test setup: %d runes is already over the limit, so it cannot distinguish bytes from runes", len([]rune(id)))
+	}
+	if len(id) <= MaxIDLen {
+		t.Fatalf("test setup: %d bytes does not exceed the limit", len(id))
+	}
+
+	if err := (Event{Event: SessionStarted, ID: id}).Validate(); err == nil {
+		t.Errorf("Validate() = nil for an id of %d bytes (%d runes), want an error", len(id), len([]rune(id)))
+	}
 }
