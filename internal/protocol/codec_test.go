@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -104,5 +105,81 @@ func TestEncoderWritesOneLinePerEvent(t *testing.T) {
 	}
 	if first.Title != "a\nb" {
 		t.Errorf("round-tripped title = %q, want %q", first.Title, "a\nb")
+	}
+}
+
+// eventLineOfLength builds a valid event whose JSON encoding is exactly n bytes,
+// padding the title. The padding is plain ASCII so it needs no escaping and the
+// length grows one byte per character.
+func eventLineOfLength(t *testing.T, n int) string {
+	t.Helper()
+	probe, err := json.Marshal(Event{Event: SessionStarted, ID: "1", Title: "x"})
+	if err != nil {
+		t.Fatalf("probe marshal: %v", err)
+	}
+	overhead := len(probe) - 1
+	pad := n - overhead
+	if pad < 0 {
+		t.Fatalf("cannot build a %d byte event; overhead alone is %d", n, overhead)
+	}
+	out, err := json.Marshal(Event{Event: SessionStarted, ID: "1", Title: strings.Repeat("x", pad)})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if len(out) != n {
+		t.Fatalf("built a %d byte event, want %d", len(out), n)
+	}
+	return string(out)
+}
+
+// An unbounded line length lets any local process drive the daemon's memory by
+// opening a socket and never sending a newline. The limit is measured on the
+// payload, excluding the framing LF, so that a message of exactly the documented
+// size is legal rather than off-by-one rejected.
+func TestDecoderEnforcesMessageSizeLimit(t *testing.T) {
+	t.Run("accepts a payload of exactly the limit", func(t *testing.T) {
+		line := eventLineOfLength(t, MaxMessageLen)
+
+		got, err := NewDecoder(strings.NewReader(line + "\n")).Decode()
+		if err != nil {
+			t.Fatalf("Decode() of a %d byte payload = %v, want it accepted", MaxMessageLen, err)
+		}
+		if got.ID != "1" {
+			t.Errorf("Decode() id = %q, want %q", got.ID, "1")
+		}
+	})
+
+	t.Run("rejects a payload one byte over the limit", func(t *testing.T) {
+		line := eventLineOfLength(t, MaxMessageLen+1)
+
+		_, err := NewDecoder(strings.NewReader(line + "\n")).Decode()
+		if !errors.Is(err, ErrMessageTooLarge) {
+			t.Errorf("Decode() of a %d byte payload = %v, want ErrMessageTooLarge", MaxMessageLen+1, err)
+		}
+	})
+
+	// A client that opens a connection and streams bytes without ever sending a
+	// newline must be rejected on the limit, not buffered indefinitely.
+	t.Run("rejects an unterminated oversized line", func(t *testing.T) {
+		_, err := NewDecoder(strings.NewReader(strings.Repeat("x", MaxMessageLen+1))).Decode()
+		if !errors.Is(err, ErrMessageTooLarge) {
+			t.Errorf("Decode() of an unterminated oversized line = %v, want ErrMessageTooLarge", err)
+		}
+	})
+}
+
+// The daemon must not emit a message its own decoder would refuse, which would
+// be a protocol violation visible only to the client.
+func TestEncoderRefusesOversizedEvents(t *testing.T) {
+	oversized := Event{Event: SessionStarted, ID: "1", Title: strings.Repeat("x", MaxMessageLen)}
+
+	var buf bytes.Buffer
+	err := NewEncoder(&buf).Encode(oversized)
+
+	if !errors.Is(err, ErrMessageTooLarge) {
+		t.Errorf("Encode() = %v, want ErrMessageTooLarge", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("wrote %d bytes on a rejected event, want none: a partial line desynchronises the stream", buf.Len())
 	}
 }
