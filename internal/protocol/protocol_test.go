@@ -136,3 +136,25 @@ func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
 		t.Errorf("Validate() = nil for an id of %d bytes (%d runes), want an error", len(id), len([]rune(id)))
 	}
 }
+
+// The CLI turns a subcommand name into an event type, and `hum doctor` reports
+// which types a daemon understands. Both need parsing that rejects unknown
+// input rather than silently producing a type the daemon will discard.
+func TestParseEventType(t *testing.T) {
+	for _, want := range []EventType{SessionStarted, SessionUpdated, SessionCompleted, SessionFailed, SessionCancelled} {
+		got, err := ParseEventType(string(want))
+		if err != nil {
+			t.Errorf("ParseEventType(%q) = error %v, want %s", want, err, want)
+			continue
+		}
+		if got != want {
+			t.Errorf("ParseEventType(%q) = %s, want %s", want, got, want)
+		}
+	}
+
+	for _, bad := range []string{"", "session.exploded", "SESSION.STARTED", "started", "session.started "} {
+		if _, err := ParseEventType(bad); !errors.Is(err, ErrUnknownEvent) {
+			t.Errorf("ParseEventType(%q) = %v, want it to wrap ErrUnknownEvent", bad, err)
+		}
+	}
+}
