@@ -1,12 +1,3 @@
-// Package paths resolves where Hum keeps its configuration and control socket.
-//
-// The socket lives inside the config directory by default, so one $HUM_HOME
-// moves all state together. A $HUM_SOCKET override is returned verbatim for the
-// caller to validate, and the default must stay within the sun_path field of
-// sockaddr_un: 104 bytes on macOS, 108 on Linux.
-//
-// ProjectConfigFile skips the global config file, which a client running under
-// $HOME would otherwise match as its project config.
 package paths
 
 import (
@@ -74,9 +65,6 @@ func EnsureRuntimeDir() error {
 	return nil
 }
 
-// absolute is a seam over filepath.Abs, which fails only when the working
-// directory has been removed. macOS still resolves a removed one, so no test
-// can arrange that failure portably.
 var absolute = filepath.Abs
 
 func absClean(p string) string {

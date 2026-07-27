@@ -17,44 +17,30 @@ through it rather than calling `go` directly.
 
 ## Comments
 
-**Comments explain why, never what.** A senior Go engineer reads the code for
-behaviour. Prose that restates it goes stale, and a stale comment is worse than
-none because it is believed.
+**Write no comments.** Not doc comments, not package docs, not "why" comments,
+not `TODO`s. The only exceptions are compiler directives (`//go:build`,
+`//go:generate`), which are not comments but instructions.
 
-Write a comment only when the code breaks a pattern a reader would otherwise
-restore:
+This is absolute. Do not reintroduce comments under any justification —
+"this one is genuinely subtle", "this records a decision", "this is idiomatic
+GoDoc". The answer is still no.
 
-- A deviation from the obvious approach, with the reason it was rejected.
-  `!(v >= 0 && v <= 1)` needs a comment; `v > max` does not.
-- A constraint that lives outside the file: a platform quirk, a wire contract,
-  an upstream bug, a value another file depends on.
-- A correctness trap that looks like a mistake — a deliberate omission, an
-  ordering requirement, an error deliberately ignored.
+If code needs explaining, the code is wrong. Rename the identifier, extract a
+function whose name is the sentence you were about to write, or restructure
+until it reads plainly. A comment is the option you take when you have given up
+on making the code say it.
 
-Delete anything else. In particular, never write a comment that:
+Everything a comment would have said goes somewhere durable instead:
 
-- Restates the next line, or names what a function obviously does.
-- Narrates structure (`// loop over items`, `// error handling`).
-- Documents an exported symbol whose name already carries the contract. Go
-  requires no doc comment, and no linter here enforces one. `NewDecoder returns
-  a Decoder` earns nothing.
+| Kind of information | Where it lives |
+|---|---|
+| How it works, wire shapes, field tables | `docs/` |
+| Why a change was made | the commit message |
+| Alternatives considered and rejected | the issue or PR |
+| What a subtle line does | a named function or constant |
 
-Reach for a better name or a smaller function before reaching for a comment.
-If a workaround needs a paragraph to justify, the code is wrong — fix the code.
-
-### Where the thinking goes instead
-
-- **`docs/`** carries functionality: the protocol reference, wire shapes, field
-  tables, user-facing behaviour. Anything a reader would call "how it works"
-  belongs here, not in the source. Never document behaviour that is not yet
-  implemented without labelling it as such.
-- **Package doc comments** stay short — a few lines naming the package's purpose
-  and the invariant a caller must not break, then a pointer to `docs/`. A
-  package doc that grows section headings has become a document in the wrong
-  file; move it.
-- **Commit messages** carry why a change was made, and survive refactors of the
-  code they describe.
-- **Issues and PRs** carry the alternatives considered and rejected.
+Comments rot silently because nothing tests them; commits, issues and `docs/`
+are read in the context that keeps them honest.
 
 ## Tests
 
@@ -73,6 +59,24 @@ behaviour, boundaries and error paths — not plumbing.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be
   staged. Register restoration with `t.Cleanup` *before* installing a stub. No
   test in those packages calls `t.Parallel`, and adding one would race the stub.
+
+## Traps
+
+Things the code cannot say, that will be "fixed" back if forgotten.
+
+- `volume` bounds read `!(v >= 0 && v <= 1)`. Every comparison against `NaN` is
+  false, so `v < 0 || v > 1` accepts `"NaN"`.
+- `cmd/hum` parses flags in a loop. Go's `flag` stops at the first positional,
+  so a single pass reads `theme use --json minimal` as a theme named `--json`.
+- `filepath.Abs` fails only when the working directory is removed, and macOS
+  keeps resolving a removed one. That is why `absolute` is a variable.
+- The default socket path must fit `sun_path`: 104 bytes on macOS, 108 on Linux.
+- oto v3.4.0 is CGO-free on macOS but declares `#cgo pkg-config: alsa` on Linux,
+  so the Linux legs install `libasound2-dev` and `pkg-config`. #39 removes this.
+- A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
+  only; requiring it would block every external contribution.
+- A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
+  connection.
 
 ## Protocol
 

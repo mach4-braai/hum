@@ -1,5 +1,3 @@
-// Command humd is the Hum auditory display daemon: session registry, harmony
-// engine, and audio renderer served over a Unix socket.
 package main
 
 import (
@@ -15,8 +13,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 2
 }
 
-// exit is a seam: os.Exit would end the test binary before it could observe
-// that main forwards run's code.
 var exit = os.Exit
 
 func main() {

@@ -141,7 +141,6 @@ func TestSocketPathResolution(t *testing.T) {
 	})
 }
 
-// Conservative sun_path budget: 104 bytes on macOS, 108 on Linux.
 const maxSocketPathLen = 100
 
 func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
@@ -196,10 +195,6 @@ func TestGlobalConfigDirFallsBackToProjectDirNameWithoutAHome(t *testing.T) {
 	}
 }
 
-// withRemovedWorkingDir reproduces filepath.Abs with no working directory: an
-// absolute path still resolves, a relative one cannot. Removing the real working
-// directory is not portable, as macOS keeps resolving it. Restoration is
-// registered before the stub is installed, so a panic cannot leak it.
 func withRemovedWorkingDir(t *testing.T) {
 	t.Helper()
 	original := absolute
@@ -226,8 +221,6 @@ func TestProjectConfigFileReportsNotFoundWhenTheWorkingDirIsGone(t *testing.T) {
 	}
 }
 
-// A relative HUM_HOME cannot be made absolute without a working directory. The
-// walk must still run: the comparison guarding it is an optimisation, not a gate.
 func TestProjectConfigFileWalksWhenTheGlobalPathCannotBeMadeAbsolute(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ProjectDirName), 0o755); err != nil {

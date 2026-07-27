@@ -175,7 +175,6 @@ func TestDecoderRejectsMalformedJSON(t *testing.T) {
 		}
 	})
 
-	// JSON null unmarshals into a struct without error, zeroing every field.
 	t.Run("null is not a message", func(t *testing.T) {
 		if _, err := NewDecoder(strings.NewReader("null\n")).Decode(); err == nil {
 			t.Error("Decode() = nil for a null payload, want an error; a zero event must not look like a successful decode")
@@ -202,8 +201,6 @@ func (r *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// The limit must trip while the line is still arriving, not once the stream
-// ends: an endless line would otherwise be buffered in full.
 func TestDecoderRejectsAnOversizedLineBeforeTheStreamEnds(t *testing.T) {
 	src := &countingReader{src: strings.NewReader(strings.Repeat("x", 4*MaxMessageLen))}
 

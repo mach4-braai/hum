@@ -1,4 +1,3 @@
-// Package infra asserts repository configuration that would otherwise go unchecked.
 package infra
 
 import (
@@ -26,7 +25,6 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-// Anchored entries: unanchored "hum" would also hide the cmd/hum source tree.
 func TestGitignoreExcludesBuildArtefacts(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".gitignore"))
 	if err != nil {

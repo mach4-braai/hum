@@ -21,14 +21,9 @@ func unreachableSocket(t *testing.T) string {
 	return socket
 }
 
-// serveOne answers exactly one request with response. The returned await
-// closes the listener and waits for the server goroutine, giving the caller a
-// happens-before edge on the decoded request: socket traffic alone is not one,
-// and the race detector rightly refuses to infer it.
 func serveOne(t *testing.T, response string) func() protocol.Request {
 	t.Helper()
-	// Short path: a Unix socket address is capped near 104 bytes, and macOS
-	// temp directories are already long.
+
 	dir, err := os.MkdirTemp("", "hum")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
@@ -55,8 +50,6 @@ func serveOne(t *testing.T, response string) func() protocol.Request {
 		_, _ = io.WriteString(conn, response)
 	}()
 
-	// Closing before waiting, and idempotent: a test whose client never dials
-	// would otherwise block in Accept forever.
 	var once sync.Once
 	await := func() protocol.Request {
 		once.Do(func() {

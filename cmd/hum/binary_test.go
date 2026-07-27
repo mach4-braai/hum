@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// The exit codes are a contract with shell scripts, so they are asserted
-// against a real process. An in-process test of run cannot catch a main that
-// discards run's return value, and `go run` is useless here: it reports 1 for
-// any non-zero program exit, collapsing the very distinction being tested.
 var buildHum = sync.OnceValues(func() (string, error) {
 	dir, err := os.MkdirTemp("", "hum-bin")
 	if err != nil {

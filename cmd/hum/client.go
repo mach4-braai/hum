@@ -15,8 +15,7 @@ func send(request protocol.Request, timeout time.Duration, asJSON bool, stdout, 
 	socket := paths.SocketPath()
 	conn, err := net.DialTimeout("unix", socket, timeout)
 	if err != nil {
-		// Never the raw dial error: "connect: no such file or directory" tells
-		// a user nothing about what to do next.
+
 		fmt.Fprintf(stderr, "hum: no daemon listening at %s\nstart it with `humd`, or `brew services start hum`\n", socket)
 		return exitUnreachable
 	}
@@ -31,8 +30,6 @@ func send(request protocol.Request, timeout time.Duration, asJSON bool, stdout, 
 		return exitUnreachable
 	}
 
-	// Decoded raw first, so --json can print exactly what the daemon sent
-	// rather than a re-encoding that may differ in field order or omissions.
 	var raw json.RawMessage
 	if err := json.NewDecoder(conn).Decode(&raw); err != nil {
 		fmt.Fprintf(stderr, "hum: no usable response from %s: %v\n", socket, err)

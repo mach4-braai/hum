@@ -7,8 +7,6 @@ import (
 	"strconv"
 )
 
-// Kept out of EventType: a client that only reports sessions never sends these,
-// and the published event schema must not grow daemon plumbing.
 type Command string
 
 const (
@@ -24,8 +22,6 @@ const (
 
 var ErrUnknownCommand = errors.New("unknown command")
 
-// A fraction rather than decibels, so the wire contract stays readable to a
-// shell script.
 const (
 	MinVolume = 0.0
 	MaxVolume = 1.0
@@ -45,15 +41,12 @@ type Request struct {
 	Value   string
 }
 
-// Data stays raw so the envelope needs no knowledge of each command's payload.
 type Response struct {
 	OK    bool            `json:"ok"`
 	Error string          `json:"error,omitempty"`
 	Data  json.RawMessage `json:"data,omitempty"`
 }
 
-// Refuses an invalid request rather than serialising an ambiguous message the
-// daemon would have to guess at.
 func (r Request) MarshalJSON() ([]byte, error) {
 	if err := r.Validate(); err != nil {
 		return nil, fmt.Errorf("encode request: %w", err)
@@ -88,8 +81,6 @@ func (r *Request) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Trust boundary: a request carrying both is ambiguous, and one carrying
-// neither is a no-op the daemon would answer with a meaningless success.
 func (r Request) Validate() error {
 	switch {
 	case r.Event != nil && r.Command != "":
@@ -110,8 +101,7 @@ func (r Request) Validate() error {
 	if err != nil {
 		return fmt.Errorf("volume %q is not a number", r.Value)
 	}
-	// Negated rather than `volume < Min || volume > Max`: every comparison
-	// against NaN is false, so the direct form would admit it.
+
 	if !(volume >= MinVolume && volume <= MaxVolume) {
 		return fmt.Errorf("volume %v is outside [%v, %v]", volume, MinVolume, MaxVolume)
 	}

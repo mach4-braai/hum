@@ -1,9 +1,3 @@
-// Package protocol defines Hum's wire contract: newline-delimited JSON for
-// work-session events and daemon control. It is public, so shapes change
-// additively or not at all, and nothing here may name an AI tool, agent
-// framework, or client.
-//
-// The contract is specified in docs/protocol.md.
 package protocol
 
 import (
@@ -42,8 +36,6 @@ func (t EventType) Known() bool {
 	return false
 }
 
-// Trust boundary: an empty id would become an unaddressable session whose drone
-// never stops.
 func (e Event) Validate() error {
 	if !e.Event.Known() {
 		return fmt.Errorf("%w: %q", ErrUnknownEvent, e.Event)
@@ -57,8 +49,6 @@ func (e Event) Validate() error {
 	return nil
 }
 
-// The comparison is exact: accepting case variants or padding would make the
-// closed set a suggestion.
 func ParseEventType(s string) (EventType, error) {
 	t := EventType(s)
 	if !t.Known() {

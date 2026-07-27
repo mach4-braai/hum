@@ -1,12 +1,3 @@
-// Command hum is the client CLI for the Hum auditory display daemon.
-//
-// Exit code 3, the daemon being unreachable, must never collapse into 1. A CI
-// script uses the distinction to skip Hum entirely when it is not running
-// rather than treating its absence as a failure. `hum help` lists the codes.
-//
-// Only bare control requests are dispatched today. The absent commands are a
-// deliberate omission, not an oversight: those carrying a payload or acting
-// locally arrive with their own issues.
 package main
 
 import (
@@ -92,9 +83,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return send(request, opts.timeout, opts.asJSON, stdout, stderr)
 }
 
-// operandsOf consumes flags wherever they appear among the words and returns
-// what is left. Go's flag package stops at the first positional, so a single
-// pass would read `theme use --json minimal` as a theme named "--json".
 func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([]string, bool) {
 	var positional []string
 	for {
@@ -167,8 +155,6 @@ func unexpected(command, operand string, stderr io.Writer) (protocol.Request, in
 	return protocol.Request{}, exitUsage
 }
 
-// exit is a seam: os.Exit would end the test binary before it could observe
-// that main forwards run's code.
 var exit = os.Exit
 
 func main() {

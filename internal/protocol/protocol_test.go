@@ -104,7 +104,7 @@ func TestEventValidation(t *testing.T) {
 }
 
 func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
-	// 65 two-byte runes: only 65 characters, but 130 bytes.
+
 	id := strings.Repeat("é", MaxIDLen/2+1)
 	if len([]rune(id)) > MaxIDLen {
 		t.Fatalf("test setup: %d runes is already over the limit, so it cannot distinguish bytes from runes", len([]rune(id)))

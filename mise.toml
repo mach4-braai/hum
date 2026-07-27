@@ -1,9 +1,4 @@
-# GoReleaser and the Homebrew formula cannot use mise, so they duplicate the
-# ldflags defined here; internal/infra asserts the copies stay in sync.
-
 [tools]
-# Exact patch, not a floating "1.24": that resolves differently per machine,
-# which is what this pin exists to prevent. oto/v3 needs >= 1.24.0.
 go = "1.24.13"
 
 [env]
@@ -24,20 +19,14 @@ go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
 description = "Run the unit test suite"
 run = "go test ./..."
 
-# A fixed floor: it bounds erosion but does not follow coverage upwards. Raise
-# it by hand as coverage rises, and lower it only deliberately.
 [tasks.coverage]
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
 set -eu
 MINIMUM=98
-# -coverpkg credits cross-package execution, so a package covered only by
-# another package's test still counts.
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
-# CI publishes this last stdout line verbatim as the coverage status
-# description, so it states both numbers and prints in either outcome.
 awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
   below = (total + 0 < minimum + 0)
   if (below) {

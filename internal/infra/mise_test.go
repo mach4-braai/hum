@@ -11,8 +11,6 @@ import (
 
 var requiredTasks = []string{"build", "check", "clean", "coverage", "fmt", "install", "test", "vet"}
 
-// Via mise itself, proving mise can read the file. Skip only when mise is absent;
-// other failures may mean a malformed mise.toml.
 func TestMiseDefinesRequiredTasks(t *testing.T) {
 	if _, err := exec.LookPath("mise"); err != nil {
 		t.Skip("mise is not installed; skipping the task-list assertion")
@@ -20,7 +18,7 @@ func TestMiseDefinesRequiredTasks(t *testing.T) {
 	root := repoRoot(t)
 	cmd := exec.Command("mise", "tasks", "ls", "-J")
 	cmd.Dir = root
-	// Trust for this invocation only, so trust state cannot affect the result.
+
 	cmd.Env = append(os.Environ(), "MISE_TRUSTED_CONFIG_PATHS="+root)
 	out, err := cmd.Output()
 	if err != nil {
@@ -45,7 +43,6 @@ func TestMiseDefinesRequiredTasks(t *testing.T) {
 	}
 }
 
-// GoReleaser and the formula duplicate these flags; this detects the drift.
 func TestMiseBuildTaskStampsVersionAndTrimsPaths(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {
@@ -70,7 +67,6 @@ func TestMisePinsGoToolchain(t *testing.T) {
 	}
 }
 
-// Without an enforced floor the coverage job only reports, and nothing is gated.
 func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {
@@ -89,8 +85,6 @@ func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
 	}
 }
 
-// CI publishes this line verbatim as the coverage status description, so its
-// shape is a contract between mise.toml and the workflow.
 func TestMiseCoverageTaskEmitsTheSummaryCIPublishes(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {
