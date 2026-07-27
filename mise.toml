@@ -46,9 +46,6 @@ if [ -n "$unformatted" ]; then
 fi
 go vet ./...
 go test ./...
-# The infra suite is tagged so that a plain `go test ./...` needs nothing but a
-# Go toolchain. Run it explicitly here so CI still validates this file.
-go test -tags=infra ./internal/infra/
 '''
 
 [tasks.install]

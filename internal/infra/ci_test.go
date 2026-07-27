@@ -1,5 +1,3 @@
-//go:build infra
-
 package infra
 
 import (
