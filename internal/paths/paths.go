@@ -4,6 +4,7 @@
 package paths
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -96,4 +97,18 @@ func SocketPath() string {
 		return p
 	}
 	return filepath.Join(GlobalConfigDir(), SocketFileName)
+}
+
+// RuntimeDirPerm keeps the control socket private to its owner. Anything able to
+// open the socket can drive the user's audio output.
+const RuntimeDirPerm = 0o700
+
+// EnsureRuntimeDir creates the directory that holds the control socket. It is
+// idempotent, because every daemon start after the first finds it present.
+func EnsureRuntimeDir() error {
+	dir := filepath.Dir(SocketPath())
+	if err := os.MkdirAll(dir, RuntimeDirPerm); err != nil {
+		return fmt.Errorf("create runtime dir %s: %w", dir, err)
+	}
+	return nil
 }
