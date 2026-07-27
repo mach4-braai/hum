@@ -98,7 +98,6 @@ func TestEncoderWritesOneLinePerEvent(t *testing.T) {
 	}
 }
 
-// eventLineOfLength builds an event whose JSON is exactly n bytes.
 func eventLineOfLength(t *testing.T, n int) string {
 	t.Helper()
 	probe, err := json.Marshal(Event{Event: SessionStarted, ID: "1", Title: "x"})
@@ -176,7 +175,6 @@ func TestDecoderRejectsMalformedJSON(t *testing.T) {
 		}
 	})
 
-	// JSON null unmarshals into a struct without error, zeroing every field.
 	t.Run("null is not a message", func(t *testing.T) {
 		if _, err := NewDecoder(strings.NewReader("null\n")).Decode(); err == nil {
 			t.Error("Decode() = nil for a null payload, want an error; a zero event must not look like a successful decode")
@@ -192,7 +190,6 @@ func TestDecoderRejectsMalformedJSON(t *testing.T) {
 	}
 }
 
-// countingReader reports how much of an oversized line the decoder consumed.
 type countingReader struct {
 	src  io.Reader
 	read int
@@ -204,8 +201,6 @@ func (r *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// The limit must trip while the line is still arriving, not once the stream
-// ends: an endless line would otherwise be buffered in full.
 func TestDecoderRejectsAnOversizedLineBeforeTheStreamEnds(t *testing.T) {
 	src := &countingReader{src: strings.NewReader(strings.Repeat("x", 4*MaxMessageLen))}
 
@@ -219,7 +214,6 @@ func TestDecoderRejectsAnOversizedLineBeforeTheStreamEnds(t *testing.T) {
 	}
 }
 
-// errWriter fails every write, as a peer that has closed the connection does.
 type errWriter struct{}
 
 func (errWriter) Write([]byte) (int, error) {

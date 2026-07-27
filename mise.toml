@@ -1,11 +1,4 @@
-# Single source of truth for the Go toolchain and build flags. CI installs the
-# toolchain from here so local and CI cannot drift. GoReleaser and the Homebrew
-# formula cannot use mise, so they duplicate the ldflags; internal/infra asserts
-# the duplication stays in sync.
-
 [tools]
-# Exact patch: a floating "1.24" drifts between machines. oto/v3 needs >= 1.24.0.
-# go.mod separately declares the language version, which may differ.
 go = "1.24.13"
 
 [env]
@@ -26,21 +19,14 @@ go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
 description = "Run the unit test suite"
 run = "go test ./..."
 
-# A fixed floor, raised by hand as coverage rises and lowered only deliberately.
-# At 98 against a measured 98.9%, one uncovered statement in the 93 sinks the
-# build, which is the intent: new code arrives with its tests.
 [tasks.coverage]
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
 set -eu
 MINIMUM=98
-# -coverpkg attributes cross-package execution, so a package covered only by
-# another package's test still counts.
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
-# The last stdout line is the contract CI publishes verbatim as the description
-# of the coverage status, so it states both numbers and is printed either way.
 awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
   below = (total + 0 < minimum + 0)
   if (below) {

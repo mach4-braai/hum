@@ -5,7 +5,6 @@ on:
     branches: [master]
   pull_request:
 
-# Supersede stale runs, so an older one cannot report after a fresher one.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -15,8 +14,6 @@ permissions:
 
 jobs:
   check:
-    # oto/v3 v3.4.0 builds CGO-free on macOS but declares "#cgo pkg-config: alsa"
-    # on Linux, so both platforms must be covered.
     strategy:
       fail-fast: false
       matrix:
@@ -25,8 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Installs the Go toolchain pinned in mise.toml, and trusts the config.
-      # actions/setup-go is avoided: an independent Go version would defeat the pin.
       - uses: jdx/mise-action@v4
 
       - name: Cache Go modules
@@ -38,9 +33,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      # oto/v3 v3.4.0 links ALSA through cgo on Linux; pkg-config resolves its
-      # "#cgo pkg-config: alsa" directive. Remove alongside the oto v3.5 upgrade in #39.
-      - name: Install Linux audio build dependency
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -48,8 +41,6 @@ jobs:
 
       - run: mise run check
 
-  # A separate job, so coverage reports as its own status check. Single-platform:
-  # the total is identical on both, and check already covers cross-platform builds.
   coverage:
     runs-on: ubuntu-latest
     permissions:
@@ -69,14 +60,11 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      # Same cgo ALSA dependency as the check job; removed alongside #39.
-      - name: Install Linux audio build dependency
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config
 
-      # The per-function table lands in the job summary either way, so a failing
-      # check names the under-covered functions without reopening the log.
       - name: Enforce the coverage minimum
         id: measure
         run: |
@@ -100,10 +88,6 @@ jobs:
           } >>"$GITHUB_OUTPUT"
           exit $status
 
-      # Supplemental display only: the job above is the gate. A commit status is
-      # the only check that carries a description, which is where the numbers
-      # belong, but a fork's token is read-only and cannot post one, so this must
-      # never decide whether the pull request can merge.
       - name: Publish the measured total
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         continue-on-error: true

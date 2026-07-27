@@ -48,8 +48,6 @@ func TestRequestDecodesTheCommandForm(t *testing.T) {
 	}
 }
 
-// Decoding stays separate from validation so a caller can answer a malformed
-// message and a contract breach differently.
 func TestRequestDecodingDoesNotValidate(t *testing.T) {
 	var got Request
 	if err := json.Unmarshal([]byte(`{"event":"session.started","id":"1","command":"status"}`), &got); err != nil {
@@ -76,8 +74,6 @@ func TestRequestRejectsMalformedJSON(t *testing.T) {
 		}
 	})
 
-	// The probe accepts the event field, so the failure comes from the second
-	// pass that decodes the surrounding event object.
 	t.Run("event field types disagree", func(t *testing.T) {
 		var got Request
 		if err := json.Unmarshal([]byte(`{"event":"session.started","priority":"high"}`), &got); err == nil {
@@ -137,8 +133,6 @@ func TestRequestValidateBoundsVolume(t *testing.T) {
 		}
 	}
 
-	// ParseFloat accepts these spellings, and every comparison against NaN is
-	// false, so a direct range check would admit NaN as a valid volume.
 	for _, value := range []string{"", "loud", "-0.1", "1.1", "2", "NaN", "nan", "Inf", "+Inf", "-Inf"} {
 		if err := (Request{Command: CmdVolume, Value: value}).Validate(); err == nil {
 			t.Errorf("Validate() with volume %q = nil, want it rejected", value)
@@ -146,8 +140,6 @@ func TestRequestValidateBoundsVolume(t *testing.T) {
 	}
 }
 
-// A value is meaningful only to some commands; the others must not start
-// rejecting requests that merely carry one.
 func TestRequestValidateIgnoresValueOnOtherCommands(t *testing.T) {
 	if err := (Request{Command: CmdThemeUse, Value: "minimal"}).Validate(); err != nil {
 		t.Errorf("Validate() = %v, want theme.use to accept a value", err)
@@ -181,7 +173,6 @@ func TestRequestEncodesACommand(t *testing.T) {
 		}
 	})
 
-	// An empty value must vanish rather than ride along as "".
 	t.Run("without a value", func(t *testing.T) {
 		data, err := json.Marshal(Request{Command: CmdPing})
 		if err != nil {
@@ -193,7 +184,6 @@ func TestRequestEncodesACommand(t *testing.T) {
 	})
 }
 
-// Refusing at the boundary keeps an ambiguous message off the wire entirely.
 func TestRequestRefusesToEncodeAnInvalidEnvelope(t *testing.T) {
 	both := Request{Event: &Event{Event: SessionStarted, ID: "1"}, Command: CmdStatus}
 

@@ -1,4 +1,3 @@
-// Command hum is the client CLI for the Hum auditory display daemon.
 package main
 
 import (
@@ -11,8 +10,6 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
-// Exit codes are part of the CLI contract: a CI script distinguishes "the work
-// failed" from "Hum is not running", and the two must never collapse into 1.
 const (
 	exitOK          = 0
 	exitDaemonError = 1
@@ -20,8 +17,6 @@ const (
 	exitUnreachable = 3
 )
 
-// defaultTimeout bounds a control round trip. The daemon answers from memory,
-// so a slow reply means it is wedged rather than busy.
 const defaultTimeout = 2 * time.Second
 
 const usage = `usage: hum [--json] [--timeout <duration>] <command> [flags]
@@ -47,10 +42,6 @@ Exit codes:
   3  the daemon is unreachable
 `
 
-// control maps each command that is a bare control request onto its protocol
-// command. Commands carrying a payload or acting locally (init, start,
-// complete, fail, doctor) arrive with their own issues rather than being
-// guessed at here.
 var control = map[string]protocol.Command{
 	"ping":   protocol.CmdPing,
 	"status": protocol.CmdStatus,
@@ -58,15 +49,11 @@ var control = map[string]protocol.Command{
 	"stop":   protocol.CmdShutdown,
 }
 
-// options are accepted before or after the command, because both spellings are
-// natural and rejecting one is a papercut rather than a contract.
 type options struct {
 	asJSON  bool
 	timeout time.Duration
 }
 
-// flagsFor gives each command its own set over the same options, so a command
-// can add its own flags later without another dispatcher.
 func flagsFor(name string, opts *options, stderr io.Writer) *flag.FlagSet {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -75,8 +62,6 @@ func flagsFor(name string, opts *options, stderr io.Writer) *flag.FlagSet {
 	return flags
 }
 
-// run executes the CLI and returns the process exit code. It is separated from
-// main so that exit codes and output streams are testable in process.
 func run(args []string, stdout, stderr io.Writer) int {
 	opts := options{timeout: defaultTimeout}
 	global := flagsFor("hum", &opts, stderr)
@@ -98,9 +83,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return send(request, opts.timeout, opts.asJSON, stdout, stderr)
 }
 
-// operandsOf consumes flags wherever they appear among the words and returns
-// what is left. Go's flag package stops at the first positional, so a single
-// pass would read `theme use --json minimal` as a theme named "--json".
 func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([]string, bool) {
 	var positional []string
 	for {
@@ -116,7 +98,6 @@ func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([
 	}
 }
 
-// parse turns the command words into one request, or reports a usage error.
 func parse(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
 	command, words := words[0], words[1:]
 
@@ -169,15 +150,11 @@ func parseTheme(words []string, opts *options, stderr io.Writer) (protocol.Reque
 	}
 }
 
-// unexpected rejects trailing words rather than ignoring them, so a mistyped
-// command is reported instead of silently doing something else.
 func unexpected(command, operand string, stderr io.Writer) (protocol.Request, int) {
 	fmt.Fprintf(stderr, "hum %s: unexpected argument %q\n", command, operand)
 	return protocol.Request{}, exitUsage
 }
 
-// exit is a seam: os.Exit would end the test binary before it could observe
-// that main forwards run's code.
 var exit = os.Exit
 
 func main() {

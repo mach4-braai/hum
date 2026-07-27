@@ -2,13 +2,10 @@
 Thumbs.db
 *.swp
 
-# Build output. The binary entries are anchored so they do not also match the
-# cmd/hum and cmd/humd source directories.
 /bin/
 /dist/
 /hum
 /humd
 
-# Test output.
 *.test
 coverage.out

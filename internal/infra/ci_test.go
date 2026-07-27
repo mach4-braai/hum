@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// Asserted as text; a YAML parser would cost one of two allowed dependencies.
 func readWorkflow(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "ci.yml"))
@@ -35,7 +34,6 @@ func TestCIDerivesToolchainFromMise(t *testing.T) {
 	if !strings.Contains(workflow, "jdx/mise-action") {
 		t.Error("ci workflow does not install the toolchain with jdx/mise-action")
 	}
-	// `uses:`, not any mention: the workflow names setup-go in a comment.
 	if strings.Contains(workflow, "uses: actions/setup-go") {
 		t.Error("ci workflow uses actions/setup-go, which declares a Go version independently of mise.toml")
 	}
@@ -91,7 +89,6 @@ func TestCICachesGoModules(t *testing.T) {
 	}
 }
 
-// libasound2-dev alone cannot link; pkg-config resolves the cgo directive.
 func TestCIInstallsPkgConfigForCgoAlsa(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -108,9 +105,7 @@ func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 	}
 }
 
-// Minimum majors, so the warning cannot return and nobody chases each release.
 func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
-	// mise-action v3 is also node20, so v4 is the floor, not v3.
 	minMajor := map[string]int{
 		"actions/checkout": 5,
 		"actions/cache":    5,
@@ -138,7 +133,6 @@ func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
 	}
 }
 
-// Its own job, so branch protection can require it independently of check.
 func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -151,8 +145,6 @@ func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
 	}
 }
 
-// The measured total reaches the pull request as a commit status description,
-// the only check text that can carry it.
 func TestCIPublishesTheMeasuredCoverageTotal(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -162,7 +154,6 @@ func TestCIPublishesTheMeasuredCoverageTotal(t *testing.T) {
 	if !strings.Contains(workflow, "statuses: write") {
 		t.Error("the coverage job cannot post a status without statuses: write")
 	}
-	// A fork's token is read-only, so posting must never gate the merge.
 	if !strings.Contains(workflow, "continue-on-error: true") {
 		t.Error("a failed status post would fail the required coverage job")
 	}

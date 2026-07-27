@@ -10,10 +10,6 @@ import (
 	"testing"
 )
 
-// The exit codes are a contract with shell scripts, so they are asserted
-// against a real process. An in-process test of run cannot catch a main that
-// discards run's return value, and `go run` is useless here: it reports 1 for
-// any non-zero program exit, collapsing the very distinction being tested.
 var buildHum = sync.OnceValues(func() (string, error) {
 	dir, err := os.MkdirTemp("", "hum-bin")
 	if err != nil {
@@ -27,7 +23,6 @@ var buildHum = sync.OnceValues(func() (string, error) {
 	return binary, nil
 })
 
-// runBinary reports the process exit code and combined output.
 func runBinary(t *testing.T, socket string, args ...string) (int, string) {
 	t.Helper()
 	binary, err := buildHum()
@@ -74,8 +69,6 @@ func TestBinaryExitCodes(t *testing.T) {
 	}
 }
 
-// Distinguishing 3 from 1 is what lets a CI script tell "Hum is not running"
-// from "the work failed", so the message must be actionable, not a dial error.
 func TestBinaryReportsAnAbsentDaemonActionably(t *testing.T) {
 	absent := filepath.Join(t.TempDir(), "absent.sock")
 
