@@ -32,3 +32,15 @@ func TestGlobalConfigDirFallsBackToHomeDotHum(t *testing.T) {
 		t.Errorf("GlobalConfigDir() = %q, want %q", got, want)
 	}
 }
+
+// The filename is part of the documented layout in PRD.md section 12, so it is
+// asserted rather than left to the caller to join.
+func TestGlobalConfigFileLivesInsideConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HUM_HOME", dir)
+	want := filepath.Join(dir, "config.yaml")
+
+	if got := GlobalConfigFile(); got != want {
+		t.Errorf("GlobalConfigFile() = %q, want %q", got, want)
+	}
+}
