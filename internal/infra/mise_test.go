@@ -88,3 +88,23 @@ func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
 		}
 	}
 }
+
+// CI publishes this line verbatim as the coverage status description, so its
+// shape is a contract between mise.toml and the workflow.
+func TestMiseCoverageTaskEmitsTheSummaryCIPublishes(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	if !strings.Contains(string(data), "of statements, minimum") {
+		t.Fatal("the coverage task emits no summary line for CI to publish")
+	}
+
+	workflow, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "ci.yml"))
+	if err != nil {
+		t.Fatalf("read ci workflow: %v", err)
+	}
+	if !strings.Contains(string(workflow), `*"of statements, minimum"*`) {
+		t.Error("the workflow does not check the summary shape, so a malformed line would be published as the description")
+	}
+}
