@@ -101,7 +101,6 @@ func (r Request) Validate() error {
 	if err != nil {
 		return fmt.Errorf("volume %q is not a number", r.Value)
 	}
-
 	if !(volume >= MinVolume && volume <= MaxVolume) {
 		return fmt.Errorf("volume %v is outside [%v, %v]", volume, MinVolume, MaxVolume)
 	}

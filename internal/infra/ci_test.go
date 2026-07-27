@@ -34,7 +34,6 @@ func TestCIDerivesToolchainFromMise(t *testing.T) {
 	if !strings.Contains(workflow, "jdx/mise-action") {
 		t.Error("ci workflow does not install the toolchain with jdx/mise-action")
 	}
-
 	if strings.Contains(workflow, "uses: actions/setup-go") {
 		t.Error("ci workflow uses actions/setup-go, which declares a Go version independently of mise.toml")
 	}
@@ -107,7 +106,6 @@ func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 }
 
 func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
-
 	minMajor := map[string]int{
 		"actions/checkout": 5,
 		"actions/cache":    5,
@@ -156,7 +154,6 @@ func TestCIPublishesTheMeasuredCoverageTotal(t *testing.T) {
 	if !strings.Contains(workflow, "statuses: write") {
 		t.Error("the coverage job cannot post a status without statuses: write")
 	}
-
 	if !strings.Contains(workflow, "continue-on-error: true") {
 		t.Error("a failed status post would fail the required coverage job")
 	}

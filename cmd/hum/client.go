@@ -15,7 +15,6 @@ func send(request protocol.Request, timeout time.Duration, asJSON bool, stdout, 
 	socket := paths.SocketPath()
 	conn, err := net.DialTimeout("unix", socket, timeout)
 	if err != nil {
-
 		fmt.Fprintf(stderr, "hum: no daemon listening at %s\nstart it with `humd`, or `brew services start hum`\n", socket)
 		return exitUnreachable
 	}

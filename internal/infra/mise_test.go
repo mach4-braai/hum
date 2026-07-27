@@ -18,7 +18,6 @@ func TestMiseDefinesRequiredTasks(t *testing.T) {
 	root := repoRoot(t)
 	cmd := exec.Command("mise", "tasks", "ls", "-J")
 	cmd.Dir = root
-
 	cmd.Env = append(os.Environ(), "MISE_TRUSTED_CONFIG_PATHS="+root)
 	out, err := cmd.Output()
 	if err != nil {

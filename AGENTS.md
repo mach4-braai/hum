@@ -17,30 +17,14 @@ through it rather than calling `go` directly.
 
 ## Comments
 
-**Write no comments.** Not doc comments, not package docs, not "why" comments,
-not `TODO`s. The only exceptions are compiler directives (`//go:build`,
-`//go:generate`), which are not comments but instructions.
+**Write none.** No doc comments, no package docs, no "why" comments, no TODOs.
+Compiler directives (`//go:build`) are not comments and may stay.
 
-This is absolute. Do not reintroduce comments under any justification —
-"this one is genuinely subtle", "this records a decision", "this is idiomatic
-GoDoc". The answer is still no.
+No exceptions, no justifications. If code needs explaining, rename something or
+extract a function whose name is the sentence you were about to write.
 
-If code needs explaining, the code is wrong. Rename the identifier, extract a
-function whose name is the sentence you were about to write, or restructure
-until it reads plainly. A comment is the option you take when you have given up
-on making the code say it.
-
-Everything a comment would have said goes somewhere durable instead:
-
-| Kind of information | Where it lives |
-|---|---|
-| How it works, wire shapes, field tables | `docs/` |
-| Why a change was made | the commit message |
-| Alternatives considered and rejected | the issue or PR |
-| What a subtle line does | a named function or constant |
-
-Comments rot silently because nothing tests them; commits, issues and `docs/`
-are read in the context that keeps them honest.
+Functionality goes in `docs/`. Reasons go in the commit message. Rejected
+alternatives go in the issue or PR. Traps go in the list below.
 
 ## Tests
 

@@ -23,7 +23,6 @@ func unreachableSocket(t *testing.T) string {
 
 func serveOne(t *testing.T, response string) func() protocol.Request {
 	t.Helper()
-
 	dir, err := os.MkdirTemp("", "hum")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)

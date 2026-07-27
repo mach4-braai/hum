@@ -33,7 +33,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      - name: Install Linux audio build dependency (drop with oto v3.5, #39)
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -60,7 +60,7 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      - name: Install Linux audio build dependency (drop with oto v3.5, #39)
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev pkg-config

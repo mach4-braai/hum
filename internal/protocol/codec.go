@@ -31,7 +31,6 @@ func (d *Decoder) Decode() (Event, error) {
 		if len(line) == 0 {
 			continue
 		}
-
 		if line[0] != '{' {
 			return Event{}, fmt.Errorf("decode event: message must be a JSON object, got %.16q", line)
 		}
@@ -57,7 +56,6 @@ func (d *Decoder) readBoundedLine() ([]byte, error) {
 		}
 
 		if err != nil {
-
 			if errors.Is(err, io.EOF) && len(line)+len(chunk) > 0 {
 				line = append(line, chunk...)
 				if len(line) > MaxMessageLen {
@@ -89,7 +87,6 @@ func NewEncoder(w io.Writer) *Encoder {
 }
 
 func (e *Encoder) Encode(ev Event) error {
-
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
