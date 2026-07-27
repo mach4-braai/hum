@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -24,7 +25,9 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 			Workspace: "tofu",
 			Title:     "Validate PR #142",
 		}
-		if got != want {
+		// Compared with DeepEqual rather than ==: Event carries a Metadata
+		// map, so the struct is not comparable and == would not compile.
+		if !reflect.DeepEqual(got, want) {
 			t.Errorf("decoded = %+v, want %+v", got, want)
 		}
 
