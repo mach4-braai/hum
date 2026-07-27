@@ -21,7 +21,6 @@ const ProjectDirName = ".hum"
 const EnvSocket = "HUM_SOCKET"
 const SocketFileName = "humd.sock"
 
-// RuntimeDirPerm keeps the socket private to its owner.
 const RuntimeDirPerm = 0o700
 
 func GlobalConfigDir() string {
