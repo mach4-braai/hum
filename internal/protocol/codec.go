@@ -9,16 +9,14 @@ import (
 	"io"
 )
 
-// MaxMessageLen bounds one wire message in bytes, excluding the framing newline.
-// Unbounded lines would let a local process exhaust memory by withholding one.
+// MaxMessageLen bounds one message in bytes, excluding the framing newline.
 const MaxMessageLen = 64 << 10
 
 // ErrMessageTooLarge reports a wire message beyond MaxMessageLen.
 var ErrMessageTooLarge = errors.New("message exceeds the maximum length")
 
 // Decoder reads newline-delimited events. It owns one buffered reader for the
-// connection's lifetime; a per-message reader would drop what it buffered past the
-// first newline. Decode does not validate: callers apply Event.Validate.
+// connection's lifetime; a per-message reader would drop what it read ahead.
 type Decoder struct {
 	r *bufio.Reader
 }
@@ -28,14 +26,10 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r: bufio.NewReader(r)}
 }
 
-// Decode returns the next event, or io.EOF once the stream is exhausted. Blank
-// lines are skipped so a bare-newline keepalive does not drop the connection.
-//
-// After ErrMessageTooLarge the read position is unspecified, because the rest of
-// the oversized line is unconsumed. Callers must close rather than resynchronise.
+// Decode returns the next event; callers must close after ErrMessageTooLarge.
 func (d *Decoder) Decode() (Event, error) {
 	for {
-		line, err := d.readLine()
+		line, err := d.readBoundedLine()
 		if err != nil {
 			return Event{}, err
 		}
@@ -56,12 +50,7 @@ func (d *Decoder) Decode() (Event, error) {
 	}
 }
 
-// readLine returns one line without its trailing newline, refusing to accumulate
-// more than MaxMessageLen bytes.
-//
-// ReadString and ReadBytes grow until the delimiter, so an unterminated line
-// buffers without bound. ReadSlice lets length be checked as the line grows.
-func (d *Decoder) readLine() ([]byte, error) {
+func (d *Decoder) readBoundedLine() ([]byte, error) {
 	var line []byte
 	for {
 		chunk, err := d.r.ReadSlice('\n')
@@ -109,11 +98,8 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w: w}
 }
 
-// Encode writes one event as a single LF-terminated line. encoding/json escapes
-// newlines in strings, so field content cannot desynchronise the framing.
-//
-// An oversized event is refused before any bytes are written: a partial line
-// would desynchronise every message after it.
+// Encode writes one event as a single LF-terminated line. An oversized event is
+// refused before any bytes are written; a partial line would desynchronise.
 func (e *Encoder) Encode(ev Event) error {
 	data, err := json.Marshal(ev)
 	if err != nil {

@@ -8,8 +8,6 @@ import (
 	"testing"
 )
 
-// PRD.md section 14's exact payloads. Third-party clients are written against
-// these, so a rename or a newly mandatory field is a breaking change.
 func TestPRDWireExamplesRoundTrip(t *testing.T) {
 	t.Run("session.started with all documented fields", func(t *testing.T) {
 		const wire = `{"event":"session.started","id":"123","workspace":"tofu","title":"Validate PR #142"}`
@@ -25,8 +23,6 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 			Workspace: "tofu",
 			Title:     "Validate PR #142",
 		}
-		// Compared with DeepEqual rather than ==: Event carries a Metadata
-		// map, so the struct is not comparable and == would not compile.
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("decoded = %+v, want %+v", got, want)
 		}
@@ -40,9 +36,6 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 		}
 	})
 
-	// The completion example carries only an id. Re-encoding must not introduce
-	// empty workspace, title or priority keys: clients that diff payloads or
-	// match on exact shape would see spurious changes.
 	t.Run("session.completed omits absent fields", func(t *testing.T) {
 		const wire = `{"event":"session.completed","id":"123"}`
 
@@ -61,8 +54,6 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 	})
 }
 
-// Validation is a trust boundary: an empty id becomes an unaddressable session
-// whose drone never stops.
 func TestEventValidation(t *testing.T) {
 	valid := Event{Event: SessionStarted, ID: "123"}
 	if err := valid.Validate(); err != nil {
@@ -99,9 +90,6 @@ func TestEventValidation(t *testing.T) {
 		}
 	})
 
-	// An unbounded id would be echoed back by `hum status` and stored per
-	// session, so it is a cheap memory-amplification vector from any local
-	// process.
 	t.Run("rejects an id longer than the documented limit", func(t *testing.T) {
 		if err := (Event{Event: SessionStarted, ID: strings.Repeat("x", MaxIDLen+1)}).Validate(); err == nil {
 			t.Errorf("Validate() = nil, want an error for an id of %d bytes", MaxIDLen+1)
@@ -115,7 +103,6 @@ func TestEventValidation(t *testing.T) {
 	})
 }
 
-// A byte limit, not a rune limit: multibyte ids would otherwise get 4x the budget.
 func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
 	// 65 two-byte runes: only 65 characters, but 130 bytes.
 	id := strings.Repeat("é", MaxIDLen/2+1)
@@ -131,7 +118,6 @@ func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
 	}
 }
 
-// Unknown input must be rejected, not silently become a type the daemon discards.
 func TestParseEventType(t *testing.T) {
 	for _, want := range []EventType{SessionStarted, SessionUpdated, SessionCompleted, SessionFailed, SessionCancelled} {
 		got, err := ParseEventType(string(want))

@@ -1,16 +1,15 @@
-//go:build infra
-
 package infra
 
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-// Asserted as text: a YAML library would spend one of the two dependencies
-// PRD.md section 22 allows the whole project.
+// Asserted as text; a YAML parser would cost one of two allowed dependencies.
 func readWorkflow(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "ci.yml"))
@@ -20,8 +19,6 @@ func readWorkflow(t *testing.T) string {
 	return string(data)
 }
 
-// Both platforms are covered because oto/v3 v3.4.0 builds CGO-free on macOS but
-// declares "#cgo pkg-config: alsa" on Linux, where CGO_ENABLED=0 fails.
 func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -32,16 +29,13 @@ func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
 	}
 }
 
-// CI must take its toolchain from mise.toml, or the pin stops being the single
-// source of truth and CI drifts from local builds.
 func TestCIDerivesToolchainFromMise(t *testing.T) {
 	workflow := readWorkflow(t)
 
 	if !strings.Contains(workflow, "jdx/mise-action") {
 		t.Error("ci workflow does not install the toolchain with jdx/mise-action")
 	}
-	// Matches actual usage rather than any mention: a comment explaining why
-	// setup-go is avoided is desirable, and must not trip this assertion.
+	// `uses:`, not any mention: the workflow names setup-go in a comment.
 	if strings.Contains(workflow, "uses: actions/setup-go") {
 		t.Error("ci workflow uses actions/setup-go, which declares a Go version independently of mise.toml")
 	}
@@ -50,8 +44,6 @@ func TestCIDerivesToolchainFromMise(t *testing.T) {
 	}
 }
 
-// Without cancel-in-progress, pushing twice to a branch leaves both runs
-// competing for runners and the stale one can report after the fresh one.
 func TestCICancelsSupersededRuns(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -63,7 +55,6 @@ func TestCICancelsSupersededRuns(t *testing.T) {
 	}
 }
 
-// oto/v3 v3.4.0 links ALSA through cgo on Linux, so the headers are needed.
 func TestCIInstallsLinuxAudioBuildDependency(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -75,7 +66,6 @@ func TestCIInstallsLinuxAudioBuildDependency(t *testing.T) {
 	}
 }
 
-// pull_request alone leaves the default branch unverified after a direct push.
 func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -90,8 +80,6 @@ func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	}
 }
 
-// Without a module cache every job re-downloads the dependency graph, which
-// grows into minutes of runner time once oto and yaml.v3 are in go.mod.
 func TestCICachesGoModules(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -103,8 +91,7 @@ func TestCICachesGoModules(t *testing.T) {
 	}
 }
 
-// pkg-config is what resolves the "#cgo pkg-config: alsa" directive in
-// oto/v3 v3.4.0; libasound2-dev alone is not enough to link.
+// libasound2-dev alone cannot link; pkg-config resolves the cgo directive.
 func TestCIInstallsPkgConfigForCgoAlsa(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -113,11 +100,40 @@ func TestCIInstallsPkgConfigForCgoAlsa(t *testing.T) {
 	}
 }
 
-// Without a pointer to the issue that removes it, the step becomes permanent.
 func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 	workflow := readWorkflow(t)
 
 	if !strings.Contains(workflow, "#39") {
 		t.Error("the Linux audio dependency step does not reference issue #39, which removes it")
+	}
+}
+
+// Minimum majors, so the warning cannot return and nobody chases each release.
+func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
+	// mise-action v3 is also node20, so v4 is the floor, not v3.
+	minMajor := map[string]int{
+		"actions/checkout": 5,
+		"actions/cache":    5,
+		"jdx/mise-action":  4,
+	}
+
+	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+)@v(\d+)`)
+	found := make(map[string]bool, len(minMajor))
+	for _, m := range uses.FindAllStringSubmatch(readWorkflow(t), -1) {
+		action, major := m[1], m[2]
+		found[action] = true
+		got, err := strconv.Atoi(major)
+		if err != nil {
+			t.Fatalf("parse major of %s@v%s: %v", action, major, err)
+		}
+		if want, tracked := minMajor[action]; tracked && got < want {
+			t.Errorf("%s is pinned at v%d, want at least v%d: earlier majors run on the deprecated node20 runtime", action, got, want)
+		}
+	}
+
+	for action := range minMajor {
+		if !found[action] {
+			t.Errorf("workflow no longer uses %s; drop it from minMajor or restore it", action)
+		}
 	}
 }
