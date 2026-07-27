@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# A second push to the same ref supersedes the first. Without this, both runs
+# compete for runners and the stale one can report after the fresher one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Both platforms are covered because the audio backend is platform-sensitive:
+    # oto/v3 v3.4.0 builds CGO-free on macOS but its driver_unix.go declares
+    # "#cgo pkg-config: alsa", so a CGO_ENABLED=0 Linux build fails.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Installs the Go toolchain pinned in mise.toml. actions/setup-go is
+      # deliberately not used: it would declare a Go version independently and
+      # let CI drift from local builds, making the pin meaningless. mise-action
+      # also trusts the config, which mise otherwise refuses to read.
+      - uses: jdx/mise-action@v2
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      # oto/v3 v3.4.0 links ALSA through cgo on Linux, and pkg-config is what
+      # resolves its "#cgo pkg-config: alsa" directive. Remove this step
+      # together with the oto v3.5 upgrade in #39, which drops the Linux build
+      # dependency entirely.
+      - name: Install Linux audio build dependency
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      # Formatting, vet, unit tests and the tagged build-tooling assertions.
+      - run: mise run check
