@@ -25,3 +25,12 @@ func GlobalConfigDir() string {
 	}
 	return filepath.Join(home, ".hum")
 }
+
+// ConfigFileName is the configuration filename used at both the global and the
+// project level, per PRD.md section 12.
+const ConfigFileName = "config.yaml"
+
+// GlobalConfigFile returns the path to the global configuration file.
+func GlobalConfigFile() string {
+	return filepath.Join(GlobalConfigDir(), ConfigFileName)
+}
