@@ -50,8 +50,11 @@ const ProjectDirName = ".hum"
 // it as project config, letting one file occupy two layers of PRD.md
 // section 12's precedence chain at the wrong priority.
 func ProjectConfigFile(startDir string) (string, bool) {
-	global := filepath.Clean(GlobalConfigFile())
-	dir := startDir
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", false
+	}
+	global := absClean(GlobalConfigFile())
 	for {
 		candidate := filepath.Join(dir, ProjectDirName, ConfigFileName)
 		if candidate != global {
@@ -65,4 +68,14 @@ func ProjectConfigFile(startDir string) (string, bool) {
 		}
 		dir = parent
 	}
+}
+
+// absClean resolves p against the working directory, falling back to a cleaned
+// relative path when that is not possible. Used so path comparisons are made
+// between like forms.
+func absClean(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
 }
