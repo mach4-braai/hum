@@ -1,0 +1,74 @@
+# Build tooling for Hum.
+#
+# This file is the single source of truth for the Go toolchain and for the build
+# flags. CI installs the toolchain from here rather than declaring its own
+# version, so local and CI builds cannot drift.
+#
+# GoReleaser and the Homebrew formula cannot depend on mise, so they duplicate
+# the ldflags below. `internal/infra` asserts that the duplication stays in sync.
+
+[tools]
+# Pinned to an exact patch so local, CI and release builds use the identical
+# compiler; a floating "1.24" would drift between machines over time. The audio
+# backend (oto/v3) requires at least 1.24.0. go.mod separately declares the
+# *language* version, which is a different thing and may legitimately differ.
+go = "1.24.13"
+
+[env]
+HUM_VERSION = "{{ exec(command='git describe --tags --always --dirty 2>/dev/null || echo dev') }}"
+HUM_COMMIT = "{{ exec(command='git rev-parse --short HEAD 2>/dev/null || echo none') }}"
+HUM_DATE = "{{ exec(command='date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+
+[tasks.build]
+description = "Build hum and humd into bin/"
+run = '''
+set -eu
+LDFLAGS="-X main.version=$HUM_VERSION -X main.commit=$HUM_COMMIT -X main.date=$HUM_DATE"
+go build -trimpath -ldflags "$LDFLAGS" -o bin/hum ./cmd/hum
+go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
+'''
+
+[tasks.test]
+description = "Run the unit test suite"
+run = "go test ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.fmt]
+description = "Format all Go source in place"
+run = "gofmt -w ."
+
+[tasks.check]
+description = "Formatting, vet, unit tests and build-tooling assertions"
+run = '''
+set -eu
+unformatted=$(gofmt -l .)
+if [ -n "$unformatted" ]; then
+  echo "unformatted files:" >&2
+  echo "$unformatted" >&2
+  exit 1
+fi
+go vet ./...
+go test ./...
+# The infra suite is tagged so that a plain `go test ./...` needs nothing but a
+# Go toolchain. Run it explicitly here so CI still validates this file.
+go test -tags=infra ./internal/infra/
+'''
+
+[tasks.install]
+description = "Install both binaries into $PREFIX/bin (default /usr/local)"
+run = '''
+set -eu
+PREFIX="${PREFIX:-/usr/local}"
+DESTDIR="${DESTDIR:-}"
+mise run build
+mkdir -p "$DESTDIR$PREFIX/bin"
+install -m 0755 bin/hum "$DESTDIR$PREFIX/bin/hum"
+install -m 0755 bin/humd "$DESTDIR$PREFIX/bin/humd"
+'''
+
+[tasks.clean]
+description = "Remove build output"
+run = "rm -rf bin dist"
