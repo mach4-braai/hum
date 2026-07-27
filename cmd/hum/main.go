@@ -2,18 +2,178 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"time"
+
+	"github.com/mach4-braai/hum/internal/protocol"
 )
 
-const usage = `usage: hum <command> [flags]`
+// Exit codes are part of the CLI contract: a CI script distinguishes "the work
+// failed" from "Hum is not running", and the two must never collapse into 1.
+const (
+	exitOK          = 0
+	exitDaemonError = 1
+	exitUsage       = 2
+	exitUnreachable = 3
+)
+
+// defaultTimeout bounds a control round trip. The daemon answers from memory,
+// so a slow reply means it is wedged rather than busy.
+const defaultTimeout = 2 * time.Second
+
+const usage = `usage: hum [--json] [--timeout <duration>] <command> [flags]
+
+Commands:
+  init          write a project configuration
+  start         announce a new work session
+  stop          stop the daemon
+  complete      mark a session completed
+  fail          mark a session failed
+  status        report daemon and session state
+  mute          silence output without stopping
+  doctor        diagnose the installation
+  theme list    list available themes
+  theme use     switch to a theme
+  ping          check that the daemon is reachable
+  help          print this message
+
+Exit codes:
+  0  success
+  1  the daemon returned an error
+  2  usage error
+  3  the daemon is unreachable
+`
+
+// control maps each command that is a bare control request onto its protocol
+// command. Commands carrying a payload or acting locally (init, start,
+// complete, fail, doctor) arrive with their own issues rather than being
+// guessed at here.
+var control = map[string]protocol.Command{
+	"ping":   protocol.CmdPing,
+	"status": protocol.CmdStatus,
+	"mute":   protocol.CmdMute,
+	"stop":   protocol.CmdShutdown,
+}
+
+// options are accepted before or after the command, because both spellings are
+// natural and rejecting one is a papercut rather than a contract.
+type options struct {
+	asJSON  bool
+	timeout time.Duration
+}
+
+// flagsFor gives each command its own set over the same options, so a command
+// can add its own flags later without another dispatcher.
+func flagsFor(name string, opts *options, stderr io.Writer) *flag.FlagSet {
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	flags.BoolVar(&opts.asJSON, "json", opts.asJSON, "print the daemon's raw response")
+	flags.DurationVar(&opts.timeout, "timeout", opts.timeout, "how long to wait for the daemon")
+	return flags
+}
 
 // run executes the CLI and returns the process exit code. It is separated from
 // main so that exit codes and output streams are testable in process.
 func run(args []string, stdout, stderr io.Writer) int {
-	fmt.Fprintln(stderr, usage)
-	return 2
+	opts := options{timeout: defaultTimeout}
+	global := flagsFor("hum", &opts, stderr)
+	global.Usage = func() { fmt.Fprint(stderr, usage) }
+	if err := global.Parse(args); err != nil {
+		return exitUsage
+	}
+
+	rest := global.Args()
+	if len(rest) == 0 || rest[0] == "help" {
+		fmt.Fprint(stderr, usage)
+		return exitUsage
+	}
+
+	request, code := parse(rest, &opts, stderr)
+	if code != exitOK {
+		return code
+	}
+	return send(request, opts.timeout, opts.asJSON, stdout, stderr)
+}
+
+// operandsOf consumes flags wherever they appear among the words and returns
+// what is left. Go's flag package stops at the first positional, so a single
+// pass would read `theme use --json minimal` as a theme named "--json".
+func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([]string, bool) {
+	var positional []string
+	for {
+		flags := flagsFor(name, opts, stderr)
+		if err := flags.Parse(words); err != nil {
+			return nil, false
+		}
+		if flags.NArg() == 0 {
+			return positional, true
+		}
+		positional = append(positional, flags.Arg(0))
+		words = flags.Args()[1:]
+	}
+}
+
+// parse turns the command words into one request, or reports a usage error.
+func parse(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
+	command, words := words[0], words[1:]
+
+	if command == "theme" {
+		return parseTheme(words, opts, stderr)
+	}
+
+	cmd, known := control[command]
+	if !known {
+		fmt.Fprintf(stderr, "hum: unknown command %q\n\n", command)
+		fmt.Fprint(stderr, usage)
+		return protocol.Request{}, exitUsage
+	}
+
+	operands, ok := operandsOf("hum "+command, words, opts, stderr)
+	if !ok {
+		return protocol.Request{}, exitUsage
+	}
+	if len(operands) != 0 {
+		return unexpected(command, operands[0], stderr)
+	}
+	return protocol.Request{Command: cmd}, exitOK
+}
+
+func parseTheme(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
+	operands, ok := operandsOf("hum theme", words, opts, stderr)
+	if !ok {
+		return protocol.Request{}, exitUsage
+	}
+	if len(operands) == 0 {
+		fmt.Fprint(stderr, "hum theme: expected \"list\" or \"use <name>\"\n")
+		return protocol.Request{}, exitUsage
+	}
+
+	switch operands[0] {
+	case "list":
+		if len(operands) > 1 {
+			return unexpected("theme list", operands[1], stderr)
+		}
+		return protocol.Request{Command: protocol.CmdThemeList}, exitOK
+	case "use":
+		if len(operands) != 2 {
+			fmt.Fprint(stderr, "hum theme use: expected exactly one theme name\n")
+			return protocol.Request{}, exitUsage
+		}
+		return protocol.Request{Command: protocol.CmdThemeUse, Value: operands[1]}, exitOK
+	default:
+		fmt.Fprintf(stderr, "hum theme: unknown subcommand %q, expected \"list\" or \"use\"\n", operands[0])
+		return protocol.Request{}, exitUsage
+	}
+}
+
+// unexpected rejects trailing words rather than ignoring them, so a mistyped
+// command is reported instead of silently doing something else.
+func unexpected(command, operand string, stderr io.Writer) (protocol.Request, int) {
+	fmt.Fprintf(stderr, "hum %s: unexpected argument %q\n", command, operand)
+	return protocol.Request{}, exitUsage
 }
 
 // exit is a seam: os.Exit would end the test binary before it could observe
