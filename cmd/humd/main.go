@@ -17,6 +17,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 2
 }
 
+// exit is a seam: os.Exit would end the test binary before it could observe
+// that main forwards run's code.
+var exit = os.Exit
+
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }

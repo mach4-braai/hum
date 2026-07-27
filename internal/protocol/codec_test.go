@@ -191,3 +191,48 @@ func TestDecoderRejectsMalformedJSON(t *testing.T) {
 		})
 	}
 }
+
+// countingReader reports how much of an oversized line the decoder consumed.
+type countingReader struct {
+	src  io.Reader
+	read int
+}
+
+func (r *countingReader) Read(p []byte) (int, error) {
+	n, err := r.src.Read(p)
+	r.read += n
+	return n, err
+}
+
+// The limit must trip while the line is still arriving, not once the stream
+// ends: an endless line would otherwise be buffered in full.
+func TestDecoderRejectsAnOversizedLineBeforeTheStreamEnds(t *testing.T) {
+	src := &countingReader{src: strings.NewReader(strings.Repeat("x", 4*MaxMessageLen))}
+
+	_, err := NewDecoder(src).Decode()
+
+	if !errors.Is(err, ErrMessageTooLarge) {
+		t.Fatalf("Decode() = %v, want ErrMessageTooLarge", err)
+	}
+	if limit := 2 * MaxMessageLen; src.read > limit {
+		t.Errorf("Decode() read %d bytes before rejecting, want at most %d", src.read, limit)
+	}
+}
+
+// errWriter fails every write, as a peer that has closed the connection does.
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) {
+	return 0, errors.New("connection reset by peer")
+}
+
+func TestEncoderReportsWriteFailures(t *testing.T) {
+	err := NewEncoder(errWriter{}).Encode(Event{Event: SessionStarted, ID: "1"})
+
+	if err == nil {
+		t.Fatal("Encode() = nil, want the write failure reported")
+	}
+	if !strings.Contains(err.Error(), "connection reset by peer") {
+		t.Errorf("Encode() = %v, want the underlying write error preserved", err)
+	}
+}

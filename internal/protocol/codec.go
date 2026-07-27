@@ -101,6 +101,8 @@ func NewEncoder(w io.Writer) *Encoder {
 // Encode writes one event as a single LF-terminated line. An oversized event is
 // refused before any bytes are written; a partial line would desynchronise.
 func (e *Encoder) Encode(ev Event) error {
+	// Unreachable while Event holds only strings, an int and a string map, but
+	// dropping the check would hide the first field that can fail to marshal.
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("encode event: %w", err)
