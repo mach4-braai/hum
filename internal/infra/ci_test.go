@@ -3,6 +3,8 @@ package infra
 import (
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -117,5 +119,38 @@ func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 
 	if !strings.Contains(workflow, "#39") {
 		t.Error("the Linux audio dependency step does not reference issue #39, which removes it")
+	}
+}
+
+// GitHub deprecated the node20 action runtime and now forces those actions onto
+// node24, warning on every run. Pinning minimum majors keeps the warning from
+// coming back without forcing a chase after every new release.
+func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
+	// Verified against each action.yml: the majors below the minimum declare
+	// `using: node20`. Note mise-action v3 is still node20, so v4 is the floor.
+	minMajor := map[string]int{
+		"actions/checkout": 5,
+		"actions/cache":    5,
+		"jdx/mise-action":  4,
+	}
+
+	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+)@v(\d+)`)
+	found := make(map[string]bool, len(minMajor))
+	for _, m := range uses.FindAllStringSubmatch(readWorkflow(t), -1) {
+		action, major := m[1], m[2]
+		found[action] = true
+		got, err := strconv.Atoi(major)
+		if err != nil {
+			t.Fatalf("parse major of %s@v%s: %v", action, major, err)
+		}
+		if want, tracked := minMajor[action]; tracked && got < want {
+			t.Errorf("%s is pinned at v%d, want at least v%d: earlier majors run on the deprecated node20 runtime", action, got, want)
+		}
+	}
+
+	for action := range minMajor {
+		if !found[action] {
+			t.Errorf("workflow no longer uses %s; drop it from minMajor or restore it", action)
+		}
 	}
 }
