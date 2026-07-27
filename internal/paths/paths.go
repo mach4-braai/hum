@@ -43,12 +43,21 @@ const ProjectDirName = ".hum"
 // configuration file, returning the first match and whether one was found.
 // Clients run from anywhere inside a project, so discovery mirrors the way git
 // locates its root.
+//
+// The global configuration file is skipped even though it matches the shape
+// being searched for. Global config lives at ~/.hum/config.yaml, so a client
+// run anywhere under the home directory would otherwise discover it and apply
+// it as project config, letting one file occupy two layers of PRD.md
+// section 12's precedence chain at the wrong priority.
 func ProjectConfigFile(startDir string) (string, bool) {
+	global := filepath.Clean(GlobalConfigFile())
 	dir := startDir
 	for {
 		candidate := filepath.Join(dir, ProjectDirName, ConfigFileName)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, true
+		if candidate != global {
+			if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+				return candidate, true
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
