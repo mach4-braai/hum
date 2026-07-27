@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/mach4-braai/hum/internal/protocol"
@@ -21,8 +22,11 @@ func unreachableSocket(t *testing.T) string {
 	return socket
 }
 
-// serveOne answers exactly one request with response, and reports what it read.
-func serveOne(t *testing.T, response string) *protocol.Request {
+// serveOne answers exactly one request with response. The returned await
+// closes the listener and waits for the server goroutine, giving the caller a
+// happens-before edge on the decoded request: socket traffic alone is not one,
+// and the race detector rightly refuses to infer it.
+func serveOne(t *testing.T, response string) func() protocol.Request {
 	t.Helper()
 	// Short path: a Unix socket address is capped near 104 bytes, and macOS
 	// temp directories are already long.
@@ -39,7 +43,7 @@ func serveOne(t *testing.T, response string) *protocol.Request {
 	}
 	t.Setenv("HUM_SOCKET", socket)
 
-	got := &protocol.Request{}
+	var got protocol.Request
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -48,16 +52,22 @@ func serveOne(t *testing.T, response string) *protocol.Request {
 			return
 		}
 		defer conn.Close()
-		_ = json.NewDecoder(conn).Decode(got)
+		_ = json.NewDecoder(conn).Decode(&got)
 		_, _ = io.WriteString(conn, response)
 	}()
-	// One cleanup, closing before waiting. Two would run last-registered first,
-	// so a test that never dials would block in Accept forever.
-	t.Cleanup(func() {
-		listener.Close()
-		<-done
-	})
-	return got
+
+	// Closing before waiting, and idempotent: a test whose client never dials
+	// would otherwise block in Accept forever.
+	var once sync.Once
+	await := func() protocol.Request {
+		once.Do(func() {
+			listener.Close()
+			<-done
+		})
+		return got
+	}
+	t.Cleanup(func() { await() })
+	return await
 }
 
 func TestRunWithoutArgumentsPrintsUsageToStderrAndExitsTwo(t *testing.T) {
@@ -178,7 +188,7 @@ func TestCommandsExitThreeWhenTheDaemonIsAbsent(t *testing.T) {
 }
 
 func TestPingSendsTheControlCommandAndSucceeds(t *testing.T) {
-	got := serveOne(t, `{"ok":true}`+"\n")
+	await := serveOne(t, `{"ok":true}`+"\n")
 	var stdout, stderr bytes.Buffer
 
 	code := run([]string{"ping"}, &stdout, &stderr)
@@ -186,6 +196,7 @@ func TestPingSendsTheControlCommandAndSucceeds(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d; stderr = %q", code, exitOK, stderr.String())
 	}
+	got := await()
 	if got.Command != protocol.CmdPing {
 		t.Errorf("daemon received command %q, want %q", got.Command, protocol.CmdPing)
 	}
@@ -195,13 +206,14 @@ func TestPingSendsTheControlCommandAndSucceeds(t *testing.T) {
 }
 
 func TestThemeUseCarriesTheName(t *testing.T) {
-	got := serveOne(t, `{"ok":true}`+"\n")
+	await := serveOne(t, `{"ok":true}`+"\n")
 	var stdout, stderr bytes.Buffer
 
 	if code := run([]string{"theme", "use", "orchestra"}, &stdout, &stderr); code != exitOK {
 		t.Fatalf("exit code = %d, want %d; stderr = %q", code, exitOK, stderr.String())
 	}
 
+	got := await()
 	if got.Command != protocol.CmdThemeUse {
 		t.Errorf("daemon received command %q, want %q", got.Command, protocol.CmdThemeUse)
 	}
@@ -362,6 +374,7 @@ func TestThemeAcceptsFlagsAroundItsSubcommand(t *testing.T) {
 		{"theme", "list", "--json"},
 		{"theme", "use", "minimal", "--json"},
 		{"theme", "--json", "use", "minimal"},
+		{"theme", "use", "--json", "minimal"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			serveOne(t, `{"ok":true}`+"\n")
@@ -400,7 +413,7 @@ func TestUnknownFlagsAreUsageErrors(t *testing.T) {
 // An envelope that cannot be marshalled must never reach the socket, and the
 // caller must not be told the request succeeded.
 func TestSendRefusesAnUnmarshallableRequest(t *testing.T) {
-	got := serveOne(t, `{"ok":true}`+"\n")
+	await := serveOne(t, `{"ok":true}`+"\n")
 	var stdout, stderr bytes.Buffer
 
 	code := send(protocol.Request{}, defaultTimeout, false, &stdout, &stderr)
@@ -408,7 +421,7 @@ func TestSendRefusesAnUnmarshallableRequest(t *testing.T) {
 	if code != exitUnreachable {
 		t.Errorf("send() = %d, want %d", code, exitUnreachable)
 	}
-	if got.Command != "" {
+	if got := await(); got.Command != "" {
 		t.Errorf("daemon received %q, want nothing sent", got.Command)
 	}
 }

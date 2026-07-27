@@ -98,12 +98,30 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return send(request, opts.timeout, opts.asJSON, stdout, stderr)
 }
 
+// operandsOf consumes flags wherever they appear among the words and returns
+// what is left. Go's flag package stops at the first positional, so a single
+// pass would read `theme use --json minimal` as a theme named "--json".
+func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([]string, bool) {
+	var positional []string
+	for {
+		flags := flagsFor(name, opts, stderr)
+		if err := flags.Parse(words); err != nil {
+			return nil, false
+		}
+		if flags.NArg() == 0 {
+			return positional, true
+		}
+		positional = append(positional, flags.Arg(0))
+		words = flags.Args()[1:]
+	}
+}
+
 // parse turns the command words into one request, or reports a usage error.
 func parse(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
-	command, operands := words[0], words[1:]
+	command, words := words[0], words[1:]
 
 	if command == "theme" {
-		return parseTheme(operands, opts, stderr)
+		return parseTheme(words, opts, stderr)
 	}
 
 	cmd, known := control[command]
@@ -113,56 +131,42 @@ func parse(words []string, opts *options, stderr io.Writer) (protocol.Request, i
 		return protocol.Request{}, exitUsage
 	}
 
-	flags := flagsFor("hum "+command, opts, stderr)
-	if err := flags.Parse(operands); err != nil {
+	operands, ok := operandsOf("hum "+command, words, opts, stderr)
+	if !ok {
 		return protocol.Request{}, exitUsage
 	}
-	if flags.NArg() != 0 {
-		return unexpected(command, flags.Arg(0), stderr)
+	if len(operands) != 0 {
+		return unexpected(command, operands[0], stderr)
 	}
 	return protocol.Request{Command: cmd}, exitOK
 }
 
-func parseTheme(operands []string, opts *options, stderr io.Writer) (protocol.Request, int) {
-	flags := flagsFor("hum theme", opts, stderr)
-	if err := flags.Parse(operands); err != nil {
+func parseTheme(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
+	operands, ok := operandsOf("hum theme", words, opts, stderr)
+	if !ok {
 		return protocol.Request{}, exitUsage
 	}
-	words := flags.Args()
-	if len(words) == 0 {
+	if len(operands) == 0 {
 		fmt.Fprint(stderr, "hum theme: expected \"list\" or \"use <name>\"\n")
 		return protocol.Request{}, exitUsage
 	}
-	subcommand, rest := words[0], words[1:]
 
-	switch subcommand {
+	switch operands[0] {
 	case "list":
-		return finishTheme("theme list", protocol.Request{Command: protocol.CmdThemeList}, rest, opts, stderr)
+		if len(operands) > 1 {
+			return unexpected("theme list", operands[1], stderr)
+		}
+		return protocol.Request{Command: protocol.CmdThemeList}, exitOK
 	case "use":
-		if len(rest) == 0 {
+		if len(operands) != 2 {
 			fmt.Fprint(stderr, "hum theme use: expected exactly one theme name\n")
 			return protocol.Request{}, exitUsage
 		}
-		request := protocol.Request{Command: protocol.CmdThemeUse, Value: rest[0]}
-		return finishTheme("theme use", request, rest[1:], opts, stderr)
+		return protocol.Request{Command: protocol.CmdThemeUse, Value: operands[1]}, exitOK
 	default:
-		fmt.Fprintf(stderr, "hum theme: unknown subcommand %q, expected \"list\" or \"use\"\n", subcommand)
+		fmt.Fprintf(stderr, "hum theme: unknown subcommand %q, expected \"list\" or \"use\"\n", operands[0])
 		return protocol.Request{}, exitUsage
 	}
-}
-
-// finishTheme parses whatever follows the subcommand's own operands. Go's flag
-// package stops at the first positional, so trailing flags reach a set only
-// once the positional has been taken off the front.
-func finishTheme(name string, request protocol.Request, rest []string, opts *options, stderr io.Writer) (protocol.Request, int) {
-	flags := flagsFor("hum "+name, opts, stderr)
-	if err := flags.Parse(rest); err != nil {
-		return protocol.Request{}, exitUsage
-	}
-	if flags.NArg() != 0 {
-		return unexpected(name, flags.Arg(0), stderr)
-	}
-	return request, exitOK
 }
 
 // unexpected rejects trailing words rather than ignoring them, so a mistyped
