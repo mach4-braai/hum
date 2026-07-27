@@ -75,3 +75,15 @@ func (e Event) Validate() error {
 	}
 	return nil
 }
+
+// ParseEventType converts a wire string to an EventType, rejecting anything
+// outside the closed set. The comparison is exact: the wire values are literal
+// strings, and accepting case variants or padded input would turn the closed set
+// into a suggestion and let a typo look like a delivered event.
+func ParseEventType(s string) (EventType, error) {
+	t := EventType(s)
+	if !t.Known() {
+		return "", fmt.Errorf("%w: %q", ErrUnknownEvent, s)
+	}
+	return t, nil
+}
