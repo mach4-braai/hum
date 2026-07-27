@@ -183,3 +183,37 @@ func TestEncoderRefusesOversizedEvents(t *testing.T) {
 		t.Errorf("wrote %d bytes on a rejected event, want none: a partial line desynchronises the stream", buf.Len())
 	}
 }
+
+// Malformed input arrives from hand-written clients and from truncated writes on
+// a closing socket. Decode must refuse it, and must keep the underlying syntax
+// error reachable so a daemon can report where the message broke rather than a
+// bare "invalid".
+func TestDecoderRejectsMalformedJSON(t *testing.T) {
+	t.Run("truncated object", func(t *testing.T) {
+		_, err := NewDecoder(strings.NewReader(`{"event":"session.started","id":` + "\n")).Decode()
+		if err == nil {
+			t.Fatal("Decode() = nil, want an error for a truncated object")
+		}
+		var syntaxErr *json.SyntaxError
+		if !errors.As(err, &syntaxErr) {
+			t.Errorf("Decode() = %v, want a wrapped *json.SyntaxError so the failure position survives", err)
+		}
+	})
+
+	// A JSON null unmarshals into a struct without error, leaving every field
+	// zero. Without an explicit guard the decoder reports success and hands back
+	// an empty event, which looks identical to a legitimately decoded message.
+	t.Run("null is not a message", func(t *testing.T) {
+		if _, err := NewDecoder(strings.NewReader("null\n")).Decode(); err == nil {
+			t.Error("Decode() = nil for a null payload, want an error; a zero event must not look like a successful decode")
+		}
+	})
+
+	for _, payload := range []string{"42", `"session.started"`, "[]", "true"} {
+		t.Run("non-object payload "+payload, func(t *testing.T) {
+			if _, err := NewDecoder(strings.NewReader(payload + "\n")).Decode(); err == nil {
+				t.Errorf("Decode() = nil for %s, want an error: a message must be a JSON object", payload)
+			}
+		})
+	}
+}
