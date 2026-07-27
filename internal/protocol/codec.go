@@ -55,8 +55,16 @@ func (d *Decoder) Decode() (Event, error) {
 		if err != nil {
 			return Event{}, err
 		}
-		if len(bytes.TrimSpace(line)) == 0 {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 {
 			continue
+		}
+		// A message is a JSON object. This check is not redundant with
+		// Unmarshal: `null` unmarshals into a struct without error and leaves
+		// every field zero, so it would otherwise be reported as a successful
+		// decode of an empty event, indistinguishable from a real message.
+		if line[0] != '{' {
+			return Event{}, fmt.Errorf("decode event: message must be a JSON object, got %.16q", line)
 		}
 		var e Event
 		if err := json.Unmarshal(line, &e); err != nil {
