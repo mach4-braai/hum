@@ -71,3 +71,37 @@ func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
 		t.Errorf("ProjectConfigFile(%q) = %q, want %q", nested, got, want)
 	}
 }
+
+// Global configuration lives at ~/.hum/config.yaml, which is exactly the shape
+// upward discovery looks for. Without a guard, running a client from anywhere
+// under $HOME would discover the *global* file and apply it as *project*
+// config, so PRD.md section 12's precedence chain would count it twice at the
+// wrong priority. That is a silent misconfiguration rather than a crash, so it
+// is asserted here.
+func TestProjectConfigFileReportsNotFound(t *testing.T) {
+	t.Run("no project config anywhere above", func(t *testing.T) {
+		if got, ok := ProjectConfigFile(t.TempDir()); ok {
+			t.Errorf("ProjectConfigFile() = %q, true; want not found", got)
+		}
+	})
+
+	t.Run("global config is not project config", func(t *testing.T) {
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("HUM_HOME", "")
+		if err := os.MkdirAll(filepath.Join(home, ".hum"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(home, ".hum", "config.yaml"), []byte("music:\n  root: D\n"), 0o644); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		nested := filepath.Join(home, "projects", "thing")
+		if err := os.MkdirAll(nested, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+
+		if got, ok := ProjectConfigFile(nested); ok {
+			t.Errorf("ProjectConfigFile() = %q, true; want not found, because that path is the global config file", got)
+		}
+	})
+}
