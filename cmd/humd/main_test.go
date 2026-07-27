@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-// humd is a daemon, so running it with no arguments is a usage error rather
-// than an invitation to start with implicit defaults: a supervisor that
-// mis-invokes it must fail loudly instead of silently holding the socket.
+// A mis-invoked daemon must fail loudly, not start with implicit defaults.
 func TestRunWithoutArgumentsPrintsUsageToStderrAndExitsTwo(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

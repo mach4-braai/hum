@@ -1,17 +1,11 @@
-# Build tooling for Hum.
-#
-# This file is the single source of truth for the Go toolchain and for the build
-# flags. CI installs the toolchain from here rather than declaring its own
-# version, so local and CI builds cannot drift.
-#
-# GoReleaser and the Homebrew formula cannot depend on mise, so they duplicate
-# the ldflags below. `internal/infra` asserts that the duplication stays in sync.
+# Single source of truth for the Go toolchain and build flags. CI installs the
+# toolchain from here so local and CI cannot drift. GoReleaser and the Homebrew
+# formula cannot use mise, so they duplicate the ldflags; internal/infra asserts
+# the duplication stays in sync.
 
 [tools]
-# Pinned to an exact patch so local, CI and release builds use the identical
-# compiler; a floating "1.24" would drift between machines over time. The audio
-# backend (oto/v3) requires at least 1.24.0. go.mod separately declares the
-# *language* version, which is a different thing and may legitimately differ.
+# Exact patch: a floating "1.24" drifts between machines. oto/v3 needs >= 1.24.0.
+# go.mod separately declares the language version, which may differ.
 go = "1.24.13"
 
 [env]

@@ -1,6 +1,5 @@
-// Package infra holds executable assertions about repository-level
-// configuration: build tooling, ignore rules and CI. These files are contracts
-// too, and a contract nobody executes is a contract that rots.
+// Package infra holds executable assertions about repository configuration.
+// These files are contracts too, and an unexecuted contract rots.
 package infra
 
 import (
@@ -30,9 +29,8 @@ func repoRoot(t *testing.T) string {
 	}
 }
 
-// Build output must never reach a commit. The binary entries are anchored with
-// a leading slash on purpose: an unanchored "hum" would also match the
-// cmd/hum source directory and silently hide the source tree from git.
+// Entries are leading-slash anchored: an unanchored "hum" would also match the
+// cmd/hum source directory and hide the source tree from git.
 func TestGitignoreExcludesBuildArtefacts(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".gitignore"))
 	if err != nil {

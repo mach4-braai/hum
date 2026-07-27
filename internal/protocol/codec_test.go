@@ -9,9 +9,7 @@ import (
 	"testing"
 )
 
-// Framing is one JSON object per line, so a client may hold a connection open
-// and stream events, and so `socat`-style manual use works without a length
-// prefix. PRD.md section 16 makes this the MVP transport contract.
+// One JSON object per line, so clients can stream and socat works unaided.
 func TestDecoderReadsAStreamOfEvents(t *testing.T) {
 	stream := strings.Join([]string{
 		`{"event":"session.started","id":"1","title":"build"}`,
@@ -108,9 +106,8 @@ func TestEncoderWritesOneLinePerEvent(t *testing.T) {
 	}
 }
 
-// eventLineOfLength builds a valid event whose JSON encoding is exactly n bytes,
-// padding the title. The padding is plain ASCII so it needs no escaping and the
-// length grows one byte per character.
+// eventLineOfLength builds an event whose JSON is exactly n bytes. ASCII padding
+// needs no escaping, so length grows one byte per character.
 func eventLineOfLength(t *testing.T, n int) string {
 	t.Helper()
 	probe, err := json.Marshal(Event{Event: SessionStarted, ID: "1", Title: "x"})
@@ -132,10 +129,7 @@ func eventLineOfLength(t *testing.T, n int) string {
 	return string(out)
 }
 
-// An unbounded line length lets any local process drive the daemon's memory by
-// opening a socket and never sending a newline. The limit is measured on the
-// payload, excluding the framing LF, so that a message of exactly the documented
-// size is legal rather than off-by-one rejected.
+// The limit is measured on the payload, excluding the framing LF.
 func TestDecoderEnforcesMessageSizeLimit(t *testing.T) {
 	t.Run("accepts a payload of exactly the limit", func(t *testing.T) {
 		line := eventLineOfLength(t, MaxMessageLen)
@@ -184,10 +178,7 @@ func TestEncoderRefusesOversizedEvents(t *testing.T) {
 	}
 }
 
-// Malformed input arrives from hand-written clients and from truncated writes on
-// a closing socket. Decode must refuse it, and must keep the underlying syntax
-// error reachable so a daemon can report where the message broke rather than a
-// bare "invalid".
+// Decode must refuse malformed input and keep the syntax error reachable.
 func TestDecoderRejectsMalformedJSON(t *testing.T) {
 	t.Run("truncated object", func(t *testing.T) {
 		_, err := NewDecoder(strings.NewReader(`{"event":"session.started","id":` + "\n")).Decode()

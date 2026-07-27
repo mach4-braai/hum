@@ -9,9 +9,8 @@ import (
 	"testing"
 )
 
-// The workflow is asserted as text rather than parsed: adding a YAML library
-// solely for a test would spend one of the two third-party dependencies PRD.md
-// section 22 allows the whole project.
+// Asserted as text: a YAML library would spend one of the two dependencies
+// PRD.md section 22 allows the whole project.
 func readWorkflow(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), ".github", "workflows", "ci.yml"))
@@ -21,10 +20,8 @@ func readWorkflow(t *testing.T) string {
 	return string(data)
 }
 
-// The audio backend is platform-sensitive, so both supported platforms must be
-// covered before any audio code lands. Verified empirically: oto/v3 v3.4.0
-// builds CGO-free on macOS but its driver_unix.go declares
-// "#cgo pkg-config: alsa", so a CGO_ENABLED=0 Linux build fails.
+// Both platforms are covered because oto/v3 v3.4.0 builds CGO-free on macOS but
+// declares "#cgo pkg-config: alsa" on Linux, where CGO_ENABLED=0 fails.
 func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -35,9 +32,8 @@ func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
 	}
 }
 
-// CI must take its Go toolchain from mise.toml rather than declaring its own
-// version, otherwise the pin in mise.toml stops being the single source of
-// truth and CI silently drifts from local builds.
+// CI must take its toolchain from mise.toml, or the pin stops being the single
+// source of truth and CI drifts from local builds.
 func TestCIDerivesToolchainFromMise(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -67,9 +63,7 @@ func TestCICancelsSupersededRuns(t *testing.T) {
 	}
 }
 
-// oto/v3 v3.4.0 links ALSA on Linux via cgo, so the Linux leg needs the
-// development headers. The step is expected to disappear with the oto v3.5
-// upgrade, so it must carry a comment tying it to that issue.
+// oto/v3 v3.4.0 links ALSA through cgo on Linux, so the headers are needed.
 func TestCIInstallsLinuxAudioBuildDependency(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -81,9 +75,7 @@ func TestCIInstallsLinuxAudioBuildDependency(t *testing.T) {
 	}
 }
 
-// A workflow that only runs on pull_request leaves the default branch
-// unverified after a direct push or a squash merge, which is exactly when a
-// broken main branch goes unnoticed.
+// pull_request alone leaves the default branch unverified after a direct push.
 func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -121,9 +113,7 @@ func TestCIInstallsPkgConfigForCgoAlsa(t *testing.T) {
 	}
 }
 
-// The Linux audio dependency disappears with the oto v3.5 upgrade. Without a
-// pointer to that issue, a future maintainer has no way to know the step is
-// removable and it becomes permanent.
+// Without a pointer to the issue that removes it, the step becomes permanent.
 func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 	workflow := readWorkflow(t)
 

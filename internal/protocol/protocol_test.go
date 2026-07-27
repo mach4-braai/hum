@@ -8,10 +8,8 @@ import (
 	"testing"
 )
 
-// PRD.md section 22 calls the event protocol a stable public contract, and
-// section 14 gives these exact payloads. Third-party clients will be written
-// against them, so they are pinned literally: a field rename or an added
-// mandatory field is a breaking change, not a refactor.
+// PRD.md section 14's exact payloads. Third-party clients are written against
+// these, so a rename or a newly mandatory field is a breaking change.
 func TestPRDWireExamplesRoundTrip(t *testing.T) {
 	t.Run("session.started with all documented fields", func(t *testing.T) {
 		const wire = `{"event":"session.started","id":"123","workspace":"tofu","title":"Validate PR #142"}`
@@ -63,10 +61,8 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 	})
 }
 
-// The daemon accepts messages from any local process, so validation is a trust
-// boundary rather than a convenience. An event that reaches the registry with an
-// empty or unbounded id becomes an unkillable voice: nothing can address it to
-// complete it, and the drone sustains forever.
+// Validation is a trust boundary: an empty id becomes an unaddressable session
+// whose drone never stops.
 func TestEventValidation(t *testing.T) {
 	valid := Event{Event: SessionStarted, ID: "123"}
 	if err := valid.Validate(); err != nil {
@@ -119,9 +115,7 @@ func TestEventValidation(t *testing.T) {
 	})
 }
 
-// The limit is a byte limit, because it bounds what travels on the wire and what
-// the daemon stores. Counting runes instead would let a multibyte id consume up
-// to four times the intended budget.
+// A byte limit, not a rune limit: multibyte ids would otherwise get 4x the budget.
 func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
 	// 65 two-byte runes: only 65 characters, but 130 bytes.
 	id := strings.Repeat("é", MaxIDLen/2+1)
@@ -137,9 +131,7 @@ func TestEventIDLimitCountsBytesNotRunes(t *testing.T) {
 	}
 }
 
-// The CLI turns a subcommand name into an event type, and `hum doctor` reports
-// which types a daemon understands. Both need parsing that rejects unknown
-// input rather than silently producing a type the daemon will discard.
+// Unknown input must be rejected, not silently become a type the daemon discards.
 func TestParseEventType(t *testing.T) {
 	for _, want := range []EventType{SessionStarted, SessionUpdated, SessionCompleted, SessionFailed, SessionCancelled} {
 		got, err := ParseEventType(string(want))

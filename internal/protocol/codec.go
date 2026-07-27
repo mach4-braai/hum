@@ -9,27 +9,16 @@ import (
 	"io"
 )
 
-// MaxMessageLen bounds a single wire message in bytes, excluding the framing
-// newline. A message of exactly this size is legal.
-//
-// This is a denial-of-service boundary, not a tidiness rule: without it any local
-// process can drive the daemon's memory by opening the socket and streaming bytes
-// without ever sending a newline.
+// MaxMessageLen bounds one wire message in bytes, excluding the framing newline.
+// Unbounded lines would let a local process exhaust memory by withholding one.
 const MaxMessageLen = 64 << 10
 
 // ErrMessageTooLarge reports a wire message beyond MaxMessageLen.
 var ErrMessageTooLarge = errors.New("message exceeds the maximum length")
 
-// Decoder reads newline-delimited events from a stream.
-//
-// It owns a single buffered reader for the life of the connection. Constructing
-// a fresh buffered reader per message would read ahead and discard whatever it
-// had buffered beyond the first newline, silently losing the messages that
-// followed on the same socket.
-//
-// Decode does not validate: framing and semantics are separate concerns, so
-// callers apply Event.Validate at the trust boundary, where they can answer with
-// a protocol error.
+// Decoder reads newline-delimited events. It owns one buffered reader for the
+// connection's lifetime; a per-message reader would drop what it buffered past the
+// first newline. Decode does not validate: callers apply Event.Validate.
 type Decoder struct {
 	r *bufio.Reader
 }
@@ -39,16 +28,11 @@ func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{r: bufio.NewReader(r)}
 }
 
-// Decode returns the next event, or io.EOF once the stream is exhausted.
+// Decode returns the next event, or io.EOF once the stream is exhausted. Blank
+// lines are skipped so a bare-newline keepalive does not drop the connection.
 //
-// Blank lines are skipped rather than reported: a client may write a bare newline
-// as a keepalive, and treating that as malformed would drop an otherwise healthy
-// connection.
-//
-// After ErrMessageTooLarge the reader is left at an unspecified position, because
-// the remainder of the oversized line has not been consumed. Callers must close
-// the connection rather than attempt to resynchronise; continuing would parse the
-// tail of a rejected message as a new one.
+// After ErrMessageTooLarge the read position is unspecified, because the rest of
+// the oversized line is unconsumed. Callers must close rather than resynchronise.
 func (d *Decoder) Decode() (Event, error) {
 	for {
 		line, err := d.readLine()
@@ -59,10 +43,8 @@ func (d *Decoder) Decode() (Event, error) {
 		if len(line) == 0 {
 			continue
 		}
-		// A message is a JSON object. This check is not redundant with
-		// Unmarshal: `null` unmarshals into a struct without error and leaves
-		// every field zero, so it would otherwise be reported as a successful
-		// decode of an empty event, indistinguishable from a real message.
+		// Not redundant with Unmarshal: `null` unmarshals into a struct without
+		// error, so it would decode as a zero-valued Event.
 		if line[0] != '{' {
 			return Event{}, fmt.Errorf("decode event: message must be a JSON object, got %.16q", line)
 		}
@@ -77,11 +59,8 @@ func (d *Decoder) Decode() (Event, error) {
 // readLine returns one line without its trailing newline, refusing to accumulate
 // more than MaxMessageLen bytes.
 //
-// bufio.Reader.ReadString and ReadBytes are unsuitable here: both grow their
-// result until the delimiter arrives, so an unterminated line would be buffered
-// without bound, which is exactly the case MaxMessageLen exists to stop. ReadSlice
-// returns what fits in the fixed buffer and reports ErrBufferFull, letting the
-// length be checked as the line accumulates.
+// ReadString and ReadBytes grow until the delimiter, so an unterminated line
+// buffers without bound. ReadSlice lets length be checked as the line grows.
 func (d *Decoder) readLine() ([]byte, error) {
 	var line []byte
 	for {
@@ -89,19 +68,19 @@ func (d *Decoder) readLine() ([]byte, error) {
 
 		if errors.Is(err, bufio.ErrBufferFull) {
 			if len(line)+len(chunk) > MaxMessageLen {
-				return nil, fmt.Errorf("%w of %d bytes", ErrMessageTooLarge, MaxMessageLen)
+				return nil, tooLarge()
 			}
 			line = append(line, chunk...)
 			continue
 		}
 
 		if err != nil {
+			// A final line with no trailing newline, as printf or a closing
+			// pipe produces.
 			if errors.Is(err, io.EOF) && len(line)+len(chunk) > 0 {
-				// A final line with no trailing newline, which is what a
-				// client using printf or a closing pipe produces.
 				line = append(line, chunk...)
 				if len(line) > MaxMessageLen {
-					return nil, fmt.Errorf("%w of %d bytes", ErrMessageTooLarge, MaxMessageLen)
+					return nil, tooLarge()
 				}
 				return line, nil
 			}
@@ -110,10 +89,14 @@ func (d *Decoder) readLine() ([]byte, error) {
 
 		payload := chunk[:len(chunk)-1]
 		if len(line)+len(payload) > MaxMessageLen {
-			return nil, fmt.Errorf("%w of %d bytes", ErrMessageTooLarge, MaxMessageLen)
+			return nil, tooLarge()
 		}
 		return append(line, payload...), nil
 	}
+}
+
+func tooLarge() error {
+	return fmt.Errorf("%w of %d bytes", ErrMessageTooLarge, MaxMessageLen)
 }
 
 // Encoder writes newline-delimited events to a stream.
@@ -126,15 +109,11 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w: w}
 }
 
-// Encode writes one event as a single LF-terminated line.
+// Encode writes one event as a single LF-terminated line. encoding/json escapes
+// newlines in strings, so field content cannot desynchronise the framing.
 //
-// encoding/json escapes newlines inside strings, so a title or metadata value
-// containing a newline cannot desynchronise the framing of the messages that
-// follow it.
-//
-// An oversized event is refused before anything is written: the daemon must not
-// emit a message its own decoder would reject, and a partial line would
-// desynchronise the stream for every message after it.
+// An oversized event is refused before any bytes are written: a partial line
+// would desynchronise every message after it.
 func (e *Encoder) Encode(ev Event) error {
 	data, err := json.Marshal(ev)
 	if err != nil {

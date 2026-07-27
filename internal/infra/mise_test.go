@@ -1,9 +1,7 @@
 //go:build infra
 
-// These assertions shell out to the mise binary, so they are kept behind a build
-// tag: a plain `go test ./...` must stay runnable with nothing but a Go
-// toolchain. The `check` task runs this suite explicitly, so CI still validates
-// the build contract.
+// These assertions shell out to mise, so they sit behind a build tag: a plain
+// `go test ./...` must need nothing but a Go toolchain. `check` runs them.
 package infra
 
 import (
@@ -15,14 +13,11 @@ import (
 	"testing"
 )
 
-// requiredTasks is the build contract that CI, the release pipeline and
-// contributors all rely on. A missing task surfaces as a confusing CI failure
-// rather than an obvious one, so their existence is asserted rather than assumed.
+// requiredTasks is the build contract CI and the release pipeline depend on.
 var requiredTasks = []string{"build", "check", "clean", "fmt", "install", "test", "vet"}
 
-// Listing goes through mise itself rather than a TOML parser: it proves mise can
-// actually read the file, and it keeps the dependency budget in PRD.md
-// section 22 at the two libraries the daemon genuinely needs.
+// Listing goes through mise itself: it proves mise can read the file, and avoids
+// spending a dependency on a TOML parser.
 func TestMiseDefinesRequiredTasks(t *testing.T) {
 	cmd := exec.Command("mise", "tasks", "ls", "-J")
 	cmd.Dir = repoRoot(t)
@@ -49,10 +44,8 @@ func TestMiseDefinesRequiredTasks(t *testing.T) {
 	}
 }
 
-// The binaries must report a real version under Homebrew, so the canonical build
-// has to stamp them. GoReleaser and the Homebrew formula cannot use mise and so
-// duplicate these flags; this assertion is what makes that duplication
-// detectable once those files exist.
+// GoReleaser and the Homebrew formula cannot use mise, so they duplicate these
+// flags; this assertion is what makes the duplication detectable when it drifts.
 func TestMiseBuildTaskStampsVersionAndTrimsPaths(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {
@@ -67,9 +60,7 @@ func TestMiseBuildTaskStampsVersionAndTrimsPaths(t *testing.T) {
 	}
 }
 
-// The toolchain is pinned in mise.toml so contributors, CI and release builds
-// use the same compiler. go.mod declares the language version, which is a
-// different thing and may legitimately differ.
+// The toolchain is pinned here so contributors, CI and releases share a compiler.
 func TestMisePinsGoToolchain(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {

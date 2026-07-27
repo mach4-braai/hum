@@ -6,9 +6,7 @@ import (
 	"testing"
 )
 
-// HUM_HOME is the documented escape hatch for relocating Hum's state. Tests and
-// sandboxed installs depend on it, so it takes precedence over the home
-// directory rather than merely seeding a default.
+// HUM_HOME must win over the home directory, so no test can reach a real ~/.hum.
 func TestGlobalConfigDirPrefersHumHome(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HUM_HOME", dir)
@@ -45,9 +43,7 @@ func TestGlobalConfigFileLivesInsideConfigDir(t *testing.T) {
 	}
 }
 
-// Clients are invoked from wherever the developer happens to be inside a
-// project, so discovery walks upward like git does. Requiring the exact project
-// root would make project config unusable in practice.
+// Discovery walks upward like git: clients run from anywhere inside a project.
 func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".hum"), 0o755); err != nil {
@@ -72,12 +68,9 @@ func TestProjectConfigFileFoundByWalkingUpFromNestedDir(t *testing.T) {
 	}
 }
 
-// Global configuration lives at ~/.hum/config.yaml, which is exactly the shape
-// upward discovery looks for. Without a guard, running a client from anywhere
-// under $HOME would discover the *global* file and apply it as *project*
-// config, so PRD.md section 12's precedence chain would count it twice at the
-// wrong priority. That is a silent misconfiguration rather than a crash, so it
-// is asserted here.
+// Global config lives at ~/.hum/config.yaml, exactly the shape discovery seeks.
+// Unguarded, a client under $HOME applies it as project config, so one file
+// occupies two layers of the precedence chain.
 func TestProjectConfigFileReportsNotFound(t *testing.T) {
 	t.Run("no project config anywhere above", func(t *testing.T) {
 		if got, ok := ProjectConfigFile(t.TempDir()); ok {
@@ -106,10 +99,8 @@ func TestProjectConfigFileReportsNotFound(t *testing.T) {
 	})
 }
 
-// The signature accepts any directory, so a caller may reasonably pass a
-// cwd-relative path. An unnormalised walk terminates at "." and never examines
-// absolute ancestors, so the project config one level up would be missed
-// entirely and the client would silently fall back to global config.
+// An unnormalised walk terminates at "." and never examines absolute ancestors,
+// so project config one level up would be missed.
 func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HUM_HOME", filepath.Join(root, "unrelated-home"))
@@ -136,9 +127,8 @@ func TestProjectConfigFileAcceptsRelativeStartDir(t *testing.T) {
 	}
 }
 
-// The daemon binds this path and every client dials it, so the two must derive
-// it identically. HUM_SOCKET is the documented escape hatch for home
-// directories deep enough to exceed the platform's sun_path limit.
+// The daemon binds this path and every client dials it, so both must derive it
+// identically.
 func TestSocketPathResolution(t *testing.T) {
 	t.Run("prefers HUM_SOCKET", func(t *testing.T) {
 		want := filepath.Join(t.TempDir(), "custom.sock")
@@ -162,10 +152,8 @@ func TestSocketPathResolution(t *testing.T) {
 	})
 }
 
-// maxSocketPathLen is the conservative sun_path budget: macOS allows 104 bytes
-// including the NUL terminator and Linux 108, so the default must stay well
-// under the smaller. Exceeding it fails at bind() with a bare "invalid
-// argument", which is undiagnosable from the error alone.
+// maxSocketPathLen is the conservative sun_path budget: 104 bytes on macOS, 108 on
+// Linux. Exceeding it fails at bind() with an undiagnosable "invalid argument".
 const maxSocketPathLen = 100
 
 func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
@@ -177,9 +165,7 @@ func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
 	}
 }
 
-// The socket's parent directory holds the control socket and, later, a pidfile.
-// It must not be group or world readable: anything able to open the socket can
-// drive the user's audio output.
+// Anything able to open the socket can drive the user's audio output.
 func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HUM_SOCKET", "")
