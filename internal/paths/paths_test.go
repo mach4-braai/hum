@@ -161,3 +161,57 @@ func TestSocketPathResolution(t *testing.T) {
 		}
 	})
 }
+
+// maxSocketPathLen is the conservative sun_path budget: macOS allows 104 bytes
+// including the NUL terminator and Linux 108, so the default must stay well
+// under the smaller. Exceeding it fails at bind() with a bare "invalid
+// argument", which is undiagnosable from the error alone.
+const maxSocketPathLen = 100
+
+func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
+	t.Setenv("HUM_SOCKET", "")
+	t.Setenv("HUM_HOME", "/Users/somebodywithalongishname/.hum")
+
+	if got := SocketPath(); len(got) > maxSocketPathLen {
+		t.Errorf("SocketPath() = %q is %d bytes, want at most %d", got, len(got), maxSocketPathLen)
+	}
+}
+
+// The socket's parent directory holds the control socket and, later, a pidfile.
+// It must not be group or world readable: anything able to open the socket can
+// drive the user's audio output.
+func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HUM_SOCKET", "")
+	t.Setenv("HUM_HOME", filepath.Join(home, "state", "nested"))
+
+	if err := EnsureRuntimeDir(); err != nil {
+		t.Fatalf("EnsureRuntimeDir() = %v, want nil", err)
+	}
+
+	dir := filepath.Dir(SocketPath())
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat %q: %v", dir, err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("%q is not a directory", dir)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Errorf("permissions on %q = %#o, want %#o", dir, perm, 0o700)
+	}
+}
+
+// Creating a directory that already exists is the normal case on every start
+// after the first, so it must not be an error.
+func TestEnsureRuntimeDirIsIdempotent(t *testing.T) {
+	t.Setenv("HUM_SOCKET", "")
+	t.Setenv("HUM_HOME", t.TempDir())
+
+	if err := EnsureRuntimeDir(); err != nil {
+		t.Fatalf("first EnsureRuntimeDir() = %v, want nil", err)
+	}
+	if err := EnsureRuntimeDir(); err != nil {
+		t.Errorf("second EnsureRuntimeDir() = %v, want nil", err)
+	}
+}
