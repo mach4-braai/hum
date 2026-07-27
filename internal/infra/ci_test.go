@@ -137,3 +137,16 @@ func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
 		}
 	}
 }
+
+// Its own job, so branch protection can require it independently of check.
+func TestCIReportsCoverageAsASeparateStatusCheck(t *testing.T) {
+	workflow := readWorkflow(t)
+
+	job := regexp.MustCompile(`(?m)^  coverage:$`)
+	if !job.MatchString(workflow) {
+		t.Fatal("ci workflow declares no coverage job, so coverage cannot be a status check of its own")
+	}
+	if !strings.Contains(workflow, "mise run coverage") {
+		t.Error("the coverage job does not run `mise run coverage`, so the minimum is enforced nowhere")
+	}
+}

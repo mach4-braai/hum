@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var requiredTasks = []string{"build", "check", "clean", "fmt", "install", "test", "vet"}
+var requiredTasks = []string{"build", "check", "clean", "coverage", "fmt", "install", "test", "vet"}
 
 // Via mise itself, proving mise can read the file. Skip only when mise is absent;
 // other failures may mean a malformed mise.toml.
@@ -67,5 +67,24 @@ func TestMisePinsGoToolchain(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "go =") {
 		t.Error("mise.toml does not pin a go version under [tools]")
+	}
+}
+
+// Without an enforced floor the coverage job only reports, and nothing is gated.
+func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	_, rest, found := strings.Cut(string(data), "[tasks.coverage]")
+	if !found {
+		t.Fatal("mise.toml defines no coverage task")
+	}
+	task, _, _ := strings.Cut(rest, "\n[tasks.")
+
+	for _, want := range []string{"-coverprofile=coverage.out", "MINIMUM="} {
+		if !strings.Contains(task, want) {
+			t.Errorf("the coverage task does not contain %q", want)
+		}
 	}
 }
