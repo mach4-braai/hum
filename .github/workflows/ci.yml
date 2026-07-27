@@ -73,7 +73,7 @@ jobs:
           sudo apt-get install -y libasound2-dev pkg-config
 
       # The per-function table lands in the job summary either way, so a failing
-      # check names the uncovered lines without reopening the log.
+      # check names the under-covered functions without reopening the log.
       - name: Enforce the coverage minimum
         run: |
           status=0

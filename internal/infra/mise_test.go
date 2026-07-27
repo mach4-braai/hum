@@ -70,7 +70,7 @@ func TestMisePinsGoToolchain(t *testing.T) {
 	}
 }
 
-// The threshold is a ratchet; without enforcement the coverage job is decorative.
+// Without an enforced floor the coverage job only reports, and nothing is gated.
 func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {

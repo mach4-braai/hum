@@ -26,8 +26,9 @@ go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
 description = "Run the unit test suite"
 run = "go test ./..."
 
-# A ratchet, not a floor: the minimum tracks the measured total, so untested new
-# code fails CI. Lowering it is a deliberate edit, reviewed like any other.
+# A fixed floor, set just under the total measured when it was introduced. It
+# does not follow coverage upwards, so small erosion above the floor passes;
+# raise it by hand as coverage rises, and lower it only deliberately.
 [tasks.coverage]
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
