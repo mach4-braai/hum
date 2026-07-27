@@ -1,8 +1,10 @@
 package paths
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -182,5 +184,85 @@ func TestEnsureRuntimeDirIsIdempotent(t *testing.T) {
 	}
 	if err := EnsureRuntimeDir(); err != nil {
 		t.Errorf("second EnsureRuntimeDir() = %v, want nil", err)
+	}
+}
+
+func TestGlobalConfigDirFallsBackToProjectDirNameWithoutAHome(t *testing.T) {
+	t.Setenv("HUM_HOME", "")
+	t.Setenv("HOME", "")
+
+	if got := GlobalConfigDir(); got != ProjectDirName {
+		t.Errorf("GlobalConfigDir() = %q, want %q: an absent home must not yield a bare or rooted path", got, ProjectDirName)
+	}
+}
+
+// withRemovedWorkingDir reproduces filepath.Abs with no working directory: an
+// absolute path still resolves, a relative one cannot. Removing the real working
+// directory is not portable, as macOS keeps resolving it. Restoration is
+// registered before the stub is installed, so a panic cannot leak it.
+func withRemovedWorkingDir(t *testing.T) {
+	t.Helper()
+	original := absolute
+	t.Cleanup(func() { absolute = original })
+	absolute = func(p string) (string, error) {
+		if filepath.IsAbs(p) {
+			return filepath.Clean(p), nil
+		}
+		return "", errors.New("getwd: no such file or directory")
+	}
+}
+
+func TestProjectConfigFileReportsNotFoundWhenTheWorkingDirIsGone(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	withRemovedWorkingDir(t)
+
+	got, ok := ProjectConfigFile("cmd")
+
+	if ok {
+		t.Errorf("ProjectConfigFile(%q) = %q, true; want not found when the start dir cannot be resolved", "cmd", got)
+	}
+	if got != "" {
+		t.Errorf("ProjectConfigFile(%q) = %q, want an empty path alongside false", "cmd", got)
+	}
+}
+
+// A relative HUM_HOME cannot be made absolute without a working directory. The
+// walk must still run: the comparison guarding it is an optimisation, not a gate.
+func TestProjectConfigFileWalksWhenTheGlobalPathCannotBeMadeAbsolute(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ProjectDirName), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	want := filepath.Join(root, ProjectDirName, ConfigFileName)
+	if err := os.WriteFile(want, []byte("project:\n  name: demo\n"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("HUM_HOME", "relative-home")
+	withRemovedWorkingDir(t)
+
+	got, ok := ProjectConfigFile(root)
+
+	if !ok {
+		t.Fatalf("ProjectConfigFile(%q) reported not found, want %q", root, want)
+	}
+	if got != want {
+		t.Errorf("ProjectConfigFile(%q) = %q, want %q", root, got, want)
+	}
+}
+
+func TestEnsureRuntimeDirReportsAnUncreatableParent(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	t.Setenv("HUM_SOCKET", filepath.Join(blocker, "nested", "humd.sock"))
+
+	err := EnsureRuntimeDir()
+
+	if err == nil {
+		t.Fatal("EnsureRuntimeDir() = nil, want an error when the parent is a regular file")
+	}
+	if !strings.Contains(err.Error(), blocker) {
+		t.Errorf("EnsureRuntimeDir() = %v, want the offending path %q named", err, blocker)
 	}
 }

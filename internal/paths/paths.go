@@ -45,7 +45,7 @@ func GlobalConfigFile() string {
 // ProjectConfigFile walks upward from startDir, as git locates its root.
 // Skips the global config file, which a client under $HOME would otherwise match.
 func ProjectConfigFile(startDir string) (string, bool) {
-	dir, err := filepath.Abs(startDir)
+	dir, err := absolute(startDir)
 	if err != nil {
 		return "", false
 	}
@@ -84,9 +84,14 @@ func EnsureRuntimeDir() error {
 	return nil
 }
 
+// absolute is a seam over filepath.Abs, which fails only when the working
+// directory has been removed. macOS still resolves a removed one, so no test
+// can arrange that failure portably.
+var absolute = filepath.Abs
+
 // absClean resolves p against the working directory for like-form comparison.
 func absClean(p string) string {
-	if abs, err := filepath.Abs(p); err == nil {
+	if abs, err := absolute(p); err == nil {
 		return abs
 	}
 	return filepath.Clean(p)
