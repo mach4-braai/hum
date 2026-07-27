@@ -7,6 +7,11 @@
 // else. A field that only one integration would set belongs in Metadata.
 package protocol
 
+import (
+	"errors"
+	"fmt"
+)
+
 // EventType identifies a work-session lifecycle transition. The set is closed:
 // PRD.md section 14 defines exactly these five.
 type EventType string
@@ -31,4 +36,42 @@ type Event struct {
 	Title     string            `json:"title,omitempty"`
 	Priority  int               `json:"priority,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+}
+
+// MaxIDLen bounds a session id in **bytes**, not runes. The id travels on every
+// message and is retained per session, so a byte bound is what actually caps
+// memory and wire size; a rune bound would let a multibyte id consume up to four
+// times the intended budget.
+const MaxIDLen = 128
+
+// ErrUnknownEvent reports an event type outside the closed set in PRD.md
+// section 14. Callers match it with errors.Is to distinguish a client using a
+// newer protocol from a malformed message.
+var ErrUnknownEvent = errors.New("unknown event type")
+
+// Known reports whether t is one of the five documented event types.
+func (t EventType) Known() bool {
+	switch t {
+	case SessionStarted, SessionUpdated, SessionCompleted, SessionFailed, SessionCancelled:
+		return true
+	}
+	return false
+}
+
+// Validate checks an event against the wire contract.
+//
+// This is a trust boundary, not a convenience: the daemon accepts messages from
+// any local process. An event admitted with an empty id becomes an unaddressable
+// session, so nothing can ever complete it and its drone sustains forever.
+func (e Event) Validate() error {
+	if !e.Event.Known() {
+		return fmt.Errorf("%w: %q", ErrUnknownEvent, e.Event)
+	}
+	if e.ID == "" {
+		return errors.New("event id is required")
+	}
+	if len(e.ID) > MaxIDLen {
+		return fmt.Errorf("event id is %d bytes, limit is %d", len(e.ID), MaxIDLen)
+	}
+	return nil
 }
