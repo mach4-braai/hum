@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 )
 
 type EventType string
@@ -20,13 +21,17 @@ type Event struct {
 	ID        string            `json:"id"`
 	Workspace string            `json:"workspace,omitempty"`
 	Title     string            `json:"title,omitempty"`
+	Root      string            `json:"root,omitempty"`
 	Priority  int               `json:"priority,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 const MaxIDLen = 128
 
-var ErrUnknownEvent = errors.New("unknown event type")
+var (
+	ErrUnknownEvent = errors.New("unknown event type")
+	ErrRelativeRoot = errors.New("project root is not an absolute path")
+)
 
 func (t EventType) Known() bool {
 	switch t {
@@ -45,6 +50,9 @@ func (e Event) Validate() error {
 	}
 	if len(e.ID) > MaxIDLen {
 		return fmt.Errorf("event id is %d bytes, limit is %d", len(e.ID), MaxIDLen)
+	}
+	if e.Root != "" && !filepath.IsAbs(e.Root) {
+		return fmt.Errorf("%w: %q", ErrRelativeRoot, e.Root)
 	}
 	return nil
 }

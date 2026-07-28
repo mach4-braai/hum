@@ -52,6 +52,26 @@ func TestPRDWireExamplesRoundTrip(t *testing.T) {
 			t.Errorf("re-encoded = %s, want %s", out, wire)
 		}
 	})
+
+	t.Run("session.started carries an absolute project root", func(t *testing.T) {
+		const wire = `{"event":"session.started","id":"123","root":"/Users/dev/projects/tofu"}`
+
+		var got Event
+		if err := json.Unmarshal([]byte(wire), &got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if got.Root != "/Users/dev/projects/tofu" {
+			t.Errorf("decoded root = %q, want %q", got.Root, "/Users/dev/projects/tofu")
+		}
+
+		out, err := json.Marshal(got)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		if string(out) != wire {
+			t.Errorf("re-encoded = %s, want %s", out, wire)
+		}
+	})
 }
 
 func TestEventValidation(t *testing.T) {
@@ -99,6 +119,25 @@ func TestEventValidation(t *testing.T) {
 	t.Run("accepts an id at exactly the documented limit", func(t *testing.T) {
 		if err := (Event{Event: SessionStarted, ID: strings.Repeat("x", MaxIDLen)}).Validate(); err != nil {
 			t.Errorf("Validate() on an id of exactly %d bytes = %v, want nil", MaxIDLen, err)
+		}
+	})
+
+	t.Run("accepts an absolute project root", func(t *testing.T) {
+		if err := (Event{Event: SessionStarted, ID: "1", Root: "/tmp/project"}).Validate(); err != nil {
+			t.Errorf("Validate() with an absolute root = %v, want nil", err)
+		}
+	})
+
+	t.Run("rejects a relative project root", func(t *testing.T) {
+		err := Event{Event: SessionStarted, ID: "1", Root: "projects/tofu"}.Validate()
+		if !errors.Is(err, ErrRelativeRoot) {
+			t.Errorf("Validate() with a relative root = %v, want ErrRelativeRoot", err)
+		}
+	})
+
+	t.Run("accepts an absent project root", func(t *testing.T) {
+		if err := (Event{Event: SessionCompleted, ID: "1"}).Validate(); err != nil {
+			t.Errorf("Validate() with no root = %v, want nil", err)
 		}
 	})
 }

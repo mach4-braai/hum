@@ -52,6 +52,7 @@ message and answer each differently. Growing the set is a protocol change.
 | `id` | string | yes |
 | `workspace` | string | no |
 | `title` | string | no |
+| `root` | string | no |
 | `priority` | number | no |
 | `metadata` | object of strings | no |
 
@@ -63,6 +64,19 @@ retained memory. An empty `id` is rejected — it would create an unaddressable
 session whose drone never stops.
 
 Unknown JSON fields are ignored. That is what makes adding a field additive.
+
+`root` is the client's canonical absolute path to the project root, sent on
+`session.started` so the daemon can resolve that project's
+`.hum/config.yaml`. The daemon's own working directory cannot serve: under a
+supervisor it is `$HOME`, so the client is the only process that knows where the
+project is.
+
+Validation of `root` is split. `Validate` rejects a relative path, which is a
+pure check any receiver can make and a mistake no filesystem can excuse. Whether
+the path *exists* is checked by the daemon when it resolves the config, because
+only the daemon shares a filesystem with the project. A missing `root` is not an
+error: it means global config only, which keeps the protocol usable from a bare
+`socat` one-liner.
 
 ## Requests
 
