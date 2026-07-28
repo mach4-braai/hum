@@ -72,7 +72,8 @@ func TestParsePitch(t *testing.T) {
 		{"A4", 9, 4, false},
 		{"G#8", 8, 8, false},
 		{"C-1", 0, -1, false},
-		{"B9", 11, 9, false},
+		{"G9", 7, 9, false},
+		{"B9", 0, 0, true},
 		{"", 0, 0, true},
 		{"H4", 0, 0, true},
 		{"D", 0, 0, true},
@@ -142,6 +143,46 @@ func TestFlatNormalizesToSharp(t *testing.T) {
 	}
 	if got := p.String(); got != "A#1" {
 		t.Errorf("Bb1 normalised to %q, want A#1", got)
+	}
+}
+
+func TestAccidentalCarriesAcrossTheOctave(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"B#3", "C4"},
+		{"Cb4", "B3"},
+		{"B#0", "C1"},
+		{"Cb0", "B-1"},
+		{"A#3", "A#3"},
+		{"Db4", "C#4"},
+	}
+	for _, c := range cases {
+		p, err := ParsePitch(c.in)
+		if err != nil {
+			t.Fatalf("ParsePitch(%q): %v", c.in, err)
+		}
+		if got := p.String(); got != c.want {
+			t.Errorf("ParsePitch(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestParsePitchRejectsOutsideMidiRange(t *testing.T) {
+	for _, s := range []string{"G#9", "A9", "B9", "Cb-1"} {
+		if p, err := ParsePitch(s); err == nil {
+			t.Errorf("ParsePitch(%q) = %v (midi %d), want an error", s, p, p.Midi())
+		}
+	}
+	for _, s := range []string{"C-1", "G9"} {
+		p, err := ParsePitch(s)
+		if err != nil {
+			t.Fatalf("ParsePitch(%q) at the MIDI boundary: %v", s, err)
+		}
+		if p.Midi() < MinMidi || p.Midi() > MaxMidi {
+			t.Errorf("ParsePitch(%q).Midi() = %d, want within [%d, %d]", s, p.Midi(), MinMidi, MaxMidi)
+		}
 	}
 }
 

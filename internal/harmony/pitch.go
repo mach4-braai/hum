@@ -14,9 +14,19 @@ type Pitch struct {
 
 var noteNames = [12]string{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 
+const (
+	MinMidi = 0
+	MaxMidi = 127
+)
+
 func ParseNoteClass(s string) (int, error) {
+	class, _, err := parseNoteClass(s)
+	return class, err
+}
+
+func parseNoteClass(s string) (int, int, error) {
 	if len(s) == 0 || len(s) > 2 {
-		return 0, fmt.Errorf("invalid note class %q", s)
+		return 0, 0, fmt.Errorf("invalid note class %q", s)
 	}
 	letter := unicode.ToUpper(rune(s[0]))
 	var base int
@@ -36,19 +46,26 @@ func ParseNoteClass(s string) (int, error) {
 	case 'B':
 		base = 11
 	default:
-		return 0, fmt.Errorf("invalid note class %q", s)
+		return 0, 0, fmt.Errorf("invalid note class %q", s)
 	}
 	if len(s) == 1 {
-		return base, nil
+		return base, 0, nil
 	}
 	switch s[1] {
 	case '#':
-		return (base + 1) % 12, nil
+		base++
 	case 'b':
-		return (base + 11) % 12, nil
+		base--
 	default:
-		return 0, fmt.Errorf("invalid note class %q", s)
+		return 0, 0, fmt.Errorf("invalid note class %q", s)
 	}
+	switch {
+	case base > 11:
+		return base - 12, 1, nil
+	case base < 0:
+		return base + 12, -1, nil
+	}
+	return base, 0, nil
 }
 
 func ParsePitch(s string) (Pitch, error) {
@@ -64,7 +81,7 @@ func ParsePitch(s string) (Pitch, error) {
 		return Pitch{}, fmt.Errorf("invalid pitch %q: missing octave", s)
 	}
 
-	class, err := ParseNoteClass(s[:noteEnd])
+	class, carry, err := parseNoteClass(s[:noteEnd])
 	if err != nil {
 		return Pitch{}, fmt.Errorf("invalid pitch %q: %w", s, err)
 	}
@@ -77,7 +94,11 @@ func ParsePitch(s string) (Pitch, error) {
 		return Pitch{}, fmt.Errorf("invalid pitch %q: octave %d out of range [-1, 9]", s, octave)
 	}
 
-	return Pitch{Class: class, Octave: octave}, nil
+	p := Pitch{Class: class, Octave: octave + carry}
+	if p.Midi() < MinMidi || p.Midi() > MaxMidi {
+		return Pitch{}, fmt.Errorf("invalid pitch %q: midi %d out of range [%d, %d]", s, p.Midi(), MinMidi, MaxMidi)
+	}
+	return p, nil
 }
 
 func (p Pitch) String() string {

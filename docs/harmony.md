@@ -12,7 +12,12 @@ MIDI note number: `(Octave + 1) * 12 + Class`. This places C4 at MIDI 60 and A4 
 
 Frequency in hertz: `440 × 2^((Midi − 69) / 12)`.
 
-Valid octave range is −1 to 9, covering the full MIDI spectrum (MIDI 0–127, i.e. C−1 through G9).
+Valid octave range is −1 to 9, and a parsed pitch must land inside MIDI 0–127
+(C−1 through G9). `A9` and `B9` name real frequencies but fall outside MIDI, so
+`ParsePitch` rejects them rather than returning a note the wire format cannot
+describe. `Transpose` is pure arithmetic and is *not* range-checked: clamping it
+would break octave doubling, and the engine only transposes within the scale it
+allocated from.
 
 ### Enharmonic normalisation
 
@@ -31,6 +36,14 @@ This removes the need to treat two names as the same pitch anywhere downstream: 
 | G       | 7     | G#    | 8     | Ab      | 8     |
 | A       | 9     | A#    | 10    | Bb      | 10    |
 | B       | 11    | B#    | 0     | Cb      | 11    |
+
+An accidental that crosses a letter boundary carries the octave with it, because
+the octave number belongs to the letter name, not to the resulting pitch class.
+`B#3` is the semitone above `B3`, so it parses as `C4`, not `C3`; `Cb4` is the
+semitone below `C4`, so it parses as `B3`. The class column above is what
+`ParseNoteClass` reports; it cannot express the carry, which is correct for its
+only caller, since `music.root` in the config file is a bare class with no
+octave.
 
 ---
 
