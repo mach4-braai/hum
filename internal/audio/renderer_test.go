@@ -303,16 +303,66 @@ func TestSetTheme_RetargetsTheEnvelopeWithoutRestartingTheAttack(t *testing.T) {
 	}
 }
 
-func TestSetEnvelope_ShorteningTheAttackEndsIt(t *testing.T) {
+func TestSetEnvelope_ShorteningTheAttackEndsItWithoutAJump(t *testing.T) {
 	osc := NewOsc(DefaultFormat(), 440, 0.5, Envelope{Attack: time.Second, Release: time.Second})
-	buf := make([][2]float32, 64)
-	osc.Mix(buf)
+	osc.Mix(make([][2]float32, 64))
+	before := osc.curGain
 
 	osc.SetEnvelope(Envelope{Attack: time.Microsecond, Release: time.Second})
-	osc.Mix(buf)
+	osc.Mix(make([][2]float32, 1))
 
 	if osc.state != envSustain {
 		t.Errorf("state = %v, want sustain once the shortened attack is already past", osc.state)
+	}
+	if osc.curGain < before {
+		t.Errorf("curGain = %v, want it to keep rising from %v rather than fall back", osc.curGain, before)
+	}
+	if jump := osc.curGain - before; jump > 0.01 {
+		t.Errorf("curGain jumped by %v in one sample, want a continuous level: snapping to the peak is an audible click", jump)
+	}
+}
+
+func TestSetEnvelope_LengtheningTheAttackDoesNotOvershoot(t *testing.T) {
+	const gain = 0.5
+	osc := NewOsc(DefaultFormat(), 440, gain, Envelope{Attack: 10 * time.Millisecond, Release: time.Second})
+	buf := make([][2]float32, 256)
+	osc.Mix(buf)
+
+	osc.SetEnvelope(Envelope{Attack: 20 * time.Millisecond, Release: time.Second})
+	for osc.state == envAttack {
+		osc.Mix(buf)
+		if osc.curGain > gain+0.0001 {
+			t.Fatalf("curGain = %v during a lengthened attack, want it never above the peak %v", osc.curGain, gain)
+		}
+	}
+
+	if osc.curGain != gain {
+		t.Errorf("curGain = %v once the attack ends, want the peak %v", osc.curGain, gain)
+	}
+}
+
+func TestSetTheme_MidAttackSwapApproachesTheNewGain(t *testing.T) {
+	r := newTestRenderer(t)
+	if err := r.Update(harmony.State{Voices: []harmony.VoiceState{voiceState("s1", 9, 4)}}); err != nil {
+		t.Fatal(err)
+	}
+	osc := r.active["s1"].osc
+	osc.Mix(make([][2]float32, 256))
+
+	const quieter = 0.2
+	swapped := testOpts().Theme
+	swapped.Drone.Gain = quieter
+	swapped.Drone.Attack = 0.01
+	if err := r.SetTheme(swapped); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+
+	for osc.state == envAttack {
+		osc.Mix(make([][2]float32, 64))
+	}
+
+	if osc.curGain != quieter {
+		t.Errorf("curGain = %v once the retargeted attack ends, want the new theme's %v rather than the old peak", osc.curGain, quieter)
 	}
 }
 

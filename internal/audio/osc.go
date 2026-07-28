@@ -44,9 +44,8 @@ type Osc struct {
 	tgtFreqR float64
 	baseFreq float64
 
-	curGain  float64
-	tgtGain  float64
-	initGain float64
+	curGain float64
+	tgtGain float64
 
 	harmonic     float64
 	tremoloDepth float64
@@ -72,7 +71,6 @@ func NewOsc(f Format, freq float64, gain float64, env Envelope) *Osc {
 		tgtFreqL:       freq,
 		tgtFreqR:       freq,
 		tgtGain:        gain,
-		initGain:       gain,
 		attackSamples:  env.Attack.Seconds() * sr,
 		releaseSamples: env.Release.Seconds() * sr,
 		state:          envAttack,
@@ -106,7 +104,7 @@ func (o *Osc) SetEnvelope(env Envelope) {
 	o.mu.Lock()
 	o.attackSamples = env.Attack.Seconds() * o.sr
 	o.releaseSamples = env.Release.Seconds() * o.sr
-	if o.state == envAttack && o.attackSamples <= 0 {
+	if o.state == envAttack && o.envPos >= o.attackSamples {
 		o.state = envSustain
 		o.envPos = 0
 	}
@@ -152,10 +150,12 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 	for i := range buf {
 		switch o.state {
 		case envAttack:
-			o.curGain += o.initGain / o.attackSamples
+			if remaining := o.attackSamples - o.envPos; remaining > 0 {
+				o.curGain += (o.tgtGain - o.curGain) / remaining
+			}
 			o.envPos++
 			if o.envPos >= o.attackSamples {
-				o.curGain = o.initGain
+				o.curGain = o.tgtGain
 				o.state = envSustain
 				o.envPos = 0
 			}

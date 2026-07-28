@@ -72,7 +72,7 @@ func initDocument(name string) string {
 	d := config.Default()
 	var b strings.Builder
 	b.WriteString("project:\n")
-	fmt.Fprintf(&b, "  name: %s\n", name)
+	fmt.Fprintf(&b, "  name: %q\n", name)
 	b.WriteString("\n")
 	b.WriteString("music:\n")
 	fmt.Fprintf(&b, "  root: %s\n", d.Music.Root)
