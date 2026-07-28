@@ -17,33 +17,41 @@ type Source interface {
 
 type sourceEntry struct {
 	id  string
+	gen uint64
 	src Source
+}
+
+type doneSource struct {
+	id  string
+	gen uint64
 }
 
 type Mixer struct {
 	mu      sync.Mutex
-	sources map[string]Source
+	sources map[string]sourceEntry
+	gen     uint64
 	gain    float64
 
 	scratch [][2]float32
 	active  []sourceEntry
-	doneIDs []string
+	done    []doneSource
 }
 
 func NewMixer(f Format) *Mixer {
 	_ = f
 	return &Mixer{
-		sources: make(map[string]Source),
+		sources: make(map[string]sourceEntry),
 		gain:    1.0,
 		scratch: make([][2]float32, maxScratchFrames),
 		active:  make([]sourceEntry, 0, maxSources),
-		doneIDs: make([]string, 0, maxSources),
+		done:    make([]doneSource, 0, maxSources),
 	}
 }
 
 func (m *Mixer) Add(id string, s Source) {
 	m.mu.Lock()
-	m.sources[id] = s
+	m.gen++
+	m.sources[id] = sourceEntry{id: id, gen: m.gen, src: s}
 	m.mu.Unlock()
 }
 
@@ -88,14 +96,14 @@ func (m *Mixer) Read(p []byte) (int, error) {
 
 	m.mu.Lock()
 	m.active = m.active[:0]
-	for id, s := range m.sources {
-		m.active = append(m.active, sourceEntry{id: id, src: s})
+	for _, entry := range m.sources {
+		m.active = append(m.active, entry)
 	}
 	voiceCount := len(m.active)
 	gain := m.gain
 	m.mu.Unlock()
 
-	m.doneIDs = m.doneIDs[:0]
+	m.done = m.done[:0]
 
 	norm := gain
 	if voiceCount > 1 {
@@ -118,7 +126,7 @@ func (m *Mixer) Read(p []byte) (int, error) {
 				continue
 			}
 			if m.active[idx].src.Mix(sc) {
-				m.doneIDs = append(m.doneIDs, m.active[idx].id)
+				m.done = append(m.done, doneSource{id: m.active[idx].id, gen: m.active[idx].gen})
 				m.active[idx].src = nil
 			}
 		}
@@ -141,10 +149,12 @@ func (m *Mixer) Read(p []byte) (int, error) {
 		remaining -= batch
 	}
 
-	if len(m.doneIDs) > 0 {
+	if len(m.done) > 0 {
 		m.mu.Lock()
-		for _, id := range m.doneIDs {
-			delete(m.sources, id)
+		for _, finished := range m.done {
+			if current, ok := m.sources[finished.id]; ok && current.gen == finished.gen {
+				delete(m.sources, finished.id)
+			}
 		}
 		m.mu.Unlock()
 	}

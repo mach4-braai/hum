@@ -278,3 +278,52 @@ func TestMixerDoneMidBufferLenDrops(t *testing.T) {
 		t.Error("surviving source 'b' must remain")
 	}
 }
+
+type replacingSource struct {
+	m        *Mixer
+	id       string
+	swapped  bool
+	replaced Source
+}
+
+func (r *replacingSource) Mix(buf [][2]float32) bool {
+	if !r.swapped {
+		r.swapped = true
+		r.m.Add(r.id, r.replaced)
+	}
+	return true
+}
+
+func TestReadKeepsASourceAddedUnderAFinishingID(t *testing.T) {
+	m := NewMixer(DefaultFormat())
+
+	replacement := &constSource{l: 0.25, r: 0.25}
+	finishing := &replacingSource{m: m, id: "voice", replaced: replacement}
+	m.Add("voice", finishing)
+
+	p := make([]byte, 64*frameSize)
+	if _, err := m.Read(p); err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+
+	if !m.Has("voice") {
+		t.Fatal("the replacement added while the previous source finished was deleted; a session would start and never sound")
+	}
+	if m.Len() != 1 {
+		t.Errorf("Len() = %d, want 1", m.Len())
+	}
+
+	if _, err := m.Read(p); err != nil {
+		t.Fatalf("second Read: %v", err)
+	}
+	var nonZero bool
+	for i := 0; i < len(p); i += frameSize {
+		if p[i] != 0 || p[i+1] != 0 || p[i+2] != 0 || p[i+3] != 0 {
+			nonZero = true
+			break
+		}
+	}
+	if !nonZero {
+		t.Error("the replacement produced silence, so it never reached the mix")
+	}
+}
