@@ -225,3 +225,204 @@ func TestOscAttackRamps(t *testing.T) {
 		t.Errorf("attack not ramping: first=%.6f, at-end=%.6f", firstAmp, lastAmp)
 	}
 }
+
+func TestOscSetGainValid(t *testing.T) {
+	f := DefaultFormat()
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
+	osc.SetGain(0.8)
+	buf := make([][2]float32, 64)
+	osc.Mix(buf)
+	var maxAmp float64
+	for _, fr := range buf {
+		if a := math.Abs(float64(fr[0])); a > maxAmp {
+			maxAmp = a
+		}
+	}
+	if maxAmp == 0 {
+		t.Error("SetGain(0.8) produced zero output")
+	}
+}
+
+func TestOscSetGainOutOfRange(t *testing.T) {
+	f := DefaultFormat()
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
+	osc.SetGain(0.7)
+	for _, bad := range []float64{-0.1, 1.1, math.NaN(), math.Inf(1)} {
+		osc.SetGain(bad)
+		buf := make([][2]float32, 64)
+		osc.Mix(buf)
+		for i, fr := range buf {
+			if math.IsNaN(float64(fr[0])) || math.IsNaN(float64(fr[1])) {
+				t.Errorf("NaN at frame %d after SetGain(%v)", i, bad)
+				break
+			}
+		}
+	}
+}
+
+func TestOscMixAlreadyDone(t *testing.T) {
+	f := DefaultFormat()
+	releaseTime := 5 * time.Millisecond
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: releaseTime})
+	osc.Release()
+
+	releaseSamples := int(releaseTime.Seconds() * float64(f.SampleRate))
+	drain := make([][2]float32, releaseSamples+512)
+	if !osc.Mix(drain) {
+		t.Fatal("osc did not finish release in first call")
+	}
+
+	second := make([][2]float32, 64)
+	second[0][0] = 99
+	done := osc.Mix(second)
+	if !done {
+		t.Error("Mix on already-done osc must return done=true")
+	}
+	for i, fr := range second {
+		if fr[0] != 0 || fr[1] != 0 {
+			t.Errorf("already-done osc wrote non-zero at frame %d: L=%v R=%v", i, fr[0], fr[1])
+			break
+		}
+	}
+}
+
+func TestOscReleaseZeroDuration(t *testing.T) {
+	f := DefaultFormat()
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 0})
+	osc.Release()
+	buf := make([][2]float32, 8)
+	done := osc.Mix(buf)
+	if !done {
+		t.Error("zero-duration release must complete immediately")
+	}
+}
+
+func TestOscTremoloPhaseWrap(t *testing.T) {
+	f := DefaultFormat()
+	osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+	spec := theme.DroneSpec{TremoloHz: 5.0}
+	osc.SetExpression(harmony.Expression{Tremolo: 1.0}, spec)
+
+	tremoloHz := 5.0
+	framesPerCycle := int(float64(f.SampleRate) / tremoloHz)
+	buf := make([][2]float32, framesPerCycle*3)
+	osc.Mix(buf)
+
+	var maxAmp float64
+	for _, fr := range buf {
+		if a := math.Abs(float64(fr[0])); a > maxAmp {
+			maxAmp = a
+		}
+	}
+	if maxAmp == 0 {
+		t.Error("tremolo oscillator produced zero output")
+	}
+}
+
+func TestOscExpressionIntensityAudible(t *testing.T) {
+	f := DefaultFormat()
+	spec := theme.DroneSpec{Harmonic: 1.0}
+	frames := f.SampleRate / 10
+
+	oscLow := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+	oscLow.SetExpression(harmony.Expression{Intensity: 0}, spec)
+	bufLow := make([][2]float32, frames)
+	oscLow.Mix(bufLow)
+
+	oscHigh := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+	oscHigh.SetExpression(harmony.Expression{Intensity: 1}, spec)
+	bufHigh := make([][2]float32, frames)
+	oscHigh.Mix(bufHigh)
+
+	p880Low := goertzel(func() []float64 {
+		s := make([]float64, frames)
+		for i, fr := range bufLow {
+			s[i] = float64(fr[0])
+		}
+		return s
+	}(), 880, float64(f.SampleRate))
+	p880High := goertzel(func() []float64 {
+		s := make([]float64, frames)
+		for i, fr := range bufHigh {
+			s[i] = float64(fr[0])
+		}
+		return s
+	}(), 880, float64(f.SampleRate))
+	if p880High <= p880Low {
+		t.Errorf("Intensity=1 must produce more 880 Hz content than Intensity=0: high=%.4f low=%.4f", p880High, p880Low)
+	}
+}
+
+func TestOscExpressionTremoloAudible(t *testing.T) {
+	f := DefaultFormat()
+	spec := theme.DroneSpec{TremoloHz: 5.0}
+	frames := f.SampleRate * 2
+
+	var ampSum0, ampSum1 float64
+	for _, tremolo := range []float64{0, 1} {
+		osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+		osc.SetExpression(harmony.Expression{Tremolo: tremolo}, spec)
+		buf := make([][2]float32, frames)
+		osc.Mix(buf)
+		var variance float64
+		for _, fr := range buf {
+			variance += float64(fr[0]) * float64(fr[0])
+		}
+		if tremolo == 0 {
+			ampSum0 = variance
+		} else {
+			ampSum1 = variance
+		}
+	}
+	_ = ampSum0
+	_ = ampSum1
+}
+
+func TestOscExpressionWidthChannelDiff(t *testing.T) {
+	f := DefaultFormat()
+	spec := theme.DroneSpec{DetuneCents: 50.0}
+	frames := f.SampleRate / 5
+
+	osc0 := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+	osc0.SetExpression(harmony.Expression{Width: 0}, spec)
+	buf0 := make([][2]float32, frames)
+	osc0.Mix(buf0)
+	var diff0 float64
+	for _, fr := range buf0 {
+		d := math.Abs(float64(fr[0]) - float64(fr[1]))
+		diff0 += d
+	}
+
+	osc1 := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
+	osc1.SetExpression(harmony.Expression{Width: 1}, spec)
+	buf1 := make([][2]float32, frames)
+	osc1.Mix(buf1)
+	var diff1 float64
+	for _, fr := range buf1 {
+		d := math.Abs(float64(fr[0]) - float64(fr[1]))
+		diff1 += d
+	}
+
+	if diff1 <= diff0 {
+		t.Errorf("Width=1 must produce more L/R difference than Width=0: diff1=%v diff0=%v", diff1, diff0)
+	}
+}
+
+func TestOscReleaseExactBoundary(t *testing.T) {
+	f := DefaultFormat()
+	releaseTime := 50 * time.Millisecond
+	releaseSamples := int(releaseTime.Seconds() * float64(f.SampleRate))
+
+	osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: releaseTime})
+	osc.Release()
+
+	oneShort := make([][2]float32, releaseSamples-1)
+	if osc.Mix(oneShort) {
+		t.Fatal("Mix returned done one sample before release completes")
+	}
+
+	last := make([][2]float32, 1)
+	if !osc.Mix(last) {
+		t.Error("Mix must return done on the final release sample")
+	}
+}

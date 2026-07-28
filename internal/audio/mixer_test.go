@@ -215,3 +215,66 @@ func TestMixerEmptyRead(t *testing.T) {
 		}
 	}
 }
+
+func TestMixerSoftClipNeverExact(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", &constSource{l: 2.0, r: 2.0})
+
+	p := make([]byte, 256*frameSize)
+	m.Read(p)
+	frames := decodeFrames(p)
+
+	for i, fr := range frames {
+		if fr[0] >= 1.0 || fr[1] >= 1.0 {
+			t.Errorf("frame %d: hard clipping detected (L=%.8f R=%.8f); tanh(2.0)≈0.964 must be < 1.0", i, fr[0], fr[1])
+			break
+		}
+		if fr[0] < 0.9 || fr[1] < 0.9 {
+			t.Errorf("frame %d: output unexpectedly low (L=%.6f R=%.6f); expected tanh(2.0)≈0.964", i, fr[0], fr[1])
+			break
+		}
+	}
+}
+
+func TestMixerZeroLengthRead(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", &constSource{l: 0.5, r: 0.5})
+
+	p := make([]byte, 0)
+	n, err := m.Read(p)
+	if err != nil {
+		t.Fatalf("zero-length Read: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("n = %d, want 0", n)
+	}
+	if m.Len() != 1 {
+		t.Error("zero-length Read must not remove sources")
+	}
+}
+
+func TestMixerDoneMidBufferLenDrops(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", &countSource{val: 0.3, limit: 1})
+	m.Add("b", &constSource{l: 0.2, r: 0.2})
+
+	if m.Len() != 2 {
+		t.Fatalf("want 2 sources, got %d", m.Len())
+	}
+
+	p := make([]byte, 128*frameSize)
+	m.Read(p)
+
+	if m.Len() != 1 {
+		t.Errorf("Len after done source: got %d, want 1", m.Len())
+	}
+	if m.Has("a") {
+		t.Error("done source 'a' must be removed")
+	}
+	if !m.Has("b") {
+		t.Error("surviving source 'b' must remain")
+	}
+}

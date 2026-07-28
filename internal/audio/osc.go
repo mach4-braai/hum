@@ -165,11 +165,6 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 				}
 				return true
 			}
-		case envDone:
-			for j := i; j < len(buf); j++ {
-				buf[j] = [2]float32{}
-			}
-			return true
 		}
 
 		o.curFreqL += (o.tgtFreqL - o.curFreqL) * freqSmoothAlpha

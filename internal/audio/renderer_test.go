@@ -1,9 +1,12 @@
 package audio
 
 import (
+	"errors"
 	"math"
 	"testing"
+	"time"
 
+	"github.com/ebitengine/oto/v3"
 	"github.com/mach4-braai/hum/internal/harmony"
 	"github.com/mach4-braai/hum/internal/renderer"
 	"github.com/mach4-braai/hum/internal/theme"
@@ -230,5 +233,248 @@ func TestRegistered(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("audio renderer not registered")
+	}
+}
+
+func TestNewRendererWithMixer_Muted(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	opts := testOpts()
+	opts.Muted = true
+	r := newRendererWithMixer(m, f, opts)
+	if got := m.Gain(); got != 0 {
+		t.Fatalf("muted renderer: gain = %v, want 0", got)
+	}
+	_ = r
+}
+
+func TestSetTheme_UpdatesActiveVoices(t *testing.T) {
+	r := newTestRenderer(t)
+	state := harmony.State{Voices: []harmony.VoiceState{voiceState("s1", 9, 4)}}
+	if err := r.Update(state); err != nil {
+		t.Fatal(err)
+	}
+	newTheme := testOpts().Theme
+	newTheme.Drone.Gain = 0.3
+	if err := r.SetTheme(newTheme); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	if r.th.Drone.Gain != 0.3 {
+		t.Errorf("th.Drone.Gain = %v, want 0.3", r.th.Drone.Gain)
+	}
+}
+
+func TestSetTheme_NoActiveVoices(t *testing.T) {
+	r := newTestRenderer(t)
+	newTheme := testOpts().Theme
+	if err := r.SetTheme(newTheme); err != nil {
+		t.Fatalf("SetTheme with no voices: %v", err)
+	}
+}
+
+func TestUpdate_RetargetExpression(t *testing.T) {
+	r := newTestRenderer(t)
+	state1 := harmony.State{Voices: []harmony.VoiceState{voiceState("s1", 9, 4)}}
+	if err := r.Update(state1); err != nil {
+		t.Fatal(err)
+	}
+	state2 := harmony.State{Voices: []harmony.VoiceState{
+		{
+			Voice:      harmony.Voice{SessionID: "s1", Pitch: harmony.Pitch{Class: 9, Octave: 4}},
+			Expression: harmony.Expression{Intensity: 0.5},
+		},
+	}}
+	if err := r.Update(state2); err != nil {
+		t.Fatal(err)
+	}
+	if r.mixer.Len() != 1 {
+		t.Fatalf("retarget Update must not create new osc; Len=%d", r.mixer.Len())
+	}
+}
+
+func TestDroneEnvelope_Fallbacks(t *testing.T) {
+	env := droneEnvelope(theme.DroneSpec{Attack: 0, Release: 0})
+	if env.Attack != fallbackAttack {
+		t.Errorf("attack fallback = %v, want %v", env.Attack, fallbackAttack)
+	}
+	if env.Release != fallbackRelease {
+		t.Errorf("release fallback = %v, want %v", env.Release, fallbackRelease)
+	}
+}
+
+func TestDoRamp_EarlyExitOnStaleGen(t *testing.T) {
+	r := newTestRenderer(t)
+	r.mixer.SetGain(0.8)
+
+	r.mu.Lock()
+	r.rampGen = 42
+	r.mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		r.doRamp(0.8, 0, 0, 1)
+	}()
+	<-done
+
+	if got := r.mixer.Gain(); got != 0.8 {
+		t.Errorf("stale doRamp must not change gain: got %v, want 0.8", got)
+	}
+}
+
+func TestDoRamp_NormalCompletion(t *testing.T) {
+	r := newTestRenderer(t)
+	r.mixer.SetGain(0.8)
+
+	r.mu.Lock()
+	r.rampGen = 7
+	r.mu.Unlock()
+
+	r.doRamp(0.8, 0, 0, 7)
+
+	if got := r.mixer.Gain(); got > 0.05 {
+		t.Errorf("doRamp completed: gain = %v, want near 0", got)
+	}
+}
+
+func TestClose_WithEngine(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	r := newRendererWithMixer(m, f, testOpts())
+	mp := &mockPlayer{}
+	r.engine = &Engine{player: mp}
+
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close with engine: %v", err)
+	}
+	if !mp.paused {
+		t.Fatal("engine.Close must pause the player")
+	}
+}
+
+func TestTrigger_ZeroNotes(t *testing.T) {
+	r := newTestRenderer(t)
+	if err := r.Trigger(harmony.Phrase{}); err != nil {
+		t.Fatal(err)
+	}
+	if r.mixer.Len() != 0 {
+		t.Fatal("empty phrase must not add sources")
+	}
+}
+
+func TestTrigger_CapDropsOldest(t *testing.T) {
+	r := newTestRenderer(t)
+	longNote := harmony.Note{
+		Pitch:    harmony.Pitch{Class: 9, Octave: 4},
+		Duration: 10 * time.Second,
+		Gain:     0.5,
+	}
+	for range maxPhraseVoices {
+		if err := r.Trigger(harmony.Phrase{Notes: []harmony.Note{longNote}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(r.phraseIDs) == 0 {
+		t.Fatal("phraseIDs must not be empty")
+	}
+	firstID := r.phraseIDs[0]
+
+	if err := r.Trigger(harmony.Phrase{Notes: []harmony.Note{longNote}}); err != nil {
+		t.Fatal(err)
+	}
+	if r.mixer.Has(firstID) {
+		t.Error("oldest phrase voice must be dropped when cap exceeded")
+	}
+}
+
+func TestSetVolume_WhileMuted(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	opts := testOpts()
+	opts.Muted = true
+	r := newRendererWithMixer(m, f, opts)
+	r.rampDuration = 0
+
+	if err := r.SetVolume(0.4); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Gain(); got != 0 {
+		t.Errorf("gain during mute after SetVolume = %v, want 0", got)
+	}
+
+	if err := r.SetMuted(false); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.Gain(); got != 0.4 {
+		t.Errorf("gain after unmute = %v, want 0.4", got)
+	}
+}
+
+func TestSetMuted_DoubleMuteUnmute(t *testing.T) {
+	r := newTestRenderer(t)
+	r.SetVolume(0.6)
+
+	r.SetMuted(true)
+	r.SetMuted(true)
+	r.SetMuted(false)
+	r.SetMuted(false)
+
+	if got := r.mixer.Gain(); got != 0.6 {
+		t.Errorf("double toggle: gain = %v, want 0.6", got)
+	}
+}
+
+func TestRendererInit_ErrNoDevice(t *testing.T) {
+	orig := newOtoContext
+	t.Cleanup(func() { newOtoContext = orig })
+	newOtoContext = func(_ *oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
+		return nil, nil, errors.New("stub: no device")
+	}
+
+	_, err := renderer.Open("audio", renderer.Options{SampleRate: 0})
+	if err == nil {
+		t.Fatal("expected error when no device")
+	}
+	if !errors.Is(err, ErrNoDevice) {
+		t.Errorf("want ErrNoDevice in chain, got %v", err)
+	}
+}
+
+func TestRendererInit_Success(t *testing.T) {
+	orig1 := newOtoContext
+	orig2 := newOtoPlayer
+	t.Cleanup(func() { newOtoContext = orig1; newOtoPlayer = orig2 })
+
+	ready := make(chan struct{})
+	close(ready)
+	newOtoContext = func(_ *oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
+		return nil, ready, nil
+	}
+	newOtoPlayer = func(_ *oto.Context, _ *Mixer) playerPauser {
+		return &mockPlayer{}
+	}
+
+	r, err := renderer.Open("audio", renderer.Options{SampleRate: 48000, Volume: 0.5})
+	if err != nil {
+		t.Fatalf("renderer.Open: %v", err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+}
+
+func TestNewAudioRenderer_ZeroSampleRate(t *testing.T) {
+	orig := newOtoContext
+	t.Cleanup(func() { newOtoContext = orig })
+	newOtoContext = func(_ *oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
+		return nil, nil, errors.New("stub: no device")
+	}
+
+	_, err := newAudioRenderer(renderer.Options{SampleRate: 0})
+	if err == nil {
+		t.Fatal("expected error from newAudioRenderer with no device")
+	}
+	if !errors.Is(err, ErrNoDevice) {
+		t.Errorf("want ErrNoDevice, got %v", err)
 	}
 }

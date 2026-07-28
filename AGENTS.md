@@ -1,8 +1,9 @@
 # Hum
 
 Auditory display daemon. `humd` owns audio and session state; `hum` is a thin
-client over a Unix socket. `go.mod` currently has no requires; the audio backend
-is the one dependency planned, so anything else needs a strong argument.
+client over a Unix socket. `go.mod` requires exactly two things: `gopkg.in/yaml.v3`
+for configuration and themes, and `github.com/ebitengine/oto/v3` for audio
+output. A third needs a strong argument.
 
 ## Commands
 
@@ -54,13 +55,29 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   so a single pass reads `theme use --json minimal` as a theme named `--json`.
 - `filepath.Abs` fails only when the working directory is removed, and macOS
   keeps resolving a removed one. That is why `absolute` is a variable.
-- The default socket path must fit `sun_path`: 104 bytes on macOS, 108 on Linux.
+- Socket paths must fit `sun_path`: 104 bytes on macOS, 108 on Linux.
+  `NewUnixListener` rejects longer ones, because the kernel only says "invalid
+  argument". A test socket therefore cannot live in `t.TempDir()` — the test name
+  is part of that path and overflows it. Use a short `os.MkdirTemp("", "hd")`.
 - oto v3.4.0 is CGO-free on macOS but declares `#cgo pkg-config: alsa` on Linux,
   so the Linux legs install `libasound2-dev` and `pkg-config`. #39 removes this.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
+- Voices are released before `renderer.Close`, never after. Closing first cuts
+  the fade the release envelope exists to produce.
+- The event goroutine must outlive `transport.Serve`. Requests still in flight
+  during shutdown are answered by it, so stopping it first deadlocks the drain.
+- `renderer.Options.Volume` is never defaulted. `internal/config` decodes into
+  pointers so a configured `volume: 0` survives; substituting a theme's drone
+  gain, or 0.6, throws that away and unmutes a user who asked for silence.
+- `Request.MarshalJSON` refuses to encode an invalid request, so the daemon's own
+  rejection paths cannot be tested through the typed client. Write raw JSON lines
+  (`sendRaw` in `cmd/humd`).
+- The runtime coalesces rapid duplicate signals. A test that sends two `SIGTERM`s
+  back to back sees one; wait for the daemon's "waiting for voices to fade" line
+  in between.
 
 ## Protocol
 

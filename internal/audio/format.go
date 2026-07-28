@@ -19,14 +19,20 @@ func DefaultFormat() Format {
 	return Format{SampleRate: 48000, Channels: 2}
 }
 
-var newOtoContext = func(opts *oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
-	return oto.NewContext(opts)
+type playerPauser interface{ Pause() }
+
+var newOtoContext = oto.NewContext
+
+var newOtoPlayer = func(ctx *oto.Context, m *Mixer) playerPauser {
+	p := ctx.NewPlayer(m)
+	p.Play()
+	return p
 }
 
 type Engine struct {
 	mu     sync.Mutex
 	ctx    *oto.Context
-	player *oto.Player
+	player playerPauser
 	mixer  *Mixer
 	closed bool
 }
@@ -45,9 +51,8 @@ func NewEngine(f Format) (*Engine, error) {
 	if ready != nil {
 		<-ready
 	}
-	p := ctx.NewPlayer(m)
-	p.Play()
-	return &Engine{ctx: ctx, player: p, mixer: m}, nil
+	player := newOtoPlayer(ctx, m)
+	return &Engine{ctx: ctx, player: player, mixer: m}, nil
 }
 
 func (e *Engine) Mixer() *Mixer {

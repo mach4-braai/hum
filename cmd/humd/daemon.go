@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	reapEvery = time.Minute
-	reapAfter = 5 * time.Minute
+	defaultReapEvery = time.Minute
+	defaultReapAfter = 5 * time.Minute
 )
 
 type call struct {
@@ -34,6 +34,8 @@ type daemon struct {
 	theme       theme.Theme
 	globalFile  string
 	releaseWait time.Duration
+	reapEvery   time.Duration
+	reapAfter   time.Duration
 
 	contextOwner string
 	volume       float64
@@ -67,24 +69,34 @@ type sessionPayload struct {
 	Seconds   float64           `json:"seconds"`
 }
 
-func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, globalFile string) (*daemon, error) {
-	root, err := harmony.ParseNoteClass(cfg.Music.Root)
+func tuning(cfg *config.Config) (harmony.Pitch, harmony.Scale, error) {
+	class, err := harmony.ParseNoteClass(cfg.Music.Root)
 	if err != nil {
-		return nil, fmt.Errorf("music.root: %w", err)
+		return harmony.Pitch{}, harmony.Scale{}, fmt.Errorf("music.root: %w", err)
 	}
 	scale, err := harmony.LookupScale(cfg.Music.Scale)
 	if err != nil {
-		return nil, fmt.Errorf("music.scale: %w", err)
+		return harmony.Pitch{}, harmony.Scale{}, fmt.Errorf("music.scale: %w", err)
+	}
+	return harmony.Pitch{Class: class, Octave: droneOctave}, scale, nil
+}
+
+func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, globalFile string) (*daemon, error) {
+	root, scale, err := tuning(cfg)
+	if err != nil {
+		return nil, err
 	}
 
 	return &daemon{
 		log:         log,
 		registry:    session.New(),
-		engine:      harmony.NewEngine(harmony.Pitch{Class: root, Octave: droneOctave}, scale, th.PhraseSpec()),
+		engine:      harmony.NewEngine(root, scale, th.PhraseSpec()),
 		render:      r,
 		theme:       th,
 		globalFile:  globalFile,
 		releaseWait: time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin,
+		reapEvery:   defaultReapEvery,
+		reapAfter:   defaultReapAfter,
 		volume:      cfg.Audio.Volume,
 		muted:       cfg.Audio.Muted,
 		calls:       make(chan call),
@@ -96,7 +108,7 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 func (d *daemon) serveEvents(ctx context.Context) {
 	defer close(d.stopped)
 
-	reap := time.NewTicker(reapEvery)
+	reap := time.NewTicker(d.reapEvery)
 	defer reap.Stop()
 
 	for {
@@ -104,7 +116,7 @@ func (d *daemon) serveEvents(ctx context.Context) {
 		case c := <-d.calls:
 			c.reply <- d.dispatch(c.request)
 		case <-reap.C:
-			if dropped := d.registry.Reap(reapAfter); dropped > 0 {
+			if dropped := d.registry.Reap(d.reapAfter); dropped > 0 {
 				d.log.Debug("reaped terminal sessions", "count", dropped)
 			}
 		case <-ctx.Done():
@@ -178,24 +190,19 @@ func (d *daemon) adoptContext(root string) error {
 		return nil
 	}
 
+	tune, scale, err := tuning(cfg)
+	if err != nil {
+		return err
+	}
+	if err := d.engine.Retune(tune, scale); err != nil {
+		return err
+	}
+
 	owner := root
 	if root != "" {
 		if canonical, err := config.CanonicalRoot(root); err == nil {
 			owner = canonical
 		}
-	}
-
-	class, err := harmony.ParseNoteClass(cfg.Music.Root)
-	if err != nil {
-		return fmt.Errorf("music.root: %w", err)
-	}
-	scale, err := harmony.LookupScale(cfg.Music.Scale)
-	if err != nil {
-		return fmt.Errorf("music.scale: %w", err)
-	}
-	if err := d.engine.Retune(harmony.Pitch{Class: class, Octave: droneOctave}, scale); err != nil {
-		d.log.Warn("keeping the current tuning", "error", err)
-		return nil
 	}
 
 	if cfg.Music.Theme != d.theme.Name {
