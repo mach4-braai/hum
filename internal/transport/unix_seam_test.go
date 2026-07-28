@@ -15,9 +15,9 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
-func seampDir(t *testing.T) string {
+func seamDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "humts")
+	dir, err := os.MkdirTemp("", "hd")
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}
@@ -27,7 +27,7 @@ func seampDir(t *testing.T) string {
 
 func seamSockPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join(seampDir(t), "t.sock")
+	return filepath.Join(seamDir(t), "t.sock")
 }
 
 func seamStaleSocket(t *testing.T, path string) {
@@ -176,7 +176,7 @@ func TestProbeLiveNonECONNREFUSEDError(t *testing.T) {
 		return nil, syscall.EPERM
 	}
 
-	dir := seampDir(t)
+	dir := seamDir(t)
 	path := filepath.Join(dir, "t.sock")
 	seamStaleSocket(t, path)
 
@@ -199,7 +199,7 @@ func TestProbeLiveSetDeadlineFails(t *testing.T) {
 		return &mockConn{deadlineErr: errors.New("fake deadline failure")}, nil
 	}
 
-	dir := seampDir(t)
+	dir := seamDir(t)
 	path := filepath.Join(dir, "t.sock")
 	seamStaleSocket(t, path)
 
@@ -219,7 +219,7 @@ func TestProbeLiveEncodeFails(t *testing.T) {
 		return &mockConn{writeErr: errors.New("fake write failure")}, nil
 	}
 
-	dir := seampDir(t)
+	dir := seamDir(t)
 	path := filepath.Join(dir, "t.sock")
 	seamStaleSocket(t, path)
 
