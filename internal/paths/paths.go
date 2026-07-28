@@ -50,6 +50,38 @@ func ProjectConfigFile(startDir string) (string, bool) {
 	}
 }
 
+const GitDirName = ".git"
+
+func ProjectRoot(startDir string) (string, error) {
+	dir, err := absolute(startDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root from %q: %w", startDir, err)
+	}
+	if config, ok := ProjectConfigFile(dir); ok {
+		dir = filepath.Dir(filepath.Dir(config))
+	} else if root, ok := gitRoot(dir); ok {
+		dir = root
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root %s: %w", dir, err)
+	}
+	return resolved, nil
+}
+
+func gitRoot(dir string) (string, bool) {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, GitDirName)); err == nil {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
 func SocketPath() string {
 	if p := os.Getenv(EnvSocket); p != "" {
 		return p
