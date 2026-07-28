@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -94,7 +95,30 @@ func applyLayer(out *Config, prov Provenance, d *layerData, layer Layer) {
 	}
 }
 
+var ErrProjectRoot = errors.New("invalid project root")
+
+func ResolveForSession(projectRoot string) (*Config, Provenance, error) {
+	if projectRoot == "" {
+		return resolve(nil, "", false)
+	}
+	if !filepath.IsAbs(projectRoot) {
+		return nil, nil, fmt.Errorf("%w: %q is not an absolute path", ErrProjectRoot, projectRoot)
+	}
+	info, err := os.Stat(projectRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %q: %w", ErrProjectRoot, projectRoot, err)
+	}
+	if !info.IsDir() {
+		return nil, nil, fmt.Errorf("%w: %q is not a directory", ErrProjectRoot, projectRoot)
+	}
+	return resolve(nil, projectRoot, true)
+}
+
 func Resolve(cliOverrides map[string]string, startDir string) (*Config, Provenance, error) {
+	return resolve(cliOverrides, startDir, true)
+}
+
+func resolve(cliOverrides map[string]string, startDir string, useProject bool) (*Config, Provenance, error) {
 	prov := Provenance{
 		"project.name": LayerDefault,
 		"music.root":   LayerDefault,
@@ -112,12 +136,14 @@ func Resolve(cliOverrides map[string]string, startDir string) (*Config, Provenan
 	}
 	applyLayer(&out, prov, global, LayerGlobal)
 
-	if projPath, ok := paths.ProjectConfigFile(startDir); ok {
-		proj, err := loadLayer(projPath)
-		if err != nil {
-			return nil, nil, err
+	if useProject {
+		if projPath, ok := paths.ProjectConfigFile(startDir); ok {
+			proj, err := loadLayer(projPath)
+			if err != nil {
+				return nil, nil, err
+			}
+			applyLayer(&out, prov, proj, LayerProject)
 		}
-		applyLayer(&out, prov, proj, LayerProject)
 	}
 
 	keys := make([]string, 0, len(cliOverrides))
