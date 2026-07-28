@@ -102,6 +102,17 @@ func (o *Osc) SetGain(gain float64) {
 	o.mu.Unlock()
 }
 
+func (o *Osc) SetEnvelope(env Envelope) {
+	o.mu.Lock()
+	o.attackSamples = env.Attack.Seconds() * o.sr
+	o.releaseSamples = env.Release.Seconds() * o.sr
+	if o.state == envAttack && o.attackSamples <= 0 {
+		o.state = envSustain
+		o.envPos = 0
+	}
+	o.mu.Unlock()
+}
+
 func (o *Osc) SetExpression(e harmony.Expression, t theme.DroneSpec) {
 	o.mu.Lock()
 	o.harmonic = e.Intensity * t.Harmonic

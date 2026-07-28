@@ -136,14 +136,16 @@ whose daemon will not start is exactly who needs it, and Homebrew users have no
 other diagnostic.
 
 Warnings do not fail the run. A version skew between `hum` and `humd`, or a
-fallback to the silent renderer on a machine with no audio device, are conditions
-worth reporting but not reasons to exit non-zero.
+silent renderer, are conditions worth reporting but not reasons to exit non-zero.
+The audio row separates a deliberate `humd --no-audio` from a fallback to the
+silent renderer on a machine with no device: both run `nop`, but one is what the
+operator asked for and the other is a fault, and telling a headless daemon it has
+no audio device sends the user hunting for a hardware problem that does not exist.
 
 The config rows carry provenance, so a user can see which layer set `music.root`
 rather than guessing between four of them. `--audio-test` plays a two-second tone
 through the daemon and says plainly when nothing could be heard, since a
-diagnostic that reports success into silence sends the user hunting for a
-hardware fault that does not exist.
+diagnostic that reports success into silence is worse than no diagnostic at all.
 
 ## `hum init`
 

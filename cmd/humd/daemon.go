@@ -33,6 +33,7 @@ type daemon struct {
 	registry    *session.Registry
 	engine      *harmony.Engine
 	render      renderer.Renderer
+	requested   string
 	theme       theme.Theme
 	globalFile  string
 	releaseWait time.Duration
@@ -64,7 +65,7 @@ func releaseWaitFor(th theme.Theme) time.Duration {
 	return time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin
 }
 
-func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, globalFile string) (*daemon, error) {
+func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, requested, globalFile string) (*daemon, error) {
 	root, scale, err := tuning(cfg)
 	if err != nil {
 		return nil, err
@@ -75,6 +76,7 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		registry:    session.New(),
 		engine:      harmony.NewEngine(root, scale, th.PhraseSpec()),
 		render:      r,
+		requested:   requested,
 		theme:       th,
 		globalFile:  globalFile,
 		releaseWait: releaseWaitFor(th),
@@ -341,17 +343,18 @@ func (d *daemon) status() protocol.Response {
 
 	root, scale := d.engine.Tuning()
 	return payload(protocol.StatusPayload{
-		Sessions:       sessions,
-		Theme:          d.theme.Name,
-		Root:           root.String(),
-		Scale:          scale.Name,
-		ContextOwner:   d.contextOwner,
-		Renderer:       d.render.Name(),
-		SampleRate:     d.sampleRate(),
-		Version:        version,
-		Volume:         d.volume,
-		Muted:          d.muted,
-		SoundingVoices: len(state.Voices),
+		Sessions:          sessions,
+		Theme:             d.theme.Name,
+		Root:              root.String(),
+		Scale:             scale.Name,
+		ContextOwner:      d.contextOwner,
+		Renderer:          d.render.Name(),
+		RendererRequested: d.requested,
+		SampleRate:        d.sampleRate(),
+		Version:           version,
+		Volume:            d.volume,
+		Muted:             d.muted,
+		SoundingVoices:    len(state.Voices),
 	})
 }
 

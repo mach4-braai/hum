@@ -70,6 +70,10 @@ cannot sound a second completion phrase.
 `theme.use` reaches the renderer through the optional `renderer.Themeable`
 interface. Keeping it off `renderer.Renderer` means a future renderer with no
 notion of a theme — a Hue bridge, say — does not have to pretend to have one.
+The swap retargets each sounding drone's gain, expression **and** envelope in
+place, without touching envelope state or position. Rebuilding the oscillators
+would fire every voice's attack at once, so a theme change would sound like every
+session restarting.
 
 `audio.test` exists for `hum doctor --audio-test`, which has to answer "is sound
 physically reaching the speakers". It reports `played: false` when the renderer

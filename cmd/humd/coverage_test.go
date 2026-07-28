@@ -79,7 +79,7 @@ func TestNewDaemonRejectsInvalidRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load theme: %v", err)
 	}
-	_, err = newDaemon(quietLogger(), &cfg, th, &recorder{}, "")
+	_, err = newDaemon(quietLogger(), &cfg, th, &recorder{}, "recorder", "")
 	if err == nil {
 		t.Fatal("newDaemon with invalid root = nil, want an error")
 	}
@@ -96,7 +96,7 @@ func TestNewDaemonRejectsInvalidScale(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load theme: %v", err)
 	}
-	_, err = newDaemon(quietLogger(), &cfg, th, &recorder{}, "")
+	_, err = newDaemon(quietLogger(), &cfg, th, &recorder{}, "recorder", "")
 	if err == nil {
 		t.Fatal("newDaemon with invalid scale = nil, want an error")
 	}

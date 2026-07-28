@@ -13,17 +13,18 @@ type SessionPayload struct {
 }
 
 type StatusPayload struct {
-	Sessions       []SessionPayload `json:"sessions"`
-	Theme          string           `json:"theme"`
-	Root           string           `json:"root"`
-	Scale          string           `json:"scale"`
-	ContextOwner   string           `json:"context_owner,omitempty"`
-	Renderer       string           `json:"renderer"`
-	SampleRate     int              `json:"sample_rate"`
-	Version        string           `json:"version"`
-	Volume         float64          `json:"volume"`
-	Muted          bool             `json:"muted"`
-	SoundingVoices int              `json:"sounding_voices"`
+	Sessions          []SessionPayload `json:"sessions"`
+	Theme             string           `json:"theme"`
+	Root              string           `json:"root"`
+	Scale             string           `json:"scale"`
+	ContextOwner      string           `json:"context_owner,omitempty"`
+	Renderer          string           `json:"renderer"`
+	RendererRequested string           `json:"renderer_requested,omitempty"`
+	SampleRate        int              `json:"sample_rate"`
+	Version           string           `json:"version"`
+	Volume            float64          `json:"volume"`
+	Muted             bool             `json:"muted"`
+	SoundingVoices    int              `json:"sounding_voices"`
 }
 
 type ThemeListPayload struct {

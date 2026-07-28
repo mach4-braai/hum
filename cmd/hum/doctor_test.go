@@ -653,3 +653,78 @@ func TestDoctorAudioTestNotPlayedNoOp(t *testing.T) {
 		t.Errorf("expected audio-test warn with 'no-op'; got:\n%s", out)
 	}
 }
+
+func doctorRowFor(t *testing.T, out, name string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[1] == name {
+			return line
+		}
+	}
+	t.Fatalf("no %q row in doctor output:\n%s", name, out)
+	return ""
+}
+
+func TestDoctorAudioRowSeparatesHeadlessFromFallback(t *testing.T) {
+	cases := []struct {
+		name      string
+		requested string
+		want      string
+		unwanted  string
+	}{
+		{"headless by request", "nop", "headless by request", "no audio device"},
+		{"device fallback", "audio", "fell back from audio", "headless"},
+		{"daemon says nothing", "", "did not say what it asked for", "headless"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("HUM_HOME", t.TempDir())
+			status := fmt.Sprintf(
+				`{"ok":true,"data":{"version":"%s","renderer":"nop","renderer_requested":"%s","scale":"minor_pentatonic","root":"D","theme":"minimal","volume":0.6,"muted":false,"sessions":[],"sample_rate":48000}}`,
+				version, tc.requested,
+			)
+			serveResponses(t, `{"ok":true}`+"\n", status+"\n")
+			var stdout, stderr bytes.Buffer
+
+			code := run([]string{"doctor"}, &stdout, &stderr)
+
+			if code != exitOK {
+				t.Fatalf("exit %d, want %d: a silent renderer is a warning, not a failure; stdout=%s", code, exitOK, stdout.String())
+			}
+			row := doctorRowFor(t, stdout.String(), "audio")
+			if !strings.HasPrefix(row, "warn") {
+				t.Errorf("audio row = %q, want a warning", row)
+			}
+			if !strings.Contains(row, tc.want) {
+				t.Errorf("audio row = %q, want it to mention %q", row, tc.want)
+			}
+			if strings.Contains(row, tc.unwanted) {
+				t.Errorf("audio row = %q, must not claim %q", row, tc.unwanted)
+			}
+		})
+	}
+}
+
+func TestDoctorAudioRowPassesForARealDevice(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	status := fmt.Sprintf(
+		`{"ok":true,"data":{"version":"%s","renderer":"audio","renderer_requested":"audio","scale":"minor_pentatonic","root":"D","theme":"minimal","volume":0.6,"muted":false,"sessions":[],"sample_rate":48000}}`,
+		version,
+	)
+	serveResponses(t, `{"ok":true}`+"\n", status+"\n")
+	var stdout, stderr bytes.Buffer
+
+	if code := run([]string{"doctor"}, &stdout, &stderr); code != exitOK {
+		t.Fatalf("exit %d, want %d; stdout=%s", code, exitOK, stdout.String())
+	}
+
+	row := doctorRowFor(t, stdout.String(), "audio")
+	if !strings.HasPrefix(row, "pass") {
+		t.Errorf("audio row = %q, want a pass when the requested renderer is the one running", row)
+	}
+	if !strings.Contains(row, "sample_rate=48000") {
+		t.Errorf("audio row = %q, want the sample rate reported", row)
+	}
+}

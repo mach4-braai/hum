@@ -20,6 +20,8 @@ func init() {
 	register("doctor", runDoctor)
 }
 
+const nopRenderer = "nop"
+
 type doctorCheck struct {
 	Status string `json:"status"`
 	Name   string `json:"name"`
@@ -208,10 +210,16 @@ func doctorMusicCheck(cfg *config.Config) doctorCheck {
 
 func doctorAudioCheck(st protocol.StatusPayload) doctorCheck {
 	detail := fmt.Sprintf("renderer=%s  sample_rate=%d", st.Renderer, st.SampleRate)
-	if st.Renderer == "nop" {
-		return doctorCheck{"warn", "audio", detail + "  (no audio device)"}
+	if st.Renderer != nopRenderer {
+		return doctorCheck{"pass", "audio", detail}
 	}
-	return doctorCheck{"pass", "audio", detail}
+	if st.RendererRequested == nopRenderer {
+		return doctorCheck{"warn", "audio", detail + "  (headless by request)"}
+	}
+	if st.RendererRequested == "" {
+		return doctorCheck{"warn", "audio", detail + "  (silent; the daemon did not say what it asked for)"}
+	}
+	return doctorCheck{"warn", "audio", fmt.Sprintf("%s  (fell back from %s: no audio device)", detail, st.RendererRequested)}
 }
 
 func doctorRunAudioTest(e *env, daemonOK bool) doctorCheck {
@@ -230,13 +238,13 @@ func doctorRunAudioTest(e *env, daemonOK bool) doctorCheck {
 		return doctorCheck{"fail", "audio-test", fmt.Sprintf("malformed response: %v", err)}
 	}
 	if !payload.Played {
-		if payload.Renderer == "nop" {
-			return doctorCheck{"warn", "audio-test", "no-op: nop renderer (no audio device)"}
+		if payload.Renderer == nopRenderer {
+			return doctorCheck{"warn", "audio-test", "no-op: the nop renderer produces no sound"}
 		}
 		if payload.Muted {
-			return doctorCheck{"warn", "audio-test", "no-op: daemon is muted"}
+			return doctorCheck{"warn", "audio-test", "no-op: the daemon is muted"}
 		}
-		return doctorCheck{"warn", "audio-test", "no-op: tone was not played"}
+		return doctorCheck{"warn", "audio-test", "no-op: the tone was not played"}
 	}
 	return doctorCheck{"pass", "audio-test", fmt.Sprintf("tone played (%.1fs, renderer=%s)", payload.Seconds, payload.Renderer)}
 }

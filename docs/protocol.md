@@ -150,7 +150,8 @@ daemon that writes them and the client that renders them cannot drift.
 {"ok":true,"data":{
   "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","pitch":"D2","updates":0,"seconds":12.4}],
   "theme":"minimal","root":"D2","scale":"minor_pentatonic","context_owner":"/Users/dev/projects/tofu",
-  "renderer":"audio","sample_rate":48000,"version":"0.1.0","volume":0.6,"muted":false,"sounding_voices":1
+  "renderer":"audio","renderer_requested":"audio","sample_rate":48000,"version":"0.1.0",
+  "volume":0.6,"muted":false,"sounding_voices":1
 }}
 ```
 
@@ -164,10 +165,13 @@ correlate what they hear with what is running. It is omitted once the voice is
 released, which is what distinguishes a session that is still audible from one
 that is merely still listed.
 
-`renderer`, `sample_rate` and `version` describe the daemon rather than the
-work: `renderer` is `nop` when no audio device was available, `sample_rate` is
-0 for a renderer that cannot report one, and `version` lets `hum doctor` compare
-the client and daemon builds over the same connection it already uses.
+`renderer`, `renderer_requested`, `sample_rate` and `version` describe the daemon
+rather than the work. `renderer` is what is running and `renderer_requested` is
+what was asked for, so a client can tell a deliberate `humd --no-audio` from a
+fallback to `nop` because no device was available — identical from `renderer`
+alone, and opposite diagnoses. `sample_rate` is 0 for a renderer that cannot
+report one, and `version` lets `hum doctor` compare the client and daemon builds
+over the connection it already uses.
 
 `theme.list` returns `{"themes":["minimal"],"active":"minimal"}` — the available
 themes plus the one in force, so a client can mark it without a second request.

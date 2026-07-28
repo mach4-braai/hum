@@ -168,3 +168,37 @@ func TestStatusReportsZeroSampleRateForARendererThatCannotSayOne(t *testing.T) {
 		t.Errorf("sample rate = %d for a renderer that reports none, want 0 rather than an invented default", status.SampleRate)
 	}
 }
+
+func TestStatusDistinguishesAHeadlessDaemonFromADeviceFallback(t *testing.T) {
+	d, _ := testDaemon(t)
+	d.render = renderer.NewNop(renderer.Options{})
+	d.requested = "nop"
+	socket, signals, done := startDaemon(t, d)
+	t.Cleanup(func() {
+		signals <- syscall.SIGTERM
+		<-done
+	})
+
+	status := statusOf(t, socket)
+
+	if status.Renderer != "nop" || status.RendererRequested != "nop" {
+		t.Errorf("renderer/requested = %q/%q, want nop/nop for a daemon started headless", status.Renderer, status.RendererRequested)
+	}
+}
+
+func TestStatusReportsTheRendererThatWasAskedForWhenItFellBack(t *testing.T) {
+	d, _ := testDaemon(t)
+	d.render = renderer.NewNop(renderer.Options{})
+	d.requested = "audio"
+	socket, signals, done := startDaemon(t, d)
+	t.Cleanup(func() {
+		signals <- syscall.SIGTERM
+		<-done
+	})
+
+	status := statusOf(t, socket)
+
+	if status.Renderer != "nop" || status.RendererRequested != "audio" {
+		t.Errorf("renderer/requested = %q/%q, want nop/audio so a client can tell a fallback from a headless start", status.Renderer, status.RendererRequested)
+	}
+}

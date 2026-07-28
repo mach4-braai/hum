@@ -116,7 +116,7 @@ func testDaemon(t *testing.T) (*daemon, *recorder) {
 	}
 
 	rec := &recorder{}
-	d, err := newDaemon(quietLogger(), cfg, th, rec, "")
+	d, err := newDaemon(quietLogger(), cfg, th, rec, "recorder", "")
 	if err != nil {
 		t.Fatalf("newDaemon: %v", err)
 	}

@@ -264,6 +264,78 @@ func TestSetTheme_UpdatesActiveVoices(t *testing.T) {
 	}
 }
 
+func TestSetTheme_RetargetsTheEnvelopeWithoutRestartingTheAttack(t *testing.T) {
+	r := newTestRenderer(t)
+	if err := r.Update(harmony.State{Voices: []harmony.VoiceState{voiceState("s1", 9, 4)}}); err != nil {
+		t.Fatal(err)
+	}
+	osc := r.active["s1"].osc
+
+	buf := make([][2]float32, 256)
+	osc.Mix(buf)
+	gainBefore, posBefore := osc.curGain, osc.envPos
+	if osc.state != envAttack {
+		t.Fatalf("state = %v after one buffer, want the voice still attacking", osc.state)
+	}
+
+	swapped := testOpts().Theme
+	swapped.Drone.Attack = 8
+	swapped.Drone.Release = 6
+	if err := r.SetTheme(swapped); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+
+	wantRelease := 6 * float64(r.format.SampleRate)
+	if osc.releaseSamples != wantRelease {
+		t.Errorf("releaseSamples = %v after the swap, want %v from the new theme", osc.releaseSamples, wantRelease)
+	}
+	if want := 8 * float64(r.format.SampleRate); osc.attackSamples != want {
+		t.Errorf("attackSamples = %v after the swap, want %v from the new theme", osc.attackSamples, want)
+	}
+	if osc.state != envAttack {
+		t.Errorf("state = %v after the swap, want the voice still attacking rather than retriggered", osc.state)
+	}
+	if osc.envPos != posBefore {
+		t.Errorf("envPos = %v after the swap, want %v: restarting it replays the attack", osc.envPos, posBefore)
+	}
+	if osc.curGain != gainBefore {
+		t.Errorf("curGain = %v after the swap, want %v: a jump back is an audible click", osc.curGain, gainBefore)
+	}
+}
+
+func TestSetEnvelope_ShorteningTheAttackEndsIt(t *testing.T) {
+	osc := NewOsc(DefaultFormat(), 440, 0.5, Envelope{Attack: time.Second, Release: time.Second})
+	buf := make([][2]float32, 64)
+	osc.Mix(buf)
+
+	osc.SetEnvelope(Envelope{Attack: time.Microsecond, Release: time.Second})
+	osc.Mix(buf)
+
+	if osc.state != envSustain {
+		t.Errorf("state = %v, want sustain once the shortened attack is already past", osc.state)
+	}
+}
+
+func TestSetEnvelope_ZeroAttackDoesNotProduceInfiniteGain(t *testing.T) {
+	osc := NewOsc(DefaultFormat(), 440, 0.5, Envelope{Attack: time.Second, Release: time.Second})
+	buf := make([][2]float32, 64)
+	osc.Mix(buf)
+
+	osc.SetEnvelope(Envelope{Release: time.Second})
+	for i := range buf {
+		buf[i] = [2]float32{}
+	}
+	osc.Mix(buf)
+
+	for i, frame := range buf {
+		for c, sample := range frame {
+			if math.IsNaN(float64(sample)) || math.IsInf(float64(sample), 0) {
+				t.Fatalf("sample %d channel %d = %v, want a finite value; dividing by a zero-length attack ruins the buffer", i, c, sample)
+			}
+		}
+	}
+}
+
 func TestSetTheme_NoActiveVoices(t *testing.T) {
 	r := newTestRenderer(t)
 	newTheme := testOpts().Theme
