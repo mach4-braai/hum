@@ -5,9 +5,13 @@ import (
 	"sync"
 
 	"github.com/mach4-braai/hum/internal/harmony"
+	"github.com/mach4-braai/hum/internal/theme"
 )
 
-var _ Renderer = (*NopRenderer)(nil)
+var (
+	_ Renderer  = (*NopRenderer)(nil)
+	_ Themeable = (*NopRenderer)(nil)
+)
 
 func init() {
 	Register("nop", func(opts Options) (Renderer, error) {
@@ -35,6 +39,19 @@ func NewNop(opts Options) *NopRenderer {
 }
 
 func (n *NopRenderer) Name() string { return "nop" }
+
+func (n *NopRenderer) SetTheme(t theme.Theme) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.opts.Theme = t
+	return nil
+}
+
+func (n *NopRenderer) Theme() theme.Theme {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.opts.Theme
+}
 
 func (n *NopRenderer) Update(s harmony.State) error {
 	cp := harmony.State{Voices: make([]harmony.VoiceState, len(s.Voices))}

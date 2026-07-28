@@ -26,7 +26,7 @@ func TestResolveForSessionReadsTheProjectRoot(t *testing.T) {
 	project := t.TempDir()
 	writeProjectConfig(t, project, "music:\n  root: A\n  scale: dorian\n")
 
-	cfg, prov, err := ResolveForSession(project)
+	cfg, prov, err := ResolveForSession("", project)
 	if err != nil {
 		t.Fatalf("ResolveForSession(%q): %v", project, err)
 	}
@@ -46,7 +46,7 @@ func TestResolveForSessionIgnoresTheWorkingDirectory(t *testing.T) {
 	writeProjectConfig(t, cwd, "music:\n  root: F\n")
 	t.Chdir(cwd)
 
-	cfg, prov, err := ResolveForSession("")
+	cfg, prov, err := ResolveForSession("", "")
 	if err != nil {
 		t.Fatalf("ResolveForSession(\"\"): %v", err)
 	}
@@ -65,7 +65,7 @@ func TestResolveForSessionHonoursGlobalWithoutARoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, prov, err := ResolveForSession("")
+	cfg, prov, err := ResolveForSession("", "")
 	if err != nil {
 		t.Fatalf("ResolveForSession(\"\"): %v", err)
 	}
@@ -92,7 +92,7 @@ func TestResolveForSessionRejectsABadRoot(t *testing.T) {
 	}
 	for name, root := range cases {
 		t.Run(name, func(t *testing.T) {
-			if _, _, err := ResolveForSession(root); !errors.Is(err, ErrProjectRoot) {
+			if _, _, err := ResolveForSession("", root); !errors.Is(err, ErrProjectRoot) {
 				t.Errorf("ResolveForSession(%q) error = %v, want ErrProjectRoot", root, err)
 			}
 		})
@@ -109,7 +109,7 @@ func TestResolveForSessionPrefersProjectOverGlobal(t *testing.T) {
 	project := t.TempDir()
 	writeProjectConfig(t, project, "music:\n  root: A\n")
 
-	cfg, prov, err := ResolveForSession(project)
+	cfg, prov, err := ResolveForSession("", project)
 	if err != nil {
 		t.Fatalf("ResolveForSession(%q): %v", project, err)
 	}
@@ -118,5 +118,29 @@ func TestResolveForSessionPrefersProjectOverGlobal(t *testing.T) {
 	}
 	if prov["music.theme"] != LayerGlobal {
 		t.Errorf("provenance for music.theme = %q, want %q; an untouched field falls through", prov["music.theme"], LayerGlobal)
+	}
+}
+
+func TestResolveSourcesHonoursAnExplicitGlobalFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HUM_HOME", home)
+	if err := os.WriteFile(filepath.Join(home, paths.ConfigFileName), []byte("music:\n  scale: lydian\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	elsewhere := filepath.Join(t.TempDir(), "custom.yaml")
+	if err := os.WriteFile(elsewhere, []byte("music:\n  scale: phrygian\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, prov, err := ResolveForSession(elsewhere, "")
+	if err != nil {
+		t.Fatalf("ResolveForSession(%q, \"\"): %v", elsewhere, err)
+	}
+	if cfg.Music.Scale != "phrygian" {
+		t.Errorf("music.scale = %q, want phrygian from the explicit global file", cfg.Music.Scale)
+	}
+	if prov["music.scale"] != LayerGlobal {
+		t.Errorf("provenance for music.scale = %q, want %q", prov["music.scale"], LayerGlobal)
 	}
 }

@@ -97,28 +97,47 @@ func applyLayer(out *Config, prov Provenance, d *layerData, layer Layer) {
 
 var ErrProjectRoot = errors.New("invalid project root")
 
-func ResolveForSession(projectRoot string) (*Config, Provenance, error) {
-	if projectRoot == "" {
-		return resolve(nil, "", false)
-	}
+type Sources struct {
+	GlobalFile  string
+	ProjectFrom string
+	UseProject  bool
+	CLI         map[string]string
+}
+
+func CanonicalRoot(projectRoot string) (string, error) {
 	if !filepath.IsAbs(projectRoot) {
-		return nil, nil, fmt.Errorf("%w: %q is not an absolute path", ErrProjectRoot, projectRoot)
+		return "", fmt.Errorf("%w: %q is not an absolute path", ErrProjectRoot, projectRoot)
 	}
 	info, err := os.Stat(projectRoot)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %q: %w", ErrProjectRoot, projectRoot, err)
+		return "", fmt.Errorf("%w: %q: %w", ErrProjectRoot, projectRoot, err)
 	}
 	if !info.IsDir() {
-		return nil, nil, fmt.Errorf("%w: %q is not a directory", ErrProjectRoot, projectRoot)
+		return "", fmt.Errorf("%w: %q is not a directory", ErrProjectRoot, projectRoot)
 	}
-	return resolve(nil, projectRoot, true)
+	resolved, err := filepath.EvalSymlinks(projectRoot)
+	if err != nil {
+		return "", fmt.Errorf("%w: %q: %w", ErrProjectRoot, projectRoot, err)
+	}
+	return resolved, nil
+}
+
+func ResolveForSession(globalFile, projectRoot string) (*Config, Provenance, error) {
+	if projectRoot == "" {
+		return ResolveSources(Sources{GlobalFile: globalFile})
+	}
+	canonical, err := CanonicalRoot(projectRoot)
+	if err != nil {
+		return nil, nil, err
+	}
+	return ResolveSources(Sources{GlobalFile: globalFile, ProjectFrom: canonical, UseProject: true})
 }
 
 func Resolve(cliOverrides map[string]string, startDir string) (*Config, Provenance, error) {
-	return resolve(cliOverrides, startDir, true)
+	return ResolveSources(Sources{ProjectFrom: startDir, UseProject: true, CLI: cliOverrides})
 }
 
-func resolve(cliOverrides map[string]string, startDir string, useProject bool) (*Config, Provenance, error) {
+func ResolveSources(s Sources) (*Config, Provenance, error) {
 	prov := Provenance{
 		"project.name": LayerDefault,
 		"music.root":   LayerDefault,
@@ -130,14 +149,18 @@ func resolve(cliOverrides map[string]string, startDir string, useProject bool) (
 
 	out := Default()
 
-	global, err := loadLayer(paths.GlobalConfigFile())
+	globalFile := s.GlobalFile
+	if globalFile == "" {
+		globalFile = paths.GlobalConfigFile()
+	}
+	global, err := loadLayer(globalFile)
 	if err != nil {
 		return nil, nil, err
 	}
 	applyLayer(&out, prov, global, LayerGlobal)
 
-	if useProject {
-		if projPath, ok := paths.ProjectConfigFile(startDir); ok {
+	if s.UseProject {
+		if projPath, ok := paths.ProjectConfigFile(s.ProjectFrom); ok {
 			proj, err := loadLayer(projPath)
 			if err != nil {
 				return nil, nil, err
@@ -146,14 +169,14 @@ func resolve(cliOverrides map[string]string, startDir string, useProject bool) (
 		}
 	}
 
-	keys := make([]string, 0, len(cliOverrides))
-	for k := range cliOverrides {
+	keys := make([]string, 0, len(s.CLI))
+	for k := range s.CLI {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	for _, k := range keys {
-		v := cliOverrides[k]
+		v := s.CLI[k]
 		switch k {
 		case "project.name":
 			out.Project.Name = v

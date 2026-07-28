@@ -30,6 +30,10 @@ type Renderer interface {
 	Close() error
 }
 
+type Themeable interface {
+	SetTheme(theme.Theme) error
+}
+
 type constructor func(Options) (Renderer, error)
 
 var (

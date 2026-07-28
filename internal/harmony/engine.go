@@ -179,3 +179,11 @@ func (e *Engine) Retune(root Pitch, scale Scale) error {
 func (e *Engine) Tuning() (Pitch, Scale) {
 	return e.root, e.scale
 }
+
+func (e *Engine) State() State {
+	return e.buildState()
+}
+
+func (e *Engine) SetPhraseSpec(spec PhraseSpec) {
+	e.spec = spec
+}
