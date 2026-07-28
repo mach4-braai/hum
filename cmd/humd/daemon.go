@@ -81,6 +81,10 @@ func tuning(cfg *config.Config) (harmony.Pitch, harmony.Scale, error) {
 	return harmony.Pitch{Class: class, Octave: droneOctave}, scale, nil
 }
 
+func releaseWaitFor(th theme.Theme) time.Duration {
+	return time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin
+}
+
 func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, globalFile string) (*daemon, error) {
 	root, scale, err := tuning(cfg)
 	if err != nil {
@@ -94,7 +98,7 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		render:      r,
 		theme:       th,
 		globalFile:  globalFile,
-		releaseWait: time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin,
+		releaseWait: releaseWaitFor(th),
 		reapEvery:   defaultReapEvery,
 		reapAfter:   defaultReapAfter,
 		volume:      cfg.Audio.Volume,
@@ -244,6 +248,7 @@ func (d *daemon) useTheme(name string) error {
 		}
 	}
 	d.theme = th
+	d.releaseWait = releaseWaitFor(th)
 	d.engine.SetPhraseSpec(th.PhraseSpec())
 	return nil
 }

@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/mach4-braai/hum/internal/paths"
 	"github.com/mach4-braai/hum/internal/protocol"
@@ -200,5 +202,75 @@ func TestSymlinkedRootResolvesToTheCanonicalContext(t *testing.T) {
 	}
 	if status.ContextOwner != proj {
 		t.Errorf("context owner = %q, want the canonical path %q so a session is not double-counted", status.ContextOwner, proj)
+	}
+}
+
+func writeUserTheme(t *testing.T, name string, release float64) {
+	t.Helper()
+
+	dir := filepath.Join(paths.GlobalConfigDir(), "themes")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`name: %s
+waveform: sine
+drone:
+  attack: 1.0
+  release: %v
+  gain: 0.5
+  harmonic: 0.1
+  tremolo_hz: 4.0
+  detune_cents: 5.0
+phrases:
+  completion_octaves: 2
+  completion_duration: 0.2
+  completion_gain: 0.7
+  failure_interval: -3
+  failure_duration: 1.0
+  failure_gain: 0.3
+  cancelled_sounds: false
+  cancelled_duration: 0.3
+  cancelled_gain: 0.3
+  attack: 0.02
+  decay: 0.1
+`, name, release)
+	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSwitchingThemeMovesTheFadeDeadline(t *testing.T) {
+	d, _ := testDaemon(t)
+	writeUserTheme(t, "slow", 12.0)
+
+	before := d.releaseWait
+	if err := d.useTheme("slow"); err != nil {
+		t.Fatalf("useTheme(slow): %v", err)
+	}
+
+	want := 12*time.Second + shutdownMargin
+	if d.releaseWait != want {
+		t.Errorf("releaseWait = %v after switching theme, want %v; shutdown would close audio %v before the new fade finished", d.releaseWait, want, want-d.releaseWait)
+	}
+	if d.releaseWait == before {
+		t.Error("releaseWait did not move with the theme")
+	}
+}
+
+func TestAdoptingAProjectThemeMovesTheFadeDeadline(t *testing.T) {
+	d, _ := testDaemon(t)
+	writeUserTheme(t, "sluggish", 9.0)
+	proj := project(t, "music:\n  theme: sluggish\n")
+
+	if err := d.adoptContext(proj); err != nil {
+		t.Fatalf("adoptContext(%q): %v", proj, err)
+	}
+
+	if d.theme.Name != "sluggish" {
+		t.Fatalf("theme = %q, want sluggish adopted from the project", d.theme.Name)
+	}
+	want := 9*time.Second + shutdownMargin
+	if d.releaseWait != want {
+		t.Errorf("releaseWait = %v, want %v", d.releaseWait, want)
 	}
 }
