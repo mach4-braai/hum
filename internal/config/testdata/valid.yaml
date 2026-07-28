@@ -1,0 +1,7 @@
+project:
+  name: tofu
+
+music:
+  root: D
+  scale: dorian
+  theme: orchestra
