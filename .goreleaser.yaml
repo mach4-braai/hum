@@ -1,0 +1,136 @@
+version: 2
+
+project_name: hum
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: hum
+    main: ./cmd/hum
+    binary: hum
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: humd
+    main: ./cmd/humd
+    binary: humd
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: hum-linux
+    skip: '{{ eq (envOrDefault "HUM_RELEASE_LINUX" "0") "0" }}'
+    main: ./cmd/hum
+    binary: hum
+    env:
+      - CGO_ENABLED=1
+      - 'CC={{ if eq .Arch "arm64" }}aarch64-linux-gnu-gcc{{ else }}gcc{{ end }}'
+      - 'PKG_CONFIG_LIBDIR={{ if eq .Arch "arm64" }}/usr/lib/aarch64-linux-gnu/pkgconfig{{ else }}/usr/lib/x86_64-linux-gnu/pkgconfig{{ end }}'
+      - PKG_CONFIG_SYSROOT_DIR=/
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: humd-linux
+    skip: '{{ eq (envOrDefault "HUM_RELEASE_LINUX" "0") "0" }}'
+    main: ./cmd/humd
+    binary: humd
+    env:
+      - CGO_ENABLED=1
+      - 'CC={{ if eq .Arch "arm64" }}aarch64-linux-gnu-gcc{{ else }}gcc{{ end }}'
+      - 'PKG_CONFIG_LIBDIR={{ if eq .Arch "arm64" }}/usr/lib/aarch64-linux-gnu/pkgconfig{{ else }}/usr/lib/x86_64-linux-gnu/pkgconfig{{ end }}'
+      - PKG_CONFIG_SYSROOT_DIR=/
+    goos: [linux]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Version }} -X main.commit={{ .FullCommit }} -X main.date={{ .Date }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: hum
+    ids: [hum, humd, hum-linux, humd-linux]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+      - src: docs/*.md
+        dst: docs
+
+source:
+  enabled: true
+  name_template: "{{ .ProjectName }}_{{ .Version }}_source"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat(\([^)]*\))?!?:'
+      order: 0
+    - title: Fixes
+      regexp: '^fix(\([^)]*\))?!?:'
+      order: 1
+    - title: Performance
+      regexp: '^perf(\([^)]*\))?!?:'
+      order: 2
+    - title: Refactoring
+      regexp: '^refactor(\([^)]*\))?!?:'
+      order: 3
+    - title: Other
+      order: 99
+  filters:
+    exclude:
+      - '^docs(\([^)]*\))?!?:'
+      - '^chore(\([^)]*\))?!?:'
+      - '^test(\([^)]*\))?!?:'
+      - '^ci(\([^)]*\))?!?:'
+      - '^style(\([^)]*\))?!?:'
+      - Merge pull request
+      - Merge branch
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    Install with Homebrew, building from source:
+
+        brew tap mach4-braai/tap
+        brew install hum
+
+    `linux/*` archives need `libasound.so.2` at runtime. See docs/configuration.md
+    for configuration and docs/protocol.md for the wire contract.

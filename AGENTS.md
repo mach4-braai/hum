@@ -60,7 +60,10 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   argument". A test socket therefore cannot live in `t.TempDir()` — the test name
   is part of that path and overflows it. Use a short `os.MkdirTemp("", "hd")`.
 - oto v3.4.0 is CGO-free on macOS but declares `#cgo pkg-config: alsa` on Linux,
-  so the Linux legs install `libasound2-dev` and `pkg-config`. #39 removes this.
+  so the Linux legs install `libasound2-dev` and `pkg-config`, the `on_linux`
+  block in `Formula/hum.rb` depends on `alsa-lib` and `pkg-config`, and
+  `.goreleaser.yaml` builds Linux only on a runner with an ALSA toolchain. #39
+  deletes all four.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
@@ -88,6 +91,19 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `config.Patch` decodes into `yaml.Node`, not `Config`. Decoding into the struct
   and re-encoding deletes comments and every key the struct does not model, so
   `hum volume` would strip the scale and theme lists `hum init` wrote.
+- `hum doctor` exits 1 by design with no daemon running, so the formula's `test do`
+  asserts on its output with an expected status of 1. A bare
+  `system bin/"hum", "doctor"` fails `brew test`.
+- `cmd/hum` builds for Windows only because `statusWidth` is split across
+  `width_unix.go` and `width_windows.go`; `TIOCGWINSZ` does not exist there. The
+  Windows implementation returns 0, which means "unknown" and disables title
+  truncation exactly as a piped stdout does.
+- The Linux release builds are skipped unless `HUM_RELEASE_LINUX=1`, so
+  `mise run snapshot` works on macOS where no ALSA cross-toolchain exists. The
+  release workflow sets it; forgetting it ships a release with no Linux archives.
+- `std_go_args` already passes `-trimpath` and adds `-s -w`. The formula spells
+  out only the three `-X main.*` symbols, which `internal/infra` matches against
+  `mise.toml`.
 
 ## Protocol
 

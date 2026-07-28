@@ -64,12 +64,6 @@ what you hear with what is running:
 
 ```
 ID     WORKSPACE  TITLE       STATE   NOTE  AGE
-build  hum        Build       active  D2    2s
-tests  hum        Test suite  active  F2    1s
-```
-
-```
-ID     WORKSPACE  TITLE       STATE   NOTE  AGE
 build             Build       active  D2    1s
 tests             Test suite  active  F2    1s
 ```
