@@ -1,0 +1,21 @@
+name: minimal
+waveform: sine
+drone:
+  attack: 2.5
+  release: 3.0
+  gain: 0.5
+  harmonic: 0.15
+  tremolo_hz: 5.0
+  detune_cents: 8.0
+phrases:
+  completion_octaves: 2
+  completion_duration: 0.2
+  completion_gain: 0.7
+  failure_interval: -3
+  failure_duration: 1.2
+  failure_gain: 0.35
+  cancelled_sounds: false
+  cancelled_duration: 0.4
+  cancelled_gain: 0.3
+  attack: 0.02
+  decay: 0.15

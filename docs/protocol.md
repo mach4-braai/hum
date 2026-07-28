@@ -4,11 +4,10 @@ Hum's wire contract. It is public: third-party clients depend on it, so the
 shapes here change additively or not at all. Nothing in the protocol names an AI
 tool, agent framework or client.
 
-**Implementation status.** The message types, framing and envelope described
-here are implemented in `internal/protocol`, and the `hum` client speaks them.
-The daemon does not yet listen: `humd` is still a usage stub, and the socket
-server arrives with #23, #24 and #25. Per-command response payloads are
-specified alongside the commands that produce them.
+**Implementation status.** Implemented and served. `internal/protocol` defines the
+message types, framing and envelope; `hum` speaks them and `humd` answers on a
+Unix socket. Per-command response payloads are specified alongside the commands
+that produce them.
 
 ## Framing
 
@@ -24,11 +23,13 @@ Blank lines are skipped. A final line without a trailing newline is accepted, so
 
 ## Transport
 
-The socket path is `$HUM_SOCKET`, else `humd.sock` inside the config directory.
-`hum` dials it, writes one request, reads one response and closes; it never
-reuses a connection, so a wedged daemon cannot leave the client holding a
-half-consumed stream. Whether the daemon will accept concurrent connections is
-decided by #23.
+The socket path is `$HUM_SOCKET`, else `humd.sock` inside the config directory,
+and it must fit a Unix socket address — 104 bytes on macOS, 108 on Linux. `hum`
+dials it, writes one request, reads one response and closes; it never reuses a
+connection, so a wedged daemon cannot leave the client holding a half-consumed
+stream. The daemon serves concurrent connections, one goroutine each, and a
+client may hold one connection open and batch requests down it: every request
+gets exactly one response, in order.
 
 ## Events
 
@@ -52,6 +53,7 @@ message and answer each differently. Growing the set is a protocol change.
 | `id` | string | yes |
 | `workspace` | string | no |
 | `title` | string | no |
+| `root` | string | no |
 | `priority` | number | no |
 | `metadata` | object of strings | no |
 
@@ -63,6 +65,19 @@ retained memory. An empty `id` is rejected — it would create an unaddressable
 session whose drone never stops.
 
 Unknown JSON fields are ignored. That is what makes adding a field additive.
+
+`root` is the client's canonical absolute path to the project root, sent on
+`session.started` so the daemon can resolve that project's
+`.hum/config.yaml`. The daemon's own working directory cannot serve: under a
+supervisor it is `$HOME`, so the client is the only process that knows where the
+project is.
+
+Validation of `root` is split. `Validate` rejects a relative path, which is a
+pure check any receiver can make and a mistake no filesystem can excuse. Whether
+the path *exists* is checked by the daemon when it resolves the config, because
+only the daemon shares a filesystem with the project. A missing `root` is not an
+error: it means global config only, which keeps the protocol usable from a bare
+`socat` one-liner.
 
 ## Requests
 
@@ -123,15 +138,45 @@ the wire entirely.
 command returns a payload. `data` is carried raw, so the envelope needs no
 knowledge of any command's payload shape.
 
+### Command payloads
+
+`status` returns the registry snapshot and the daemon's current musical context:
+
+```json
+{"ok":true,"data":{
+  "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","updates":0,"seconds":12.4}],
+  "theme":"minimal","root":"D2","scale":"minor_pentatonic","context_owner":"/Users/dev/projects/tofu",
+  "renderer":"audio","volume":0.6,"muted":false,"sounding_voices":1
+}}
+```
+
+`context_owner` is the project whose configuration supplied the current root,
+scale and theme, and is omitted when none did. `sounding_voices` counts sustained
+drones, which is not the same as the number of sessions: a terminal session is
+still listed until it is reaped.
+
+`theme.list` returns `{"themes":["minimal"]}`. `theme.use` returns the theme it
+switched to, so a client can confirm the switch rather than assume it.
+
+`ping`, `mute`, `unmute`, `volume` and `shutdown` carry no payload.
+
 ## Talking to the daemon without a Go client
 
-No Go client is required — the protocol is line-oriented JSON. Once the socket
-server lands (#23), this will be the shape:
+No Go client is required — the protocol is line-oriented JSON. Verified against a
+running `humd`:
 
 ```
-$ echo '{"command":"ping"}' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
+$ echo '{"command":"ping"}' | nc -U ~/.hum/humd.sock
 {"ok":true}
 ```
 
-**Not yet runnable:** `humd` does not listen, so this example is unverified and
-#35 must confirm it against a running daemon before the docs claim otherwise.
+Batching works down one connection, and each request gets its own response line:
+
+```
+$ printf '{"event":"session.started","id":"a1","title":"build"}\n{"event":"session.completed","id":"a1"}\n' | nc -U ~/.hum/humd.sock
+{"ok":true}
+{"ok":true}
+```
+
+`socat - UNIX-CONNECT:$HOME/.hum/humd.sock` behaves identically where it is
+installed; `nc -U` is used above because macOS ships it.
