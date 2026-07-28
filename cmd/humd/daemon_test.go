@@ -348,11 +348,18 @@ func TestARendererFailureDoesNotLoseTheSession(t *testing.T) {
 	})
 
 	started := protocol.Event{Event: protocol.SessionStarted, ID: "keep", Title: "still tracked"}
-	if responses := send(t, socket, protocol.Request{Event: &started}); !responses[0].OK {
-		t.Fatalf("session.started = %+v, want ok despite the renderer failing", responses[0])
+	responses := send(t, socket, protocol.Request{Event: &started})
+	if responses[0].OK {
+		t.Fatalf("session.started = %+v, want a failure so the client learns the renderer broke", responses[0])
+	}
+	if !strings.Contains(responses[0].Error, "renderer") {
+		t.Errorf("error %q does not identify the renderer as the failure", responses[0].Error)
+	}
+	if !strings.Contains(responses[0].Error, "tracked") {
+		t.Errorf("error %q does not say the session was still tracked", responses[0].Error)
 	}
 
-	responses := send(t, socket, protocol.Request{Command: protocol.CmdStatus})
+	responses = send(t, socket, protocol.Request{Command: protocol.CmdStatus})
 	var status statusPayload
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status: %v", err)

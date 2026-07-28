@@ -43,9 +43,14 @@ rather than blocking forever on a channel nobody reads.
 
 `request → registry.Apply → harmony.Apply → renderer.Update → renderer.Trigger`
 
-A renderer error is logged and returned in the response, but never terminates
-the daemon: losing audio must not lose session tracking. `hum status` keeps
-working through a broken renderer, which is what makes the failure diagnosable.
+A renderer error is logged **and** returned as a failure response, but never
+terminates the daemon and never rolls back the event. The registry and the
+harmony engine have already advanced by then, so the session is tracked and the
+voice released exactly as if audio had worked; the response says
+`session tracked, but the renderer failed: …` so a client can tell the difference
+between "your event was rejected" and "your event landed but you will not hear
+it". `hum status` keeps working through a broken renderer, which is what makes
+the failure diagnosable.
 
 A rejected event never reaches the renderer, so a replayed `session.completed`
 cannot sound a second completion phrase.

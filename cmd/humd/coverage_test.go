@@ -207,7 +207,7 @@ func TestApplyEventTerminalForUnknownSessionIsRejected(t *testing.T) {
 	}
 }
 
-func TestApplyEventTriggerErrorIsLoggedNotFatal(t *testing.T) {
+func TestApplyEventTriggerErrorIsReportedButNotFatal(t *testing.T) {
 	d, _ := testDaemon(t)
 	d.render = &triggerErrRenderer{}
 	socket, signals, done := startDaemon(t, d)
@@ -223,13 +223,20 @@ func TestApplyEventTriggerErrorIsLoggedNotFatal(t *testing.T) {
 
 	completed := protocol.Event{Event: protocol.SessionCompleted, ID: "tr1"}
 	resp := send(t, socket, protocol.Request{Event: &completed})[0]
-	if !resp.OK {
-		t.Errorf("session.completed with failing trigger = %+v, want ok (trigger error is logged, not fatal)", resp)
+	if resp.OK {
+		t.Errorf("session.completed with a failing trigger = %+v, want the failure reported to the client", resp)
 	}
 
 	status := statusOf(t, socket)
 	if status.SoundingVoice != 0 {
-		t.Errorf("sounding voices = %d after completion, want 0", status.SoundingVoice)
+		t.Errorf("sounding voices = %d after completion, want 0; the session must still advance", status.SoundingVoice)
+	}
+	if len(status.Sessions) != 1 || status.Sessions[0].State != "completed" {
+		t.Errorf("status sessions = %+v, want tr1 recorded as completed", status.Sessions)
+	}
+
+	if resp := send(t, socket, protocol.Request{Command: protocol.CmdPing})[0]; !resp.OK {
+		t.Errorf("ping after a renderer failure = %+v, want the daemon still serving", resp)
 	}
 }
 

@@ -126,8 +126,8 @@ func TestSessionDuration(t *testing.T) {
 			EndedAt:   ended,
 		}
 		old := now
-		now = func() time.Time { return later }
 		t.Cleanup(func() { now = old })
+		now = func() time.Time { return later }
 		got := s.Duration()
 		if got != 5*time.Second {
 			t.Errorf("Duration() = %v, want 5s", got)
@@ -140,8 +140,8 @@ func TestSessionDuration(t *testing.T) {
 			StartedAt: base,
 		}
 		old := now
-		now = func() time.Time { return later }
 		t.Cleanup(func() { now = old })
+		now = func() time.Time { return later }
 		got := s.Duration()
 		if got != 7*time.Second {
 			t.Errorf("Duration() = %v, want 7s", got)

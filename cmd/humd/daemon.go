@@ -163,12 +163,18 @@ func (d *daemon) applyEvent(event protocol.Event) protocol.Response {
 	}
 
 	state, phrases := d.engine.Apply(change)
+
+	var rendered error
 	if err := d.render.Update(state); err != nil {
 		d.log.Error("renderer update failed", "error", err, "session", event.ID)
+		rendered = err
 	}
 	for _, phrase := range phrases {
 		if err := d.render.Trigger(phrase); err != nil {
 			d.log.Error("renderer trigger failed", "error", err, "phrase", string(phrase.Kind))
+			if rendered == nil {
+				rendered = err
+			}
 		}
 	}
 
@@ -178,6 +184,9 @@ func (d *daemon) applyEvent(event protocol.Event) protocol.Response {
 		"state", string(change.Session.State),
 		"voices", len(state.Voices),
 	)
+	if rendered != nil {
+		return failure(fmt.Errorf("session tracked, but the renderer failed: %w", rendered))
+	}
 	return protocol.Response{OK: true}
 }
 

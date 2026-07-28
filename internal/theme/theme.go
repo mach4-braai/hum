@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	maxTremoloHz   = 20.0
-	maxDetuneCents = 100.0
+	maxTremoloHz     = 20.0
+	maxDetuneCents   = 100.0
+	maxPhraseSeconds = 60.0
+	maxDroneSeconds  = 60.0
 )
 
 type Theme struct {
@@ -49,11 +51,11 @@ func (t Theme) Validate() error {
 	if t.Waveform != "sine" {
 		return fmt.Errorf("waveform %q is not supported; only \"sine\" is valid in this release", t.Waveform)
 	}
-	if !(t.Drone.Attack > 0) {
-		return fmt.Errorf("drone.attack must be positive, got %v", t.Drone.Attack)
+	if !(t.Drone.Attack > 0 && t.Drone.Attack <= maxDroneSeconds) {
+		return fmt.Errorf("drone.attack must be in (0, %v] seconds, got %v", maxDroneSeconds, t.Drone.Attack)
 	}
-	if !(t.Drone.Release > 0) {
-		return fmt.Errorf("drone.release must be positive, got %v", t.Drone.Release)
+	if !(t.Drone.Release > 0 && t.Drone.Release <= maxDroneSeconds) {
+		return fmt.Errorf("drone.release must be in (0, %v] seconds, got %v", maxDroneSeconds, t.Drone.Release)
 	}
 	if !(t.Drone.Gain >= 0 && t.Drone.Gain <= 1) {
 		return fmt.Errorf("drone.gain must be in [0,1], got %v", t.Drone.Gain)
@@ -73,8 +75,8 @@ func (t Theme) Validate() error {
 	if !(t.Phrases.CompletionGain >= 0 && t.Phrases.CompletionGain <= 1) {
 		return fmt.Errorf("phrases.completion_gain must be in [0,1], got %v", t.Phrases.CompletionGain)
 	}
-	if !(t.Phrases.CompletionDuration > 0) {
-		return fmt.Errorf("phrases.completion_duration must be positive, got %v", t.Phrases.CompletionDuration)
+	if !(t.Phrases.CompletionDuration > 0 && t.Phrases.CompletionDuration <= maxPhraseSeconds) {
+		return fmt.Errorf("phrases.completion_duration must be in (0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.CompletionDuration)
 	}
 	if t.Phrases.FailureInterval >= 0 {
 		return fmt.Errorf("phrases.failure_interval must be negative (descending), got %d", t.Phrases.FailureInterval)
@@ -82,23 +84,23 @@ func (t Theme) Validate() error {
 	if !(t.Phrases.FailureGain >= 0 && t.Phrases.FailureGain <= 1) {
 		return fmt.Errorf("phrases.failure_gain must be in [0,1], got %v", t.Phrases.FailureGain)
 	}
-	if !(t.Phrases.FailureDuration > 0) {
-		return fmt.Errorf("phrases.failure_duration must be positive, got %v", t.Phrases.FailureDuration)
+	if !(t.Phrases.FailureDuration > 0 && t.Phrases.FailureDuration <= maxPhraseSeconds) {
+		return fmt.Errorf("phrases.failure_duration must be in (0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.FailureDuration)
 	}
 	if !(t.Phrases.CancelledGain >= 0 && t.Phrases.CancelledGain <= 1) {
 		return fmt.Errorf("phrases.cancelled_gain must be in [0,1], got %v", t.Phrases.CancelledGain)
 	}
-	if !(t.Phrases.CancelledDuration >= 0) {
-		return fmt.Errorf("phrases.cancelled_duration must be non-negative, got %v", t.Phrases.CancelledDuration)
+	if !(t.Phrases.CancelledDuration >= 0 && t.Phrases.CancelledDuration <= maxPhraseSeconds) {
+		return fmt.Errorf("phrases.cancelled_duration must be in [0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.CancelledDuration)
 	}
 	if t.Phrases.CancelledSounds && !(t.Phrases.CancelledDuration > 0) {
 		return fmt.Errorf("phrases.cancelled_duration must be positive when cancelled_sounds is true, got %v", t.Phrases.CancelledDuration)
 	}
-	if !(t.Phrases.Attack >= 0) {
-		return fmt.Errorf("phrases.attack must be non-negative, got %v", t.Phrases.Attack)
+	if !(t.Phrases.Attack >= 0 && t.Phrases.Attack <= maxPhraseSeconds) {
+		return fmt.Errorf("phrases.attack must be in [0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.Attack)
 	}
-	if !(t.Phrases.Decay >= 0) {
-		return fmt.Errorf("phrases.decay must be non-negative, got %v", t.Phrases.Decay)
+	if !(t.Phrases.Decay >= 0 && t.Phrases.Decay <= maxPhraseSeconds) {
+		return fmt.Errorf("phrases.decay must be in [0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.Decay)
 	}
 	return nil
 }

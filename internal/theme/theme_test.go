@@ -605,3 +605,46 @@ func TestValidateRejectsNonFiniteDroneShaping(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRejectsDurationsThatOverflowADuration(t *testing.T) {
+	cases := map[string]func(*Theme){
+		"completion inf":      func(th *Theme) { th.Phrases.CompletionDuration = math.Inf(1) },
+		"completion enormous": func(th *Theme) { th.Phrases.CompletionDuration = 1e308 },
+		"failure inf":         func(th *Theme) { th.Phrases.FailureDuration = math.Inf(1) },
+		"cancelled inf":       func(th *Theme) { th.Phrases.CancelledDuration = math.Inf(1) },
+		"attack inf":          func(th *Theme) { th.Phrases.Attack = math.Inf(1) },
+		"decay inf":           func(th *Theme) { th.Phrases.Decay = math.Inf(1) },
+		"drone attack inf":    func(th *Theme) { th.Drone.Attack = math.Inf(1) },
+		"drone release inf":   func(th *Theme) { th.Drone.Release = math.Inf(1) },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			th := minimalValid()
+			mutate(&th)
+			if err := th.Validate(); err == nil {
+				t.Fatal("Validate() = nil, want a rejection; the value would overflow time.Duration")
+			}
+		})
+	}
+}
+
+func TestPhraseSpecStaysWithinADurationAtTheBound(t *testing.T) {
+	th := minimalValid()
+	th.Phrases.CompletionDuration = maxPhraseSeconds
+	th.Phrases.FailureDuration = maxPhraseSeconds
+	th.Phrases.CancelledDuration = maxPhraseSeconds
+	if err := th.Validate(); err != nil {
+		t.Fatalf("Validate() at the bound = %v, want nil", err)
+	}
+
+	ps := th.PhraseSpec()
+	for name, got := range map[string]time.Duration{
+		"completion": ps.CompletionDuration,
+		"failure":    ps.FailureDuration,
+		"cancelled":  ps.CancelledDuration,
+	} {
+		if got != maxPhraseSeconds*time.Second {
+			t.Errorf("%s duration = %v, want %v", name, got, maxPhraseSeconds*time.Second)
+		}
+	}
+}

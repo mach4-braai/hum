@@ -39,14 +39,14 @@ phrases:
 
 The ambient layer that persists for the lifetime of an active session.
 
-| Key            | Type  | Unit    | Range  | Description                                                       |
-|----------------|-------|---------|--------|-------------------------------------------------------------------|
-| `attack`       | float | seconds | > 0    | Fade-in time. Values below ~1 s will click on most DAC hardware. |
-| `release`      | float | seconds | > 0    | Fade-out time. Same guidance as attack.                           |
-| `gain`         | float | linear  | [0, 1] | Amplitude of the fundamental. `NaN` is rejected.                 |
-| `harmonic`     | float | linear  | [0, 1] | Amplitude of the second harmonic (2×fundamental). `NaN` is rejected. |
-| `tremolo_hz`   | float | Hz      | ≥ 0    | Rate of the amplitude tremolo. 0 disables tremolo.               |
-| `detune_cents` | float | cents   | any    | Per-voice detuning applied to create stereo width.               |
+| Key            | Type  | Unit    | Range   | Description                                                       |
+|----------------|-------|---------|---------|-------------------------------------------------------------------|
+| `attack`       | float | seconds | (0, 60] | Fade-in time. Values below ~1 s will click on most DAC hardware. |
+| `release`      | float | seconds | (0, 60] | Fade-out time. Same guidance as attack.                           |
+| `gain`         | float | linear  | [0, 1]  | Amplitude of the fundamental. `NaN` is rejected.                 |
+| `harmonic`     | float | linear  | [0, 1]  | Amplitude of the second harmonic (2×fundamental). `NaN` is rejected. |
+| `tremolo_hz`   | float | Hz      | [0, 20] | Rate of the amplitude tremolo. 0 disables tremolo. Above 20 Hz it stops reading as tremolo and starts sounding like distortion. |
+| `detune_cents` | float | cents   | [0, 100] | Per-voice detuning applied for stereo width. A whole semitone is the ceiling; `NaN` would poison the frequency arithmetic and silence the voice. |
 
 **Attack and release rationale.** `PRD.md` §6 specifies that the drone should fade in and fade out rather than cut on and off abruptly. An abrupt gain change produces an audible click on every consumer DAC. 2.5 s and 3.0 s are long enough to be imperceptible on a typical coding session timeline while remaining responsive on the scale of a few seconds.
 
@@ -57,14 +57,22 @@ Short melodic fragments triggered on session state changes.
 | Key                    | Type  | Unit     | Range       | Description                                                                      |
 |------------------------|-------|----------|-------------|----------------------------------------------------------------------------------|
 | `completion_octaves`   | int   | octaves  | [1, 8]      | Upward transposition applied to each note of the completion phrase.              |
-| `completion_duration`  | float | seconds  | > 0         | Total duration of each note in the completion phrase.                            |
+| `completion_duration`  | float | seconds  | (0, 60]     | Total duration of each note in the completion phrase.                            |
 | `completion_gain`      | float | linear   | [0, 1]      | Amplitude of completion phrase notes. `NaN` is rejected.                         |
 | `failure_interval`     | int   | semitones | < 0        | Transposition applied to the failure phrase. Must be negative: `PRD.md` §9 requires the failure cadence to descend. A value of 0 or positive is an error. |
-| `failure_duration`     | float | seconds  | > 0         | Total duration of each note in the failure phrase.                               |
+| `failure_duration`     | float | seconds  | (0, 60]     | Total duration of each note in the failure phrase.                               |
 | `failure_gain`         | float | linear   | [0, 1]      | Amplitude of failure phrase notes. `NaN` is rejected.                           |
 | `cancelled_sounds`     | bool  | —        | —           | Whether cancellation triggers an audible phrase. Defaults to `false`.            |
-| `attack`               | float | seconds  | ≥ 0         | Per-note envelope attack for phrase notes. 0 means instantaneous onset.         |
-| `decay`                | float | seconds  | ≥ 0         | Per-note envelope decay for phrase notes.                                        |
+| `cancelled_duration`   | float | seconds  | [0, 60]     | Duration of the cancellation note. Must be positive when `cancelled_sounds` is on. |
+| `cancelled_gain`       | float | linear   | [0, 1]      | Amplitude of the cancellation note. `NaN` is rejected.                          |
+| `attack`               | float | seconds  | [0, 60]     | Per-note envelope attack for phrase notes. 0 means instantaneous onset.         |
+| `decay`                | float | seconds  | [0, 60]     | Per-note envelope decay for phrase notes.                                        |
+
+**Why every duration has an upper bound.** These floats are multiplied by
+`time.Second` to become a `time.Duration`, and `+Inf` or `1e308` seconds
+overflows that conversion into a meaningless value. Sixty seconds is far past any
+musically sensible phrase, so the bound rejects the mistake without constraining
+real themes. The same reasoning applies to `drone.attack` and `drone.release`.
 
 **`completion_octaves` note.** `PRD.md` §8 prose says "one or two octaves higher"; the worked example in §8 shows three octaves. The daemon uses two octaves because the prose is the normative statement and three octaves would push a root of A4 above MIDI 127 on a standard keyboard range. This discrepancy is documented here rather than silently resolved.
 
