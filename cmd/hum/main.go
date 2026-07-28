@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"time"
+
+	"github.com/mach4-braai/hum/internal/buildinfo"
 )
 
 const (
@@ -17,7 +19,11 @@ const (
 
 const defaultTimeout = 2 * time.Second
 
-var version = "dev"
+var (
+	version = buildinfo.UnknownVersion
+	commit  = buildinfo.UnknownCommit
+	date    = buildinfo.UnknownDate
+)
 
 const usage = `usage: hum [--json] [--timeout <duration>] <command> [flags]
 
@@ -35,6 +41,7 @@ Commands:
   theme list    list available themes
   theme use     switch to a theme
   ping          check that the daemon is reachable
+  version       print the version
   help          print this message
 
 Exit codes:

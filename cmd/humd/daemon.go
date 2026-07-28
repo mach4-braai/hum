@@ -351,7 +351,7 @@ func (d *daemon) status() protocol.Response {
 		Renderer:          d.render.Name(),
 		RendererRequested: d.requested,
 		SampleRate:        d.sampleRate(),
-		Version:           version,
+		Version:           build().Version,
 		Volume:            d.volume,
 		Muted:             d.muted,
 		SoundingVoices:    len(state.Voices),

@@ -59,7 +59,8 @@ func runDoctor(e *env, words []string) int {
 func doctorCollect(e *env, audioTest bool) []doctorCheck {
 	var checks []doctorCheck
 
-	checks = append(checks, doctorCheck{"pass", "client", version})
+	clientVersion := build().Version
+	checks = append(checks, doctorCheck{"pass", "client", clientVersion})
 
 	pingOK, pingDetail := doctorPingDaemon(e)
 	if pingOK {
@@ -78,10 +79,10 @@ func doctorCollect(e *env, audioTest bool) []doctorCheck {
 		checks = append(checks, doctorCheck{"warn", "versions", "unknown (no daemon)"})
 	} else if !statusOK {
 		checks = append(checks, doctorCheck{"warn", "versions", "could not fetch daemon status"})
-	} else if version == st.Version {
-		checks = append(checks, doctorCheck{"pass", "versions", version})
+	} else if clientVersion == st.Version {
+		checks = append(checks, doctorCheck{"pass", "versions", clientVersion})
 	} else {
-		checks = append(checks, doctorCheck{"warn", "versions", fmt.Sprintf("client %s  daemon %s", version, st.Version)})
+		checks = append(checks, doctorCheck{"warn", "versions", fmt.Sprintf("client %s  daemon %s", clientVersion, st.Version)})
 	}
 
 	checks = append(checks, doctorSocketCheck())
