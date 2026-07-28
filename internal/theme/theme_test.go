@@ -302,6 +302,13 @@ func TestPhraseSpecFromMinimal(t *testing.T) {
 	if ps.FailureDuration != wantFailure {
 		t.Errorf("FailureDuration = %v, want %v", ps.FailureDuration, wantFailure)
 	}
+	wantCancelled := time.Duration(0.4 * float64(time.Second))
+	if ps.CancelledDuration != wantCancelled {
+		t.Errorf("CancelledDuration = %v, want %v", ps.CancelledDuration, wantCancelled)
+	}
+	if ps.CancelledGain != 0.3 {
+		t.Errorf("CancelledGain = %v, want 0.3", ps.CancelledGain)
+	}
 }
 
 func TestValidateEmptyName(t *testing.T) {
@@ -432,6 +439,39 @@ func TestValidateFailureDurationZero(t *testing.T) {
 	err := th.Validate()
 	if err == nil || !strings.Contains(err.Error(), "failure_duration") {
 		t.Errorf("expected failure_duration error, got %v", err)
+	}
+}
+
+func TestValidateCancelledGainNaN(t *testing.T) {
+	th := minimalValid()
+	th.Phrases.CancelledGain = math.NaN()
+	err := th.Validate()
+	if err == nil || !strings.Contains(err.Error(), "cancelled_gain") {
+		t.Errorf("expected cancelled_gain error, got %v", err)
+	}
+}
+
+func TestValidateNegativeCancelledDuration(t *testing.T) {
+	th := minimalValid()
+	th.Phrases.CancelledDuration = -0.1
+	err := th.Validate()
+	if err == nil || !strings.Contains(err.Error(), "cancelled_duration") {
+		t.Errorf("expected cancelled_duration error, got %v", err)
+	}
+}
+
+func TestValidateCancelledSoundsNeedsADuration(t *testing.T) {
+	th := minimalValid()
+	th.Phrases.CancelledSounds = true
+	th.Phrases.CancelledDuration = 0
+	err := th.Validate()
+	if err == nil || !strings.Contains(err.Error(), "cancelled_duration") {
+		t.Errorf("expected cancelled_duration error when cancelled_sounds is on, got %v", err)
+	}
+
+	th.Phrases.CancelledDuration = 0.4
+	if err := th.Validate(); err != nil {
+		t.Errorf("Validate() with an audible cancellation = %v, want nil", err)
 	}
 }
 

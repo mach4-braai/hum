@@ -15,5 +15,7 @@ phrases:
   failure_duration: 1.2
   failure_gain: 0.35
   cancelled_sounds: false
+  cancelled_duration: 0.4
+  cancelled_gain: 0.3
   attack: 0.02
   decay: 0.15

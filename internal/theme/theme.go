@@ -31,6 +31,8 @@ type PhrasesSpec struct {
 	FailureDuration    float64 `yaml:"failure_duration"`
 	FailureGain        float64 `yaml:"failure_gain"`
 	CancelledSounds    bool    `yaml:"cancelled_sounds"`
+	CancelledDuration  float64 `yaml:"cancelled_duration"`
+	CancelledGain      float64 `yaml:"cancelled_gain"`
 	Attack             float64 `yaml:"attack"`
 	Decay              float64 `yaml:"decay"`
 }
@@ -75,6 +77,15 @@ func (t Theme) Validate() error {
 	if !(t.Phrases.FailureDuration > 0) {
 		return fmt.Errorf("phrases.failure_duration must be positive, got %v", t.Phrases.FailureDuration)
 	}
+	if !(t.Phrases.CancelledGain >= 0 && t.Phrases.CancelledGain <= 1) {
+		return fmt.Errorf("phrases.cancelled_gain must be in [0,1], got %v", t.Phrases.CancelledGain)
+	}
+	if !(t.Phrases.CancelledDuration >= 0) {
+		return fmt.Errorf("phrases.cancelled_duration must be non-negative, got %v", t.Phrases.CancelledDuration)
+	}
+	if t.Phrases.CancelledSounds && !(t.Phrases.CancelledDuration > 0) {
+		return fmt.Errorf("phrases.cancelled_duration must be positive when cancelled_sounds is true, got %v", t.Phrases.CancelledDuration)
+	}
 	if !(t.Phrases.Attack >= 0) {
 		return fmt.Errorf("phrases.attack must be non-negative, got %v", t.Phrases.Attack)
 	}
@@ -93,5 +104,7 @@ func (t Theme) PhraseSpec() harmony.PhraseSpec {
 		FailureDuration:    time.Duration(t.Phrases.FailureDuration * float64(time.Second)),
 		FailureGain:        t.Phrases.FailureGain,
 		CancelledSounds:    t.Phrases.CancelledSounds,
+		CancelledDuration:  time.Duration(t.Phrases.CancelledDuration * float64(time.Second)),
+		CancelledGain:      t.Phrases.CancelledGain,
 	}
 }
