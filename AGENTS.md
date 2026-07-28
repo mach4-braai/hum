@@ -78,6 +78,16 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - The runtime coalesces rapid duplicate signals. A test that sends two `SIGTERM`s
   back to back sees one; wait for the daemon's "waiting for voices to fade" line
   in between.
+- `humd` installs its signal handler before it opens the renderer or the socket.
+  Notifying after the listener leaves a window where `SIGTERM` kills the process
+  with the default disposition — no drain, no fade, socket left behind — and a
+  test that stops a daemon the moment it accepts a connection lands in it.
+- `hum` commands that persist a setting ask the daemon first and write the config
+  second. The reverse order leaves a file claiming `muted: true` while sound
+  keeps playing.
+- `config.Patch` decodes into `yaml.Node`, not `Config`. Decoding into the struct
+  and re-encoding deletes comments and every key the struct does not model, so
+  `hum volume` would strip the scale and theme lists `hum init` wrote.
 
 ## Protocol
 

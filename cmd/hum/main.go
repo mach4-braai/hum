@@ -6,8 +6,6 @@ import (
 	"io"
 	"os"
 	"time"
-
-	"github.com/mach4-braai/hum/internal/protocol"
 )
 
 const (
@@ -19,6 +17,8 @@ const (
 
 const defaultTimeout = 2 * time.Second
 
+var version = "dev"
+
 const usage = `usage: hum [--json] [--timeout <duration>] <command> [flags]
 
 Commands:
@@ -29,6 +29,8 @@ Commands:
   fail          mark a session failed
   status        report daemon and session state
   mute          silence output without stopping
+  unmute        resume output
+  volume        report or set the output volume
   doctor        diagnose the installation
   theme list    list available themes
   theme use     switch to a theme
@@ -42,54 +44,64 @@ Exit codes:
   3  the daemon is unreachable
 `
 
-var control = map[string]protocol.Command{
-	"ping":   protocol.CmdPing,
-	"status": protocol.CmdStatus,
-	"mute":   protocol.CmdMute,
-	"stop":   protocol.CmdShutdown,
-}
-
 type options struct {
-	asJSON  bool
-	timeout time.Duration
+	asJSON          bool
+	timeout         time.Duration
+	timeoutExplicit bool
 }
 
-func flagsFor(name string, opts *options, stderr io.Writer) *flag.FlagSet {
+type env struct {
+	stdout io.Writer
+	stderr io.Writer
+	opts   *options
+}
+
+func (e *env) usagef(format string, a ...any) int {
+	fmt.Fprintf(e.stderr, format+"\n", a...)
+	return exitUsage
+}
+
+func (e *env) fail(format string, a ...any) int {
+	fmt.Fprintf(e.stderr, format+"\n", a...)
+	return exitDaemonError
+}
+
+var commands = map[string]func(*env, []string) int{}
+
+func register(name string, run func(*env, []string) int) {
+	if _, taken := commands[name]; taken {
+		panic("hum: command registered twice: " + name)
+	}
+	commands[name] = run
+}
+
+func flagsFor(name string, opts *options, stderr io.Writer, bind func(*flag.FlagSet)) *flag.FlagSet {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.BoolVar(&opts.asJSON, "json", opts.asJSON, "print the daemon's raw response")
 	flags.DurationVar(&opts.timeout, "timeout", opts.timeout, "how long to wait for the daemon")
+	if bind != nil {
+		bind(flags)
+	}
 	return flags
 }
 
-func run(args []string, stdout, stderr io.Writer) int {
-	opts := options{timeout: defaultTimeout}
-	global := flagsFor("hum", &opts, stderr)
-	global.Usage = func() { fmt.Fprint(stderr, usage) }
-	if err := global.Parse(args); err != nil {
-		return exitUsage
-	}
-
-	rest := global.Args()
-	if len(rest) == 0 || rest[0] == "help" {
-		fmt.Fprint(stderr, usage)
-		return exitUsage
-	}
-
-	request, code := parse(rest, &opts, stderr)
-	if code != exitOK {
-		return code
-	}
-	return send(request, opts.timeout, opts.asJSON, stdout, stderr)
+func noteExplicit(flags *flag.FlagSet, opts *options) {
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "timeout" {
+			opts.timeoutExplicit = true
+		}
+	})
 }
 
-func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([]string, bool) {
+func operandsOf(name string, words []string, opts *options, stderr io.Writer, bind func(*flag.FlagSet)) ([]string, bool) {
 	var positional []string
 	for {
-		flags := flagsFor(name, opts, stderr)
+		flags := flagsFor(name, opts, stderr, bind)
 		if err := flags.Parse(words); err != nil {
 			return nil, false
 		}
+		noteExplicit(flags, opts)
 		if flags.NArg() == 0 {
 			return positional, true
 		}
@@ -98,61 +110,36 @@ func operandsOf(name string, words []string, opts *options, stderr io.Writer) ([
 	}
 }
 
-func parse(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
-	command, words := words[0], words[1:]
+func operands(e *env, command string, words []string, bind func(*flag.FlagSet)) ([]string, bool) {
+	return operandsOf("hum "+command, words, e.opts, e.stderr, bind)
+}
 
-	if command == "theme" {
-		return parseTheme(words, opts, stderr)
+func unexpected(e *env, command, operand string) int {
+	return e.usagef("hum %s: unexpected argument %q", command, operand)
+}
+
+func run(args []string, stdout, stderr io.Writer) int {
+	opts := options{timeout: defaultTimeout}
+	global := flagsFor("hum", &opts, stderr, nil)
+	global.Usage = func() { fmt.Fprint(stderr, usage) }
+	if err := global.Parse(args); err != nil {
+		return exitUsage
 	}
+	noteExplicit(global, &opts)
 
-	cmd, known := control[command]
-	if !known {
-		fmt.Fprintf(stderr, "hum: unknown command %q\n\n", command)
+	rest := global.Args()
+	if len(rest) == 0 || rest[0] == "help" {
 		fmt.Fprint(stderr, usage)
-		return protocol.Request{}, exitUsage
+		return exitUsage
 	}
 
-	operands, ok := operandsOf("hum "+command, words, opts, stderr)
-	if !ok {
-		return protocol.Request{}, exitUsage
+	command, known := commands[rest[0]]
+	if !known {
+		fmt.Fprintf(stderr, "hum: unknown command %q\n\n", rest[0])
+		fmt.Fprint(stderr, usage)
+		return exitUsage
 	}
-	if len(operands) != 0 {
-		return unexpected(command, operands[0], stderr)
-	}
-	return protocol.Request{Command: cmd}, exitOK
-}
-
-func parseTheme(words []string, opts *options, stderr io.Writer) (protocol.Request, int) {
-	operands, ok := operandsOf("hum theme", words, opts, stderr)
-	if !ok {
-		return protocol.Request{}, exitUsage
-	}
-	if len(operands) == 0 {
-		fmt.Fprint(stderr, "hum theme: expected \"list\" or \"use <name>\"\n")
-		return protocol.Request{}, exitUsage
-	}
-
-	switch operands[0] {
-	case "list":
-		if len(operands) > 1 {
-			return unexpected("theme list", operands[1], stderr)
-		}
-		return protocol.Request{Command: protocol.CmdThemeList}, exitOK
-	case "use":
-		if len(operands) != 2 {
-			fmt.Fprint(stderr, "hum theme use: expected exactly one theme name\n")
-			return protocol.Request{}, exitUsage
-		}
-		return protocol.Request{Command: protocol.CmdThemeUse, Value: operands[1]}, exitOK
-	default:
-		fmt.Fprintf(stderr, "hum theme: unknown subcommand %q, expected \"list\" or \"use\"\n", operands[0])
-		return protocol.Request{}, exitUsage
-	}
-}
-
-func unexpected(command, operand string, stderr io.Writer) (protocol.Request, int) {
-	fmt.Fprintf(stderr, "hum %s: unexpected argument %q\n", command, operand)
-	return protocol.Request{}, exitUsage
+	return command(&env{stdout: stdout, stderr: stderr, opts: &opts}, rest[1:])
 }
 
 var exit = os.Exit
