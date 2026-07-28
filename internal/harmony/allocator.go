@@ -94,7 +94,12 @@ func (a *Allocator) Voices() []Voice {
 	for _, v := range a.voices {
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Degree < out[j].Degree })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Degree == out[j].Degree {
+			return out[i].SessionID < out[j].SessionID
+		}
+		return out[i].Degree < out[j].Degree
+	})
 	return out
 }
 

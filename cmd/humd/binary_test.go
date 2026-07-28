@@ -67,15 +67,12 @@ func startProcess(t *testing.T, args ...string) *process {
 		}
 	})
 
-	lines := make(chan string, 64)
+	lines := make(chan string, 4096)
 	go func() {
 		defer close(lines)
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
-			select {
-			case lines <- scanner.Text():
-			default:
-			}
+			lines <- scanner.Text()
 		}
 	}()
 
@@ -288,4 +285,14 @@ func TestBinaryReclaimsAStaleSocket(t *testing.T) {
 
 	restarted.Process.Signal(syscall.SIGTERM)
 	waitExit(t, restarted, 30*time.Second)
+}
+
+func TestServeListenerExitsCleanly(t *testing.T) {
+	d, _ := testDaemon(t)
+	listener := &errListener{addr: shortSocket(t), serveErr: nil}
+	signals := make(chan os.Signal, 2)
+	code := serve(d, listener, quietLogger(), signals)
+	if code != exitOK {
+		t.Errorf("serve returned %d, want %d when listener exits without error", code, exitOK)
+	}
 }

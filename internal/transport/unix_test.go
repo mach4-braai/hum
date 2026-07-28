@@ -116,6 +116,25 @@ func sendOne(t *testing.T, path string, req protocol.Request) protocol.Response 
 	return resp
 }
 
+func trySendOne(path string, req protocol.Request) (protocol.Response, error) {
+	conn, err := net.DialTimeout("unix", path, 2*time.Second)
+	if err != nil {
+		return protocol.Response{}, err
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return protocol.Response{}, err
+	}
+	if err := json.NewEncoder(conn).Encode(req); err != nil {
+		return protocol.Response{}, err
+	}
+	var resp protocol.Response
+	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+		return protocol.Response{}, err
+	}
+	return resp, nil
+}
+
 func createStaleSocket(t *testing.T, path string) {
 	t.Helper()
 	fd, err := syscall.Socket(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)
@@ -179,8 +198,10 @@ func TestConcurrentClients(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			resp := ping(t, path)
-			if !resp.OK {
+			resp, err := trySendOne(path, protocol.Request{Command: protocol.CmdPing})
+			if err != nil {
+				errs[idx] = err.Error()
+			} else if !resp.OK {
 				errs[idx] = resp.Error
 			}
 		}(i)

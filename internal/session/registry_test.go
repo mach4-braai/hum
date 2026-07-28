@@ -216,12 +216,12 @@ func TestSnapshotOrder(t *testing.T) {
 	base := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	counter := 0
 	old := now
+	t.Cleanup(func() { now = old })
 	now = func() time.Time {
 		t := base.Add(time.Duration(counter) * time.Second)
 		counter++
 		return t
 	}
-	t.Cleanup(func() { now = old })
 
 	r := New()
 	for _, id := range []string{"c", "a", "b"} {
@@ -242,8 +242,8 @@ func TestSnapshotOrder(t *testing.T) {
 func TestSnapshotSameStartedAtSortsByID(t *testing.T) {
 	fixed := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	old := now
-	now = func() time.Time { return fixed }
 	t.Cleanup(func() { now = old })
+	now = func() time.Time { return fixed }
 
 	r := New()
 	for _, id := range []string{"z", "a", "m"} {
@@ -262,8 +262,8 @@ func TestReap(t *testing.T) {
 	base := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	current := base
 	old := now
-	now = func() time.Time { return current }
 	t.Cleanup(func() { now = old })
+	now = func() time.Time { return current }
 
 	r := New()
 
@@ -302,8 +302,8 @@ func TestReap(t *testing.T) {
 
 func TestReapActiveNotReaped(t *testing.T) {
 	old := now
-	now = func() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
 	t.Cleanup(func() { now = old })
+	now = func() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
 
 	r := New()
 	if _, err := r.Apply(startEvent("alive", "", "", 0, nil)); err != nil {
@@ -388,8 +388,8 @@ func TestEndedAtSetOnTerminal(t *testing.T) {
 	endTime := fixed.Add(30 * time.Second)
 	current := fixed
 	old := now
-	now = func() time.Time { return current }
 	t.Cleanup(func() { now = old })
+	now = func() time.Time { return current }
 
 	r := New()
 	if _, err := r.Apply(startEvent("e", "", "", 0, nil)); err != nil {

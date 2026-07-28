@@ -2,6 +2,7 @@ package harmony
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 )
@@ -219,4 +220,31 @@ func TestAllocatorRace(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestVoicesOrderIsDeterministicPastTheCap(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+
+	order := func() []string {
+		a := NewAllocator(root, scale)
+		for _, id := range []string{"s09", "s03", "s11", "s01", "s14", "s07", "s02", "s13", "s05", "s10", "s04", "s12", "s08", "s06", "s15"} {
+			a.Acquire(id)
+		}
+		ids := make([]string, 0, MaxVoices+3)
+		for _, v := range a.Voices() {
+			ids = append(ids, v.SessionID)
+		}
+		return ids
+	}
+
+	first := order()
+	if len(first) <= MaxVoices {
+		t.Fatalf("acquired %d voices, want more than the %d cap so shared degrees are exercised", len(first), MaxVoices)
+	}
+	for attempt := range 8 {
+		if got := order(); !reflect.DeepEqual(got, first) {
+			t.Fatalf("Voices() order = %v on attempt %d, want the stable %v; sessions sharing the capped degree must not depend on map order", got, attempt, first)
+		}
+	}
 }

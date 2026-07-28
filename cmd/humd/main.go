@@ -187,7 +187,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func serve(d *daemon, listener transport.Listener, log *slog.Logger, signals chan os.Signal) int {
-
 	events, stopEvents := context.WithCancel(context.Background())
 	defer stopEvents()
 	go d.serveEvents(events)
@@ -210,6 +209,10 @@ func serve(d *daemon, listener transport.Listener, log *slog.Logger, signals cha
 			d.render.Close()
 			return exitError
 		}
+		log.Info("shutting down", "reason", "the listener stopped serving")
+		code := d.drain(signals, log)
+		listener.Close()
+		return code
 	}
 
 	stopAccepting()

@@ -7,6 +7,11 @@ import (
 	"github.com/mach4-braai/hum/internal/harmony"
 )
 
+const (
+	maxTremoloHz   = 20.0
+	maxDetuneCents = 100.0
+)
+
 type Theme struct {
 	Name     string      `yaml:"name"`
 	Waveform string      `yaml:"waveform"`
@@ -56,8 +61,11 @@ func (t Theme) Validate() error {
 	if !(t.Drone.Harmonic >= 0 && t.Drone.Harmonic <= 1) {
 		return fmt.Errorf("drone.harmonic must be in [0,1], got %v", t.Drone.Harmonic)
 	}
-	if !(t.Drone.TremoloHz >= 0) {
-		return fmt.Errorf("drone.tremolo_hz must be non-negative, got %v", t.Drone.TremoloHz)
+	if !(t.Drone.TremoloHz >= 0 && t.Drone.TremoloHz <= maxTremoloHz) {
+		return fmt.Errorf("drone.tremolo_hz must be in [0, %v], got %v", maxTremoloHz, t.Drone.TremoloHz)
+	}
+	if !(t.Drone.DetuneCents >= 0 && t.Drone.DetuneCents <= maxDetuneCents) {
+		return fmt.Errorf("drone.detune_cents must be in [0, %v], got %v", maxDetuneCents, t.Drone.DetuneCents)
 	}
 	if t.Phrases.CompletionOctaves < 1 || t.Phrases.CompletionOctaves > 8 {
 		return fmt.Errorf("phrases.completion_octaves must be in [1,8], got %d", t.Phrases.CompletionOctaves)

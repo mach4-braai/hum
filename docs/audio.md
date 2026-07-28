@@ -80,7 +80,13 @@ Default values come from `minimal.yaml`: **attack 2.5 s**, **release 3.0 s** (`d
 
 Frequency is interpolated per-sample toward `tgtFreqL` / `tgtFreqR` using a 1st-order IIR with `freqSmoothAlpha = 0.01` (~100-sample / 2 ms time constant at 48 kHz). A `SetFreq` or `SetExpression` call changes the target; the running phase accumulator is never reset, so the sine wave is always continuous. The same smoothing applies across `Read` buffer boundaries.
 
-The documented phase-continuity threshold is **0.10** (absolute amplitude). For a 440 Hz sine at gain 0.8 the maximum per-sample derivative through the full pipeline is ≈ 0.024, leaving 4× headroom for harmonics and tremolo. `TestOscPhaseContinuity` and `TestOscPhaseContinuityMidBufferFreqChange` assert this threshold.
+The documented phase-continuity threshold is **0.10** (absolute amplitude). For a
+440 Hz sine at gain 0.8 the largest per-sample step through the full pipeline
+measures **0.0326**: the phase increment is 2π × 440 / 48000 ≈ 0.0576, and the
+amplitude reaching the buffer is `curGain × invSqrt2` ≈ 0.566, so the derivative
+of the sine is ≈ 0.566 × 0.0576. That leaves roughly 3× headroom for the second
+harmonic and tremolo. `TestOscPhaseContinuity` and
+`TestOscPhaseContinuityMidBufferFreqChange` assert the threshold.
 
 ### Expression mapping
 

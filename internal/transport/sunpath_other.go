@@ -1,5 +1,5 @@
-//go:build !darwin
+//go:build !linux
 
 package transport
 
-const maxSocketPathLen = 108
+const maxSocketPathLen = 104

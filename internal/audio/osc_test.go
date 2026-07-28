@@ -357,25 +357,39 @@ func TestOscExpressionTremoloAudible(t *testing.T) {
 	f := DefaultFormat()
 	spec := theme.DroneSpec{TremoloHz: 5.0}
 	frames := f.SampleRate * 2
+	nWin := 20
+	winSize := frames / nWin
 
-	var ampSum0, ampSum1 float64
-	for _, tremolo := range []float64{0, 1} {
+	windowSpread := func(tremolo float64) float64 {
 		osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
 		osc.SetExpression(harmony.Expression{Tremolo: tremolo}, spec)
 		buf := make([][2]float32, frames)
 		osc.Mix(buf)
-		var variance float64
-		for _, fr := range buf {
-			variance += float64(fr[0]) * float64(fr[0])
+		var minE, maxE float64
+		for w := range nWin {
+			var energy float64
+			for _, fr := range buf[w*winSize : (w+1)*winSize] {
+				v := float64(fr[0])
+				energy += v * v
+			}
+			if w == 0 || energy < minE {
+				minE = energy
+			}
+			if w == 0 || energy > maxE {
+				maxE = energy
+			}
 		}
-		if tremolo == 0 {
-			ampSum0 = variance
-		} else {
-			ampSum1 = variance
-		}
+		return maxE - minE
 	}
-	_ = ampSum0
-	_ = ampSum1
+
+	spread0 := windowSpread(0)
+	spread1 := windowSpread(1)
+	if spread1 < 50.0 {
+		t.Errorf("Tremolo=1 window energy spread = %.4f, want >= 50.0 (tremolo not applied)", spread1)
+	}
+	if spread1 <= spread0 {
+		t.Errorf("Tremolo=1 spread %.4f must exceed Tremolo=0 spread %.4f", spread1, spread0)
+	}
 }
 
 func TestOscExpressionWidthChannelDiff(t *testing.T) {

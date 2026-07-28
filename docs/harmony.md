@@ -21,7 +21,12 @@ allocated from.
 
 ### Enharmonic normalisation
 
-Flats are immediately normalised to their sharp enharmonic equivalent on parse. `Bb1` becomes `A#1`; `Db3` becomes `C#3`. `String()` always renders sharps, so a parse/format round-trip is lossless for sharps and normalising for flats. There is a single canonical representation for every pitch.
+Parsing canonicalises. Flats become their sharp equivalent — `Bb1` becomes `A#1`,
+`Db3` becomes `C#3` — and an accidental that crosses a letter boundary also moves
+the octave, so `B#3` becomes `C4`. `String()` always renders the canonical sharp
+spelling, so a round-trip is lossless only for input that was already canonical;
+for anything else it is normalising, by design. Every pitch has exactly one
+printed form.
 
 This removes the need to treat two names as the same pitch anywhere downstream: the registry, the harmony engine, and the audio engine all see class integers, never string spellings.
 

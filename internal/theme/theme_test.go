@@ -582,3 +582,26 @@ func TestLoadRejectsAPathAsAThemeName(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateRejectsNonFiniteDroneShaping(t *testing.T) {
+	cases := map[string]func(*Theme){
+		"detune NaN":      func(th *Theme) { th.Drone.DetuneCents = math.NaN() },
+		"detune negative": func(th *Theme) { th.Drone.DetuneCents = -1 },
+		"detune absurd":   func(th *Theme) { th.Drone.DetuneCents = 1200 },
+		"tremolo NaN":     func(th *Theme) { th.Drone.TremoloHz = math.NaN() },
+		"tremolo audible": func(th *Theme) { th.Drone.TremoloHz = 5000 },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			th := minimalValid()
+			mutate(&th)
+			err := th.Validate()
+			if err == nil {
+				t.Fatal("Validate() = nil, want a rejection")
+			}
+			if !strings.Contains(err.Error(), "drone.") {
+				t.Errorf("error %q does not name the offending drone field", err)
+			}
+		})
+	}
+}
