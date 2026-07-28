@@ -11,6 +11,7 @@ import (
 var (
 	_ Renderer  = (*NopRenderer)(nil)
 	_ Themeable = (*NopRenderer)(nil)
+	_ Sampled   = (*NopRenderer)(nil)
 )
 
 func init() {
@@ -39,6 +40,12 @@ func NewNop(opts Options) *NopRenderer {
 }
 
 func (n *NopRenderer) Name() string { return "nop" }
+
+func (n *NopRenderer) SampleRate() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.opts.SampleRate
+}
 
 func (n *NopRenderer) SetTheme(t theme.Theme) error {
 	n.mu.Lock()

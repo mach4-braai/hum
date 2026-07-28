@@ -62,6 +62,7 @@ type AudioRenderer struct {
 var (
 	_ renderer.Renderer  = (*AudioRenderer)(nil)
 	_ renderer.Themeable = (*AudioRenderer)(nil)
+	_ renderer.Sampled   = (*AudioRenderer)(nil)
 )
 
 func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRenderer {
@@ -84,12 +85,16 @@ func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRende
 
 func (r *AudioRenderer) Name() string { return "audio" }
 
+func (r *AudioRenderer) SampleRate() int { return r.format.SampleRate }
+
 func (r *AudioRenderer) SetTheme(t theme.Theme) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.th = t
+	env := droneEnvelope(t.Drone)
 	for _, av := range r.active {
+		av.osc.SetEnvelope(env)
 		av.osc.SetGain(t.Drone.Gain)
 		av.osc.SetExpression(av.last.Expression, t.Drone)
 	}

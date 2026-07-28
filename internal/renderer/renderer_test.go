@@ -336,3 +336,28 @@ func TestOpenErrorListsRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestNopSampleRateReportsTheRateItWasOpenedWith(t *testing.T) {
+	var sampled Sampled = NewNop(Options{SampleRate: 44100})
+
+	if got := sampled.SampleRate(); got != 44100 {
+		t.Errorf("SampleRate() = %d, want 44100", got)
+	}
+	if got := NewNop(Options{}).SampleRate(); got != defaultSampleRate {
+		t.Errorf("SampleRate() = %d for a default renderer, want %d", got, defaultSampleRate)
+	}
+}
+
+func TestNopThemeRoundTripsWhatWasSet(t *testing.T) {
+	n := NewNop(Options{Theme: theme.Theme{Name: "initial"}})
+
+	if got := n.Theme().Name; got != "initial" {
+		t.Errorf("Theme() = %q, want the theme it was opened with", got)
+	}
+	if err := n.SetTheme(theme.Theme{Name: "swapped"}); err != nil {
+		t.Fatalf("SetTheme: %v", err)
+	}
+	if got := n.Theme().Name; got != "swapped" {
+		t.Errorf("Theme() = %q after SetTheme, want swapped", got)
+	}
+}

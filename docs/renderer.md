@@ -15,6 +15,19 @@ type Renderer interface {
 }
 ```
 
+Two optional interfaces sit beside it, both discovered with a type assertion:
+
+```go
+type Themeable interface{ SetTheme(theme.Theme) error }
+type Sampled   interface{ SampleRate() int }
+```
+
+Neither belongs on `Renderer`. A future MIDI or Hue renderer has no theme and no
+sample rate, and forcing it to return a fabricated one would make `hum doctor`
+report a number that means nothing. A renderer that does not implement `Sampled`
+is reported as sample rate 0, which reads as "not applicable" rather than as a
+plausible-looking default.
+
 ## Concurrency Contract
 
 `Update` is called only from the daemon's single event goroutine. It must be idempotent because the daemon calls it on every state change, including no-op transitions. A renderer that hands state off to an audio callback thread is responsible for its own internal locking; the interface makes no guarantee about which thread reads the state.

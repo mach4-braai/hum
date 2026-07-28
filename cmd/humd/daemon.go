@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	defaultReapEvery = time.Minute
-	defaultReapAfter = 5 * time.Minute
+	defaultReapEvery  = time.Minute
+	defaultReapAfter  = 5 * time.Minute
+	audioTestDuration = 2 * time.Second
+	audioTestGain     = 0.6
 )
 
 type call struct {
@@ -31,6 +33,7 @@ type daemon struct {
 	registry    *session.Registry
 	engine      *harmony.Engine
 	render      renderer.Renderer
+	requested   string
 	theme       theme.Theme
 	globalFile  string
 	releaseWait time.Duration
@@ -44,29 +47,6 @@ type daemon struct {
 	calls    chan call
 	stopped  chan struct{}
 	shutdown chan struct{}
-}
-
-type statusPayload struct {
-	Sessions      []sessionPayload `json:"sessions"`
-	Theme         string           `json:"theme"`
-	Root          string           `json:"root"`
-	Scale         string           `json:"scale"`
-	ContextOwner  string           `json:"context_owner,omitempty"`
-	Renderer      string           `json:"renderer"`
-	Volume        float64          `json:"volume"`
-	Muted         bool             `json:"muted"`
-	SoundingVoice int              `json:"sounding_voices"`
-}
-
-type sessionPayload struct {
-	ID        string            `json:"id"`
-	Workspace string            `json:"workspace,omitempty"`
-	Title     string            `json:"title,omitempty"`
-	State     string            `json:"state"`
-	Priority  int               `json:"priority,omitempty"`
-	Metadata  map[string]string `json:"metadata,omitempty"`
-	Updates   int               `json:"updates"`
-	Seconds   float64           `json:"seconds"`
 }
 
 func tuning(cfg *config.Config) (harmony.Pitch, harmony.Scale, error) {
@@ -85,7 +65,7 @@ func releaseWaitFor(th theme.Theme) time.Duration {
 	return time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin
 }
 
-func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, globalFile string) (*daemon, error) {
+func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, requested, globalFile string) (*daemon, error) {
 	root, scale, err := tuning(cfg)
 	if err != nil {
 		return nil, err
@@ -96,6 +76,7 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		registry:    session.New(),
 		engine:      harmony.NewEngine(root, scale, th.PhraseSpec()),
 		render:      r,
+		requested:   requested,
 		theme:       th,
 		globalFile:  globalFile,
 		releaseWait: releaseWaitFor(th),
@@ -281,13 +262,16 @@ func (d *daemon) applyCommand(command protocol.Command, value string) protocol.R
 		return protocol.Response{OK: true}
 
 	case protocol.CmdThemeList:
-		return payload(map[string][]string{"themes": theme.List()})
+		return payload(protocol.ThemeListPayload{Themes: theme.List(), Active: d.theme.Name})
 
 	case protocol.CmdThemeUse:
 		if err := d.useTheme(value); err != nil {
 			return failure(err)
 		}
-		return payload(map[string]string{"theme": d.theme.Name})
+		return payload(protocol.ThemeUsePayload{Theme: d.theme.Name})
+
+	case protocol.CmdAudioTest:
+		return d.audioTest()
 
 	case protocol.CmdShutdown:
 		d.requestShutdown()
@@ -304,15 +288,52 @@ func (d *daemon) requestShutdown() {
 	}
 }
 
+func (d *daemon) audioTest() protocol.Response {
+	root, _ := d.engine.Tuning()
+	phrase := harmony.Phrase{
+		Kind: harmony.PhraseTest,
+		Notes: []harmony.Note{{
+			Pitch:    root,
+			Duration: audioTestDuration,
+			Gain:     audioTestGain,
+		}},
+	}
+	if err := d.render.Trigger(phrase); err != nil {
+		return failure(err)
+	}
+	name := d.render.Name()
+	return payload(protocol.AudioTestPayload{
+		Played:   name != nopRendererName && !d.muted,
+		Renderer: name,
+		Muted:    d.muted,
+		Seconds:  audioTestDuration.Seconds(),
+	})
+}
+
+func (d *daemon) sampleRate() int {
+	if sampled, ok := d.render.(renderer.Sampled); ok {
+		return sampled.SampleRate()
+	}
+	return 0
+}
+
 func (d *daemon) status() protocol.Response {
 	snapshot := d.registry.Snapshot()
-	sessions := make([]sessionPayload, len(snapshot))
+	state := d.engine.State()
+
+	pitches := make(map[string]string, len(state.Voices))
+	for _, v := range state.Voices {
+		pitches[v.SessionID] = v.Pitch.String()
+	}
+
+	sessions := make([]protocol.SessionPayload, len(snapshot))
 	for i, s := range snapshot {
-		sessions[i] = sessionPayload{
+		sessions[i] = protocol.SessionPayload{
 			ID:        s.ID,
 			Workspace: s.Workspace,
 			Title:     s.Title,
 			State:     string(s.State),
+			Pitch:     pitches[s.ID],
 			Priority:  s.Priority,
 			Metadata:  s.Metadata,
 			Updates:   s.Updates,
@@ -321,17 +342,19 @@ func (d *daemon) status() protocol.Response {
 	}
 
 	root, scale := d.engine.Tuning()
-	state := d.engine.State()
-	return payload(statusPayload{
-		Sessions:      sessions,
-		Theme:         d.theme.Name,
-		Root:          root.String(),
-		Scale:         scale.Name,
-		ContextOwner:  d.contextOwner,
-		Renderer:      d.render.Name(),
-		Volume:        d.volume,
-		Muted:         d.muted,
-		SoundingVoice: len(state.Voices),
+	return payload(protocol.StatusPayload{
+		Sessions:          sessions,
+		Theme:             d.theme.Name,
+		Root:              root.String(),
+		Scale:             scale.Name,
+		ContextOwner:      d.contextOwner,
+		Renderer:          d.render.Name(),
+		RendererRequested: d.requested,
+		SampleRate:        d.sampleRate(),
+		Version:           version,
+		Volume:            d.volume,
+		Muted:             d.muted,
+		SoundingVoices:    len(state.Voices),
 	})
 }
 

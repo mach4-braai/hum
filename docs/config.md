@@ -105,3 +105,53 @@ package; `internal/theme` reports an unknown theme when it fails to load one.
 
 The dependency runs one way: `internal/config` imports `internal/harmony`, never
 the reverse.
+
+## Writing configuration back
+
+`hum volume`, `hum mute` and `hum theme use` persist what they changed, so the
+setting survives a daemon restart. Two operations exist for that:
+
+- `Patch(path, values)` — set field paths (`audio.volume`, `music.theme`, …) in
+  an existing file, leaving everything else alone.
+- `Write(path, data)` — replace a whole file, used by `hum init` for a generated
+  document.
+
+Both create the parent directory (`0700`), write a temporary file beside the
+target, `fsync` it, `chmod` it to `0600` and `rename` it into place. A partial
+write would corrupt the user's entire configuration, and `rename` within one
+directory is the only atomic replacement POSIX offers.
+
+`Patch` validates every value *before* opening the file, so a rejected
+`audio.volume` of `1.5` leaves the previous file intact rather than truncating it
+and then failing. Validation matches the CLI-override rules exactly, including
+the NaN guard below; an unrecognised field path is `ErrUnknownKey`.
+
+### Why `Patch` decodes into `yaml.Node`
+
+Decoding into `Config` and re-encoding would silently delete anything the struct
+does not model — comments, key order, and any key a newer version of hum writes.
+`hum init` emits a commented file listing the valid scales and themes, so a
+`hum volume 0.4` that stripped those comments would degrade the file every time
+it was touched.
+
+`yaml.Node` keeps comments, order and unmodelled keys. `Patch` walks the mapping
+to the requested field, creating intermediate mappings when they are missing,
+replaces the value node in place, and carries the old node's comments across so a
+trailing `# the current choice` survives a value change. A key that exists but is
+not a mapping where one is needed is replaced, because the alternative is
+refusing to fix a file the user has already broken.
+
+## Finding the project root
+
+`paths.ProjectRoot(startDir)` answers "which project is this?" for the client,
+which is the only process that knows: under `brew services` the daemon's working
+directory is `$HOME`. Precedence, first match wins:
+
+1. the directory owning the nearest `.hum/config.yaml` at or above `startDir`
+2. the nearest directory at or above it containing `.git` (a file, as in a
+   worktree, counts)
+3. `startDir` itself
+
+The result is passed through `filepath.EvalSymlinks`, so a session started
+through a symlinked path lands in the same musical context as one started through
+the canonical path instead of being counted as a second project.

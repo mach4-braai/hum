@@ -109,6 +109,7 @@ The command form:
 | `volume` | fraction in `[0.0, 1.0]` |
 | `theme.list` | — |
 | `theme.use` | theme name |
+| `audio.test` | — |
 | `shutdown` | — |
 | `ping` | — |
 
@@ -140,13 +141,17 @@ knowledge of any command's payload shape.
 
 ### Command payloads
 
+Payload shapes live in `internal/protocol` rather than in either binary, so the
+daemon that writes them and the client that renders them cannot drift.
+
 `status` returns the registry snapshot and the daemon's current musical context:
 
 ```json
 {"ok":true,"data":{
-  "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","updates":0,"seconds":12.4}],
+  "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","pitch":"D2","updates":0,"seconds":12.4}],
   "theme":"minimal","root":"D2","scale":"minor_pentatonic","context_owner":"/Users/dev/projects/tofu",
-  "renderer":"audio","volume":0.6,"muted":false,"sounding_voices":1
+  "renderer":"audio","renderer_requested":"audio","sample_rate":48000,"version":"0.1.0",
+  "volume":0.6,"muted":false,"sounding_voices":1
 }}
 ```
 
@@ -155,8 +160,28 @@ scale and theme, and is omitted when none did. `sounding_voices` counts sustaine
 drones, which is not the same as the number of sessions: a terminal session is
 still listed until it is reaped.
 
-`theme.list` returns `{"themes":["minimal"]}`. `theme.use` returns the theme it
-switched to, so a client can confirm the switch rather than assume it.
+A session's `pitch` is the note its drone is sounding, so an operator can
+correlate what they hear with what is running. It is omitted once the voice is
+released, which is what distinguishes a session that is still audible from one
+that is merely still listed.
+
+`renderer`, `renderer_requested`, `sample_rate` and `version` describe the daemon
+rather than the work. `renderer` is what is running and `renderer_requested` is
+what was asked for, so a client can tell a deliberate `humd --no-audio` from a
+fallback to `nop` because no device was available — identical from `renderer`
+alone, and opposite diagnoses. `sample_rate` is 0 for a renderer that cannot
+report one, and `version` lets `hum doctor` compare the client and daemon builds
+over the connection it already uses.
+
+`theme.list` returns `{"themes":["minimal"],"active":"minimal"}` — the available
+themes plus the one in force, so a client can mark it without a second request.
+`theme.use` returns `{"theme":"minimal"}`, the theme it switched to, so a client
+can confirm the switch rather than assume it.
+
+`audio.test` plays a two-second tone and returns
+`{"played":true,"renderer":"audio","muted":false,"seconds":2}`. `played` is
+false when nothing could be heard — a `nop` renderer or a muted daemon — because
+a diagnostic that reports success into silence is worse than no diagnostic.
 
 `ping`, `mute`, `unmute`, `volume` and `shutdown` carry no payload.
 
