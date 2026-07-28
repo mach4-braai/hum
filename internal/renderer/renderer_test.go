@@ -83,20 +83,20 @@ func TestOpenNopDefaults(t *testing.T) {
 	if nop.opts.Logger == nil {
 		t.Error("Logger should be non-nil after defaulting")
 	}
-	if nop.Volume() == 0 {
-		t.Error("Volume should be non-zero after defaulting")
+	if nop.Volume() != 0 {
+		t.Errorf("Volume: got %v, want 0; volume is never defaulted", nop.Volume())
 	}
 }
 
-func TestOpenNopWithThemeVolume(t *testing.T) {
+func TestOpenPassesVolumeThroughVerbatim(t *testing.T) {
 	th := theme.Theme{Name: "test_theme", Drone: theme.DroneSpec{Gain: 0.75}}
-	r, err := Open("nop", Options{Theme: th})
+	r, err := Open("nop", Options{Theme: th, Volume: 0.2})
 	if err != nil {
 		t.Fatalf("Open(nop) error: %v", err)
 	}
 	nop := r.(*NopRenderer)
-	if nop.Volume() != 0.75 {
-		t.Errorf("Volume: got %v, want 0.75", nop.Volume())
+	if nop.Volume() != 0.2 {
+		t.Errorf("Volume: got %v, want 0.2; the theme's drone gain must not override the master volume", nop.Volume())
 	}
 }
 
@@ -297,18 +297,16 @@ func TestNopOptionsPreservesExplicitSampleRate(t *testing.T) {
 	}
 }
 
-func TestNopOptionsDefaultVolumeNoTheme(t *testing.T) {
-	n := NewNop(Options{})
-	if n.Volume() != defaultVolume {
-		t.Errorf("Volume(): got %v, want %v", n.Volume(), defaultVolume)
-	}
-}
-
-func TestApplyDefaultsVolumeFromTheme(t *testing.T) {
+func TestApplyDefaultsPreservesAnExplicitZeroVolume(t *testing.T) {
 	th := theme.Theme{Name: "x", Drone: theme.DroneSpec{Gain: 0.42}}
 	opts := applyDefaults(Options{Theme: th})
-	if opts.Volume != 0.42 {
-		t.Errorf("Volume: got %v, want 0.42", opts.Volume)
+	if opts.Volume != 0 {
+		t.Errorf("Volume: got %v, want 0; a configured volume of zero must survive, and the theme's drone gain is a different control", opts.Volume)
+	}
+
+	n := NewNop(Options{})
+	if n.Volume() != 0 {
+		t.Errorf("Volume(): got %v, want 0", n.Volume())
 	}
 }
 

@@ -49,9 +49,17 @@ type Options struct {
 |--------------|------------|--------------------------------------------|
 | `SampleRate` | 0          | 48000                                      |
 | `Logger`     | nil        | `slog.Default()`                           |
-| `Volume`     | 0          | `Theme.Drone.Gain` if theme is set, else 0.6 |
+| `Volume`     | —          | not defaulted; passed through verbatim      |
 
-A theme is considered set when `Theme.Name` is non-empty. Volume 0 is treated as unset because the daemon always sets a positive initial volume from config; a renderer playing silence at init would be confusing.
+`Volume` is deliberately **not** defaulted. `internal/config` goes out of its way
+to keep an explicit `volume: 0` distinct from an absent one, so treating zero as
+unset here would throw that away and silently unmute a user who configured
+silence. The daemon always passes the resolved, validated config volume, so there
+is nothing to guess.
+
+`Theme.Drone.Gain` is a *different* control: it is the per-voice gain the
+oscillator applies to one drone, not the master volume. Substituting one for the
+other was a bug, not a shortcut.
 
 ## NopRenderer
 

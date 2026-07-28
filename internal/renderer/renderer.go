@@ -12,7 +12,6 @@ import (
 )
 
 const defaultSampleRate = 48000
-const defaultVolume = 0.6
 
 type Options struct {
 	SampleRate int
@@ -59,13 +58,6 @@ func applyDefaults(opts Options) Options {
 	}
 	if opts.Logger == nil {
 		opts.Logger = slog.Default()
-	}
-	if opts.Volume == 0 {
-		if opts.Theme.Name != "" {
-			opts.Volume = opts.Theme.Drone.Gain
-		} else {
-			opts.Volume = defaultVolume
-		}
 	}
 	return opts
 }
