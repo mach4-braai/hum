@@ -255,7 +255,7 @@ func TestStatusReportsTheActiveSession(t *testing.T) {
 		t.Fatalf("status = %+v", responses[0])
 	}
 
-	var status statusPayload
+	var status protocol.StatusPayload
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status payload: %v", err)
 	}
@@ -266,8 +266,8 @@ func TestStatusReportsTheActiveSession(t *testing.T) {
 	if got.ID != "s1" || got.Title != "Validate PR #142" || got.Workspace != "tofu" || got.State != "active" {
 		t.Errorf("status session = %+v, want id s1, title \"Validate PR #142\", workspace tofu, state active", got)
 	}
-	if status.SoundingVoice != 1 {
-		t.Errorf("sounding voices = %d, want 1", status.SoundingVoice)
+	if status.SoundingVoices != 1 {
+		t.Errorf("sounding voices = %d, want 1", status.SoundingVoices)
 	}
 	if status.Renderer != "recorder" {
 		t.Errorf("renderer = %q, want recorder", status.Renderer)
@@ -296,12 +296,12 @@ func TestControlCommandsProxyToTheRenderer(t *testing.T) {
 		}
 	}
 
-	var themes map[string][]string
+	var themes protocol.ThemeListPayload
 	if err := json.Unmarshal(responses[4].Data, &themes); err != nil {
 		t.Fatalf("decode theme list: %v", err)
 	}
-	if len(themes["themes"]) == 0 || themes["themes"][0] != "minimal" {
-		t.Errorf("theme list = %v, want minimal listed", themes["themes"])
+	if len(themes.Themes) == 0 || themes.Themes[0] != "minimal" {
+		t.Errorf("theme list = %v, want minimal listed", themes.Themes)
 	}
 
 	history := strings.Join(rec.history(), ",")
@@ -329,7 +329,7 @@ func TestUnknownThemeIsRejectedWithoutChangingTheCurrentOne(t *testing.T) {
 	}
 
 	responses = send(t, socket, protocol.Request{Command: protocol.CmdStatus})
-	var status statusPayload
+	var status protocol.StatusPayload
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestARendererFailureDoesNotLoseTheSession(t *testing.T) {
 	}
 
 	responses = send(t, socket, protocol.Request{Command: protocol.CmdStatus})
-	var status statusPayload
+	var status protocol.StatusPayload
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}

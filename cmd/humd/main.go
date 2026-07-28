@@ -32,6 +32,7 @@ const (
 	droneOctave     = 2
 	shutdownMargin  = 500 * time.Millisecond
 	defaultRenderer = "audio"
+	nopRendererName = "nop"
 )
 
 const usage = `usage: humd [flags]
@@ -99,7 +100,7 @@ func parseLevel(name string) (slog.Level, error) {
 
 func openRenderer(name string, noAudio bool, opts renderer.Options, log *slog.Logger) (renderer.Renderer, error) {
 	if noAudio {
-		name = "nop"
+		name = nopRendererName
 	}
 	r, err := renderer.Open(name, opts)
 	if err == nil {
@@ -109,7 +110,7 @@ func openRenderer(name string, noAudio bool, opts renderer.Options, log *slog.Lo
 		return nil, err
 	}
 	log.Warn("no audio device; continuing without sound", "renderer", name, "error", err)
-	return renderer.Open("nop", opts)
+	return renderer.Open(nopRendererName, opts)
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
@@ -128,6 +129,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	log := slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
+
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(signals)
 
 	cfg, _, err := config.ResolveForSession(opts.configFile, "")
 	if err != nil {
@@ -178,10 +183,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		"scale", cfg.Music.Scale,
 		"version", version,
 	)
-
-	signals := make(chan os.Signal, 2)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(signals)
 
 	return serve(d, listener, log, signals)
 }

@@ -62,6 +62,7 @@ type AudioRenderer struct {
 var (
 	_ renderer.Renderer  = (*AudioRenderer)(nil)
 	_ renderer.Themeable = (*AudioRenderer)(nil)
+	_ renderer.Sampled   = (*AudioRenderer)(nil)
 )
 
 func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRenderer {
@@ -83,6 +84,8 @@ func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRende
 }
 
 func (r *AudioRenderer) Name() string { return "audio" }
+
+func (r *AudioRenderer) SampleRate() int { return r.format.SampleRate }
 
 func (r *AudioRenderer) SetTheme(t theme.Theme) error {
 	r.mu.Lock()

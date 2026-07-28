@@ -478,3 +478,11 @@ func TestNewAudioRenderer_ZeroSampleRate(t *testing.T) {
 		t.Errorf("want ErrNoDevice, got %v", err)
 	}
 }
+
+func TestSampleRate_ReportsTheOutputFormat(t *testing.T) {
+	r := newTestRenderer(t)
+
+	if got := r.SampleRate(); got != DefaultFormat().SampleRate {
+		t.Fatalf("SampleRate() = %d, want %d", got, DefaultFormat().SampleRate)
+	}
+}

@@ -18,6 +18,7 @@ const (
 	CmdThemeUse  Command = "theme.use"
 	CmdShutdown  Command = "shutdown"
 	CmdPing      Command = "ping"
+	CmdAudioTest Command = "audio.test"
 )
 
 var ErrUnknownCommand = errors.New("unknown command")
@@ -29,7 +30,7 @@ const (
 
 func (c Command) Known() bool {
 	switch c {
-	case CmdStatus, CmdMute, CmdUnmute, CmdVolume, CmdThemeList, CmdThemeUse, CmdShutdown, CmdPing:
+	case CmdStatus, CmdMute, CmdUnmute, CmdVolume, CmdThemeList, CmdThemeUse, CmdShutdown, CmdPing, CmdAudioTest:
 		return true
 	}
 	return false

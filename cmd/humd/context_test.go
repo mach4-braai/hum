@@ -37,14 +37,14 @@ func project(t *testing.T, body string) string {
 	return canonical
 }
 
-func statusOf(t *testing.T, socket string) statusPayload {
+func statusOf(t *testing.T, socket string) protocol.StatusPayload {
 	t.Helper()
 
 	responses := send(t, socket, protocol.Request{Command: protocol.CmdStatus})
 	if !responses[0].OK {
 		t.Fatalf("status = %+v", responses[0])
 	}
-	var status statusPayload
+	var status protocol.StatusPayload
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
@@ -90,8 +90,8 @@ func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
 	if status.ContextOwner != a {
 		t.Errorf("context owner = %q, want project A still attributed", status.ContextOwner)
 	}
-	if status.SoundingVoice != 2 {
-		t.Errorf("sounding voices = %d, want 2 in one shared context", status.SoundingVoice)
+	if status.SoundingVoices != 2 {
+		t.Errorf("sounding voices = %d, want 2 in one shared context", status.SoundingVoices)
 	}
 
 	send(t, socket,

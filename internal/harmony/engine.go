@@ -24,6 +24,7 @@ const (
 	PhraseCompletion PhraseKind = "completion"
 	PhraseFailure    PhraseKind = "failure"
 	PhraseCancelled  PhraseKind = "cancelled"
+	PhraseTest       PhraseKind = "test"
 )
 
 type Note struct {

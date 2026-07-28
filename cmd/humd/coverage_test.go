@@ -187,8 +187,8 @@ func TestApplyEventSessionCancelledReleasesVoiceWithNoPhrase(t *testing.T) {
 		}
 	}
 
-	if status := statusOf(t, socket); status.SoundingVoice != 0 {
-		t.Errorf("sounding voices = %d after cancellation, want 0", status.SoundingVoice)
+	if status := statusOf(t, socket); status.SoundingVoices != 0 {
+		t.Errorf("sounding voices = %d after cancellation, want 0", status.SoundingVoices)
 	}
 }
 
@@ -228,8 +228,8 @@ func TestApplyEventTriggerErrorIsReportedButNotFatal(t *testing.T) {
 	}
 
 	status := statusOf(t, socket)
-	if status.SoundingVoice != 0 {
-		t.Errorf("sounding voices = %d after completion, want 0; the session must still advance", status.SoundingVoice)
+	if status.SoundingVoices != 0 {
+		t.Errorf("sounding voices = %d after completion, want 0; the session must still advance", status.SoundingVoices)
 	}
 	if len(status.Sessions) != 1 || status.Sessions[0].State != "completed" {
 		t.Errorf("status sessions = %+v, want tr1 recorded as completed", status.Sessions)
@@ -412,25 +412,24 @@ func TestApplyCommandThemeListPayloadShape(t *testing.T) {
 		t.Fatalf("theme.list = %+v, want ok", resp)
 	}
 
-	var data map[string][]string
+	var data protocol.ThemeListPayload
 	if err := json.Unmarshal(resp.Data, &data); err != nil {
 		t.Fatalf("decode theme.list payload: %v", err)
 	}
-	themes, ok := data["themes"]
-	if !ok {
-		t.Fatalf("theme.list payload has no 'themes' key: %v", data)
-	}
-	if len(themes) == 0 {
+	if len(data.Themes) == 0 {
 		t.Error("theme.list returned empty themes slice, want at least one")
 	}
 	found := false
-	for _, name := range themes {
+	for _, name := range data.Themes {
 		if name == "minimal" {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("theme.list = %v, want 'minimal' listed", themes)
+		t.Errorf("theme.list = %v, want 'minimal' listed", data.Themes)
+	}
+	if data.Active != "minimal" {
+		t.Errorf("theme.list active = %q, want the daemon's current theme so a client can mark it", data.Active)
 	}
 }
 

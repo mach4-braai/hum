@@ -34,6 +34,10 @@ type Themeable interface {
 	SetTheme(theme.Theme) error
 }
 
+type Sampled interface {
+	SampleRate() int
+}
+
 type constructor func(Options) (Renderer, error)
 
 var (
