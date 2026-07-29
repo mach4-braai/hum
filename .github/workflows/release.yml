@@ -43,27 +43,8 @@ jobs:
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
-      - name: "Install the amd64 audio build dependency (drop with oto v3.5, #39)"
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
-
-      - name: "Install the arm64 cross toolchain and ALSA headers (drop with oto v3.5, #39)"
-        run: |
-          set -eux
-          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
-          sudo dpkg --add-architecture arm64
-          sudo sed -i 's|^URIs:|Architectures: amd64\nURIs:|' /etc/apt/sources.list.d/ubuntu.sources
-          sudo tee /etc/apt/sources.list.d/arm64-ports.sources >/dev/null <<EOF
-          Types: deb
-          URIs: http://ports.ubuntu.com/ubuntu-ports/
-          Suites: $codename $codename-updates
-          Components: main universe
-          Architectures: arm64
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          EOF
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev:arm64
+      - name: "Install the audio and cross-compilation packages (drop with oto v3.5, #39)"
+        uses: ./.github/actions/linux-packages
 
       - name: Release
         env:
