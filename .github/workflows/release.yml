@@ -43,15 +43,30 @@ jobs:
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
-      - name: "Install the amd64 audio build dependency (drop with oto v3.5, #39)"
+      - name: Identify the runner image
+        id: image
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev pkg-config
+          set -eu
+          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          echo "codename=$codename" >>"$GITHUB_OUTPUT"
+          echo "key=apt-$codename-${ImageVersion:-run-$GITHUB_RUN_ID}-alsa-aarch64" >>"$GITHUB_OUTPUT"
 
-      - name: "Install the arm64 cross toolchain and ALSA headers (drop with oto v3.5, #39)"
+      - name: Cache the Linux build packages
+        id: packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: ~/hum-apt
+          key: ${{ steps.image.outputs.key }}
+
+      - name: "Install the audio and cross-compilation packages (drop with oto v3.5, #39)"
+        env:
+          DOWNLOAD: ${{ steps.packages.outputs.cache-hit != 'true' }}
+          CODENAME: ${{ steps.image.outputs.codename }}
         run: |
           set -eux
-          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          archive="$HOME/hum-apt"
+          mkdir -p "$archive/partial"
+          codename="$CODENAME"
           sudo dpkg --add-architecture arm64
           sudo sed -i 's|^URIs:|Architectures: amd64\nURIs:|' /etc/apt/sources.list.d/ubuntu.sources
           sudo tee /etc/apt/sources.list.d/arm64-ports.sources >/dev/null <<EOF
@@ -62,8 +77,14 @@ jobs:
           Architectures: arm64
           Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
           EOF
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev:arm64
+          if [ "$DOWNLOAD" = true ]; then
+            sudo apt-get update
+            sudo apt-get install -y --download-only \
+              -o Acquire::Retries=3 -o Dir::Cache::archives="$archive" \
+              libasound2-dev pkg-config gcc-aarch64-linux-gnu libasound2-dev:arm64
+            sudo chown -R "$(id -u):$(id -g)" "$archive"
+          fi
+          sudo dpkg -i "$archive"/*.deb
 
       - name: Release
         env:

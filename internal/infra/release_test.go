@@ -155,6 +155,23 @@ func TestReleaseWorkflowBuildsLinuxArtefacts(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowInstallsLinuxPackagesFromACache(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	if !strings.Contains(workflow, "--download-only") || !strings.Contains(workflow, "dpkg -i") {
+		t.Fatal("release.yml installs its packages straight from the mirror, so a cache hit would save nothing")
+	}
+	if !strings.Contains(workflow, "key: ${{ steps.image.outputs.key }}") {
+		t.Error("the cache key is not built by a shell step, and ImageVersion is a runner process variable that the env context need not carry: an empty expression collapses the key")
+	}
+	if !strings.Contains(workflow, "${ImageVersion:-run-$GITHUB_RUN_ID}") {
+		t.Error("a missing ImageVersion must degrade to a cache miss; sharing one key across image revisions installs exact-version debs that dpkg cannot reconcile")
+	}
+	if !strings.Contains(workflow, "steps.packages.outputs.cache-hit != 'true'") {
+		t.Error("release.yml updates the package indices unconditionally, which is the network round trip the cache exists to skip")
+	}
+}
+
 func TestGoreleaserSkipsLinuxUnlessEnabled(t *testing.T) {
 	release := readRepoFile(t, ".goreleaser.yaml")
 

@@ -45,6 +45,13 @@ behaviour, boundaries and error paths — not plumbing.
   is. Bumping one is two edits, and the assertion fails until they agree:
   `gh api repos/<action>/releases/latest --jq .tag_name` then
   `gh api repos/<action>/commits/<tag> --jq .sha`.
+- The release job installs its Linux packages from a cached deb archive, keyed on
+  the runner image. `apt-get` downloads only what an image lacks, so a set
+  assembled on one image can carry exact versions `dpkg -i` cannot reconcile on
+  another, and it has no network to repair that. `ImageVersion` is a runner process
+  variable, not something the `env` expression context is guaranteed to carry, so
+  the key is built in a shell step and falls back to `$GITHUB_RUN_ID`: a missing
+  image version must miss the cache, never share one.
 - Exit codes and `main` wiring are asserted against the built binary. `go run`
   is useless for this: it reports 1 for any non-zero exit.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be

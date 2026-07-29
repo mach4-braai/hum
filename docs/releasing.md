@@ -39,6 +39,12 @@ anything. Linux archives are skipped unless `HUM_RELEASE_LINUX=1` and an ALSA
 cross-toolchain are present, so a snapshot on macOS covers macOS and Windows
 only.
 
+The `aarch64` cross-compiler and the ALSA headers are restored from a cached deb
+archive keyed on the runner image, and downloaded only when that misses. They are
+62 MB, and the Ubuntu mirror served them at 49 kB/s once — twenty-one minutes for
+a build that takes fifty seconds. Issue #39 deletes the step outright when oto
+ships a stable CGO-free Linux driver.
+
 ## The formula
 
 `Formula/hum.rb` in this repository is the source of truth. The tap holds a copy
