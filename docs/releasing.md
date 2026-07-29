@@ -61,21 +61,15 @@ the App.
 
 ### The App
 
-One App serves every project that publishes into the shared tap. Creating it
-needs organisation-owner rights and is done once.
+`homebrew-tapper`, owned by the organisation, installed on
+`mach4-braai/homebrew-tap` and nothing else, holding `contents: write` and
+`metadata: read` and nothing else. One App serves every project that publishes
+into the shared tap.
 
-Organisation settings → Developer settings → GitHub Apps → New GitHub App:
-
-| Field | Value |
-|---|---|
-| Name | `mach4-braai-tap-bumper` |
-| Homepage URL | the tap's URL |
-| Webhook | unchecked |
-| Repository permissions | Contents: Read and write — nothing else |
-| Installation target | Only this account |
-
-Generate a private key, then install the App on `mach4-braai/homebrew-tap` and
-nothing else: Install App → Only select repositories.
+Recreating it: Organisation settings → Developer settings → GitHub Apps → New
+GitHub App, with the webhook unchecked, *Repository permissions → Contents: Read
+and write*, "Only this account", a generated private key, and *Install App → Only
+select repositories* pointing at the tap.
 
 ### The two values, and where they live
 
@@ -84,12 +78,19 @@ organisation secrets and variables limited to the repositories that release —
 `hum` today — or as repository entries on `hum` itself. The tap is not one of
 them.
 
-Organisation settings → Secrets and variables → Actions:
+Where they are today: `TAP_APP_CLIENT_ID` is a repository variable on `hum`, and
+`TAP_APP_PRIVATE_KEY` an organisation secret granted to `hum`. Moving the client
+id to an organisation variable is the tidier home once a second project releases
+into the tap.
 
 | Kind | Name | Value |
 |---|---|---|
-| Variable | `TAP_APP_CLIENT_ID` | the App's client id, `Iv23…`. Not sensitive |
+| Variable | `TAP_APP_CLIENT_ID` | the App's client id: `gh api /apps/homebrew-tapper --jq .client_id` |
 | Secret | `TAP_APP_PRIVATE_KEY` | the private key, whole PEM including its `BEGIN`/`END` lines |
+
+The client id is a **variable** because it is public — that `gh api` call needs no
+authentication. Holding it as a secret masks it in the logs and reads as though
+the release depended on two credentials when it depends on one.
 
 The tap holds no secret, no variable and no workflow. What it holds is the App's
 installation, which is what turns the private key into write access to it. The

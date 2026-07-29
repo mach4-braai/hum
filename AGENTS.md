@@ -67,12 +67,12 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
 - A workflow's `GITHUB_TOKEN` cannot write another repository, so the `tap` job
-  mints a GitHub App installation token: `TAP_APP_CLIENT_ID` is an organisation
-  variable, `TAP_APP_PRIVATE_KEY` an organisation secret, and `internal/infra`
-  asserts the workflow names that one secret and nothing else. The token is
-  revoked when its job ends, so the bump has to live in the job that mints it.
-  Dropping the job leaves the release green and `brew upgrade hum` on the old
-  version.
+  mints an installation token from the `homebrew-tapper` App. Its client id is
+  public — `gh api /apps/homebrew-tapper --jq .client_id` needs no auth — so it is
+  a variable, and `internal/infra` asserts the workflow names exactly one secret,
+  the private key. The token is revoked when its job ends, so the bump has to live
+  in the job that mints it. Dropping the job leaves the release green and
+  `brew upgrade hum` on the old version.
 - The `tap` job skips any tag containing a hyphen. `prerelease: auto` publishes
   `v0.2.0-rc1` as a prerelease, and a formula pointing at it would make a release
   candidate the default `brew install hum`.
