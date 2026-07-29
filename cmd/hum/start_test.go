@@ -45,6 +45,7 @@ func TestStartSendsCorrectEvent(t *testing.T) {
 
 func TestStartGeneratesIDWhenAbsent(t *testing.T) {
 	await := serveResponses(t, `{"ok":true}`+"\n", `{"ok":true}`+"\n")
+	t.Setenv(envSessionID, "")
 
 	var stdout1, stderr1 bytes.Buffer
 	code1 := run([]string{"start"}, &stdout1, &stderr1)
