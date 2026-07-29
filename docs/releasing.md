@@ -20,6 +20,11 @@ and does not reach the tap. The `tap` job is gated on the tag name for exactly
 that reason: a formula pointing at a release candidate would make it the default
 `brew install hum`.
 
+Two tags released close together are serialised: the `tap` job takes a
+concurrency group shared by every release, and it refuses a version the tap
+already exceeds. An older tag finishing last leaves the tap alone rather than
+downgrading it.
+
 `mise run snapshot` builds the same artefacts into `dist/` without publishing
 anything. Linux archives are skipped unless `HUM_RELEASE_LINUX=1` and an ALSA
 cross-toolchain are present, so a snapshot on macOS covers macOS and Windows

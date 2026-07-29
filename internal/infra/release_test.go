@@ -251,6 +251,17 @@ func TestTapBumpFollowsThePublishedRelease(t *testing.T) {
 	}
 }
 
+func TestTapBumpRefusesToGoBackwards(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	if !strings.Contains(workflow, "group: tap") {
+		t.Error("the tap job shares no concurrency group, so two releases can rewrite the formula at once")
+	}
+	if !strings.Contains(workflow, "sort -V") {
+		t.Error("the tap job does not compare the tap's version with the tag, so a slower older release would downgrade the formula")
+	}
+}
+
 var secretReference = regexp.MustCompile(`secrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]?([^'"\]]+))`)
 
 func secretsIn(workflow string) []string {

@@ -79,6 +79,11 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - The bump stages the formula before comparing it. The tap has no
   `Formula/hum.rb` until the first release, and `git diff --quiet` on an
   untracked file reports no change, which would skip that first bump.
+- The workflow's own concurrency group is keyed on the tag, so two releases run
+  concurrently and their `tap` jobs can finish in either order. The `tap` job
+  therefore takes a group of its own and refuses a version the tap already
+  exceeds, compared with `sort -V` so `0.10.0` beats `0.2.0`. `git pull --rebase`
+  is no defence: it replays the older bump on top of the newer one.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
 - Voices are released before `renderer.Close`, never after. Closing first cuts

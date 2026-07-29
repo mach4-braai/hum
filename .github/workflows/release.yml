@@ -75,6 +75,9 @@ jobs:
     needs: release
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: tap
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -104,6 +107,16 @@ jobs:
 
           version="${TAG#v}"
           archive="hum_${version}_source.tar.gz"
+
+          current=""
+          if [ -f tap/Formula/hum.rb ]; then
+            current=$(sed -n 's|^  url ".*/hum_\(.*\)_source\.tar\.gz"$|\1|p' tap/Formula/hum.rb)
+          fi
+          newest=$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -1)
+          if [ "$newest" != "$version" ]; then
+            echo "the tap carries hum $current, which is newer than $version"
+            exit 0
+          fi
 
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern checksums.txt --output checksums.txt --clobber
