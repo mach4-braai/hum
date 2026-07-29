@@ -100,7 +100,7 @@ configuration.
 `hum mute`, `hum unmute`, `hum volume N` and `hum theme use` write the setting to
 the **global** config after the daemon accepts the change, so the state survives
 a restart. Writes go through `config.Patch`, which preserves unrelated keys and
-comments and replaces the file atomically; see `docs/config.md`. A failed write
+comments and replaces the file atomically; see `docs/configuration.md`. A failed write
 is exit 1 even though the daemon already applied the change, because the user's
 intent — a durable setting — was not achieved.
 

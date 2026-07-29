@@ -60,9 +60,34 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   argument". A test socket therefore cannot live in `t.TempDir()` — the test name
   is part of that path and overflows it. Use a short `os.MkdirTemp("", "hd")`.
 - oto v3.4.0 is CGO-free on macOS but declares `#cgo pkg-config: alsa` on Linux,
-  so the Linux legs install `libasound2-dev` and `pkg-config`. #39 removes this.
+  so the Linux legs install `libasound2-dev` and `pkg-config`, the `on_linux`
+  block in `Formula/hum.rb` depends on `alsa-lib` and `pkg-config`, and
+  `.goreleaser.yaml` builds Linux only on a runner with an ALSA toolchain. #39
+  deletes all four.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
+- A workflow's `GITHUB_TOKEN` cannot write another repository, so the `tap` job
+  mints an installation token from the `homebrew-tapper` App. Its client id is
+  public — `gh api /apps/homebrew-tapper --jq .client_id` needs no auth — so it is
+  a variable, and `internal/infra` asserts the workflow names exactly one secret,
+  the private key. The token is revoked when its job ends, so the bump has to live
+  in the job that mints it. Dropping the job leaves the release green and
+  `brew upgrade hum` on the old version.
+- The tap's `default-branch` ruleset requires pull requests, and the bump only
+  lands because `homebrew-tapper` is a bypass actor on it. That setting lives in
+  the tap, so nothing here can assert it; drop it and the release fails at the
+  push with "Changes must be made through a pull request".
+- The `tap` job skips any tag containing a hyphen. `prerelease: auto` publishes
+  `v0.2.0-rc1` as a prerelease, and a formula pointing at it would make a release
+  candidate the default `brew install hum`.
+- The bump stages the formula before comparing it. The tap has no
+  `Formula/hum.rb` until the first release, and `git diff --quiet` on an
+  untracked file reports no change, which would skip that first bump.
+- The workflow's own concurrency group is keyed on the tag, so two releases run
+  concurrently and their `tap` jobs can finish in either order. The `tap` job
+  therefore takes a group of its own and refuses a version the tap already
+  exceeds, compared with `sort -V` so `0.10.0` beats `0.2.0`. `git pull --rebase`
+  is no defence: it replays the older bump on top of the newer one.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
 - Voices are released before `renderer.Close`, never after. Closing first cuts
@@ -88,6 +113,19 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `config.Patch` decodes into `yaml.Node`, not `Config`. Decoding into the struct
   and re-encoding deletes comments and every key the struct does not model, so
   `hum volume` would strip the scale and theme lists `hum init` wrote.
+- `hum doctor` exits 1 by design with no daemon running, so the formula's `test do`
+  asserts on its output with an expected status of 1. A bare
+  `system bin/"hum", "doctor"` fails `brew test`.
+- `cmd/hum` builds for Windows only because `statusWidth` is split across
+  `width_unix.go` and `width_windows.go`; `TIOCGWINSZ` does not exist there. The
+  Windows implementation returns 0, which means "unknown" and disables title
+  truncation exactly as a piped stdout does.
+- The Linux release builds are skipped unless `HUM_RELEASE_LINUX=1`, so
+  `mise run snapshot` works on macOS where no ALSA cross-toolchain exists. The
+  release workflow sets it; forgetting it ships a release with no Linux archives.
+- `std_go_args` already passes `-trimpath` and adds `-s -w`. The formula spells
+  out only the three `-X main.*` symbols, which `internal/infra` matches against
+  `mise.toml`.
 
 ## Protocol
 

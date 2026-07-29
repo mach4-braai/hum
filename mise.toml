@@ -1,5 +1,6 @@
 [tools]
 go = "1.24.13"
+goreleaser = "2.17.1"
 
 [env]
 HUM_VERSION = "{{ exec(command='git describe --tags --always --dirty 2>/dev/null || echo dev') }}"
@@ -14,6 +15,10 @@ LDFLAGS="-X main.version=$HUM_VERSION -X main.commit=$HUM_COMMIT -X main.date=$H
 go build -trimpath -ldflags "$LDFLAGS" -o bin/hum ./cmd/hum
 go build -trimpath -ldflags "$LDFLAGS" -o bin/humd ./cmd/humd
 '''
+
+[tasks.snapshot]
+description = "Build a local snapshot release into dist/"
+run = "goreleaser release --snapshot --clean"
 
 [tasks.test]
 description = "Run the unit test suite"

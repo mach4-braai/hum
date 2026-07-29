@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mach4-braai/hum/internal/audio"
+	"github.com/mach4-braai/hum/internal/buildinfo"
 	"github.com/mach4-braai/hum/internal/config"
 	"github.com/mach4-braai/hum/internal/harmony"
 	"github.com/mach4-braai/hum/internal/paths"
@@ -44,13 +45,18 @@ Flags:
   --no-audio          use the silent renderer
   --log-level <level> debug, info, warn or error
   --version           print the version and exit
+  --json              print the version as JSON
 `
 
 var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
+	version = buildinfo.UnknownVersion
+	commit  = buildinfo.UnknownCommit
+	date    = buildinfo.UnknownDate
 )
+
+func build() buildinfo.Info {
+	return buildinfo.Resolve("humd", version, commit, date)
+}
 
 type options struct {
 	configFile   string
@@ -59,6 +65,7 @@ type options struct {
 	noAudio      bool
 	logLevel     string
 	showVersion  bool
+	asJSON       bool
 }
 
 func parseFlags(args []string, stderr io.Writer) (options, int) {
@@ -72,6 +79,7 @@ func parseFlags(args []string, stderr io.Writer) (options, int) {
 	flags.BoolVar(&opts.noAudio, "no-audio", false, "use the silent renderer")
 	flags.StringVar(&opts.logLevel, "log-level", "info", "debug, info, warn or error")
 	flags.BoolVar(&opts.showVersion, "version", false, "print the version and exit")
+	flags.BoolVar(&opts.asJSON, "json", false, "print the version as JSON")
 
 	if err := flags.Parse(args); err != nil {
 		return opts, exitUsage
@@ -119,7 +127,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return code
 	}
 	if opts.showVersion {
-		fmt.Fprintf(stdout, "humd %s (%s, built %s)\n", version, commit, date)
+		if err := build().Write(stdout, opts.asJSON); err != nil {
+			fmt.Fprintf(stderr, "humd: %v\n", err)
+			return exitError
+		}
 		return exitOK
 	}
 
@@ -185,7 +196,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		"theme", th.Name,
 		"root", cfg.Music.Root,
 		"scale", cfg.Music.Scale,
-		"version", version,
+		"version", build().Version,
 	)
 
 	return serve(d, listener, log, signals)

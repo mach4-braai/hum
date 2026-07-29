@@ -203,5 +203,6 @@ $ printf '{"event":"session.started","id":"a1","title":"build"}\n{"event":"sessi
 {"ok":true}
 ```
 
-`socat - UNIX-CONNECT:$HOME/.hum/humd.sock` behaves identically where it is
-installed; `nc -U` is used above because macOS ships it.
+`nc -U` is used above because macOS ships it. Where `nc` has no `-U`,
+`socat - UNIX-CONNECT:$HOME/.hum/humd.sock` opens the same connection. Every
+example here is verified against `nc -U` only.
