@@ -1,0 +1,35 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/linux-packages
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: ci
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "08:00"
+    cooldown:
+      default-days: 1 # zizmor: ignore[dependabot-cooldown]
+      exclude:
+        - '*'
+
+  - package-ecosystem: gomod
+    directory: /
+    groups:
+      go:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: chore
+    schedule:
+      interval: weekly
+      day: saturday
+      time: "08:00"
+    cooldown:
+      default-days: 7
