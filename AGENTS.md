@@ -44,7 +44,9 @@ behaviour, boundaries and error paths — not plumbing.
   and its version are written down, since a bare SHA cannot say which release it
   is. Bumping one is two edits, and the assertion fails until they agree:
   `gh api repos/<action>/releases/latest --jq .tag_name` then
-  `gh api repos/<action>/commits/<tag> --jq .sha`.
+  `gh api repos/<action>/commits/<tag> --jq .sha`. Dependabot only makes the first
+  edit, so its `github-actions` pull requests arrive red on purpose and cannot merge
+  until `pinnedActions` records the commit it moved to.
 - The release job installs its Linux packages from a cached deb archive, keyed on
   the runner image. `apt-get` downloads only what an image lacks, so a set
   assembled on one image can carry exact versions `dpkg -i` cannot reconcile on
