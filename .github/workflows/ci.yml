@@ -13,15 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  packages:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-      - uses: ./.github/actions/linux-packages
-
   check:
+    name: check
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +22,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
@@ -50,12 +45,15 @@ jobs:
       - run: mise run check
 
   coverage:
+    name: coverage
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      statuses: write
+      statuses: write # posts the coverage/total commit status
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 

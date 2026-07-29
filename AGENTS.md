@@ -24,6 +24,12 @@ Compiler directives (`//go:build`) are not comments and may stay.
 No exceptions, no justifications. If code needs explaining, rename something or
 extract a function whose name is the sentence you were about to write.
 
+Workflow YAML is the one exception, and only for what a linter reads: a
+`# zizmor: ignore[...]` directive, the one-line justification beside it with a link
+to the audit, and the permission comments `undocumented-permissions` requires. Those
+are inputs to `zizmor`, like `//go:build` is an input to the compiler. Prose is
+still prose, and still not welcome.
+
 Functionality goes in `docs/`. Reasons go in the commit message. Rejected
 alternatives go in the issue or PR. Traps go in the list below.
 
@@ -87,6 +93,16 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   deletes all four.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
+- Every job carries `name:` spelled exactly like its id, because `zizmor --pedantic`
+  wants jobs named and the `master` ruleset requires `check (ubuntu-latest)`,
+  `check (macos-latest)` and `coverage` — contexts GitHub derives from the id when no
+  name is given. Renaming a job to something prettier renames its status check, and
+  every pull request then waits forever for one that never reports.
+- A push to `master` runs `mise run snapshot` in `release.yml`, builds every target
+  and publishes nothing. It is also what warms the package cache, so `ci.yml` has no
+  warming job of its own. It exercises the build, the archives and the config; it
+  cannot exercise publication, so it would not have caught either of the two burnt
+  tags.
 - Releases are immutable, which freezes assets and the tag the moment a release is
   published — so `.goreleaser.yaml` sets `draft: true` and uploads into a draft,
   which stays mutable. Publishing directly fails every upload with 422 and leaves a

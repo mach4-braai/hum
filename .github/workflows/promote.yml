@@ -13,12 +13,14 @@ permissions:
 
 jobs:
   tap:
+    name: tap
     if: ${{ !github.event.release.prerelease && !contains(github.event.release.tag_name, '-') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
 
       - name: Mint a token scoped to the tap alone
         id: tap-token
@@ -30,7 +32,9 @@ jobs:
           repositories: homebrew-tap
           permission-contents: write
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      # The git push below needs the credential this persists, and the job uploads no
+      # artefacts. https://docs.zizmor.sh/audits/#artipacked
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # zizmor: ignore[artipacked]
         with:
           repository: ${{ github.repository_owner }}/homebrew-tap
           token: ${{ steps.tap-token.outputs.token }}
