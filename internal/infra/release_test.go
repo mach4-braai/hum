@@ -201,3 +201,69 @@ func TestMiseDefinesTheSnapshotTask(t *testing.T) {
 		t.Error("mise.toml has no snapshot task, so the local release check is not reproducible")
 	}
 }
+
+func TestReleaseWorkflowNeedsNoCrossRepositoryCredential(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	for _, forbidden := range []string{"TAP_GITHUB_TOKEN", "x-access-token", "homebrew-tap.git"} {
+		if strings.Contains(workflow, forbidden) {
+			t.Errorf("release.yml references %q; pushing to the tap from here needs a long-lived secret in a public repository", forbidden)
+		}
+	}
+	if found := secretsIn(workflow); len(found) != 0 {
+		t.Errorf("release.yml references secrets.%v; releasing must need no user-managed secret, so use github.token", found)
+	}
+}
+
+func secretsIn(workflow string) []string {
+	var found []string
+	for _, part := range strings.Split(workflow, "secrets.")[1:] {
+		end := strings.IndexFunc(part, func(r rune) bool {
+			return !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
+		})
+		if end < 0 {
+			end = len(part)
+		}
+		found = append(found, part[:end])
+	}
+	return found
+}
+
+func TestTapBumpWorkflowIsSelfContained(t *testing.T) {
+	workflow := readRepoFile(t, "contrib", "homebrew-tap", "bump-formula.yml")
+
+	if found := secretsIn(workflow); len(found) != 0 {
+		t.Errorf("the tap bump workflow references secrets.%v; it must need no user-managed secret, so use github.token", found)
+	}
+	if !strings.Contains(workflow, "contents: write") {
+		t.Error("the tap bump workflow cannot commit without contents: write")
+	}
+	if !strings.Contains(workflow, "workflow_dispatch") {
+		t.Error("the tap bump workflow has no manual trigger, so a release cannot be picked up on demand")
+	}
+	if !strings.Contains(workflow, "checksums.txt") {
+		t.Error("the tap bump workflow does not read the published checksum, so the formula could disagree with the release")
+	}
+}
+
+func TestSecretsInFindsEveryReference(t *testing.T) {
+	workflow := "a: ${{ secrets.GITHUB_TOKEN }}\nb: ${{ secrets.TAP_GITHUB_TOKEN }}\nc: ${{secrets.DEPLOY_KEY}}\n"
+
+	found := secretsIn(workflow)
+
+	want := []string{"GITHUB_TOKEN", "TAP_GITHUB_TOKEN", "DEPLOY_KEY"}
+	if len(found) != len(want) {
+		t.Fatalf("secretsIn = %v, want %v", found, want)
+	}
+	for i, name := range want {
+		if found[i] != name {
+			t.Errorf("secretsIn()[%d] = %q, want %q", i, found[i], name)
+		}
+	}
+}
+
+func TestSecretsInReportsNothingWhenThereAreNoSecrets(t *testing.T) {
+	if found := secretsIn("steps:\n  - run: make\n"); len(found) != 0 {
+		t.Errorf("secretsIn = %v, want none", found)
+	}
+}

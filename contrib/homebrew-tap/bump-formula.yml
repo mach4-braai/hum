@@ -1,0 +1,59 @@
+name: Bump hum
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: bump-hum
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Bump the formula to hum's latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM: mach4-braai/hum
+        run: |
+          set -eu
+
+          tag=$(gh release view --repo "$UPSTREAM" --json tagName -q .tagName)
+          version="${tag#v}"
+
+          current=$(sed -n 's|^  url ".*/hum_\(.*\)_source\.tar\.gz"$|\1|p' Formula/hum.rb)
+          if [ "$current" = "$version" ]; then
+            echo "Formula/hum.rb is already at $version"
+            exit 0
+          fi
+
+          gh release download "$tag" --repo "$UPSTREAM" \
+            --pattern checksums.txt --output checksums.txt --clobber
+          archive="hum_${version}_source.tar.gz"
+          sha=$(awk -v want="$archive" '$2 == want { print $1 }' checksums.txt)
+          rm -f checksums.txt
+          if [ -z "$sha" ]; then
+            echo "no checksum for $archive in the $tag release" >&2
+            exit 1
+          fi
+
+          gh api "repos/$UPSTREAM/contents/Formula/hum.rb?ref=$tag" \
+            -H "Accept: application/vnd.github.raw" >Formula/hum.rb
+
+          sed -i \
+            -e "s|^  url .*|  url \"https://github.com/$UPSTREAM/releases/download/$tag/$archive\"|" \
+            -e "s|^  sha256 .*|  sha256 \"$sha\"|" \
+            Formula/hum.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/hum.rb
+          git commit -m "Bump hum to $version"
+          git push
