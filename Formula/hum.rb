@@ -9,8 +9,8 @@ class Hum < Formula
   depends_on "go" => :build
 
   on_linux do
-    depends_on "alsa-lib"
     depends_on "pkg-config" => :build
+    depends_on "alsa-lib"
   end
 
   def install

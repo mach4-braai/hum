@@ -3,6 +3,7 @@ package infra
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -215,16 +216,16 @@ func TestReleaseWorkflowNeedsNoCrossRepositoryCredential(t *testing.T) {
 	}
 }
 
+var secretReference = regexp.MustCompile(`secrets\s*(?:\.\s*([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]?([^'"\]]+))`)
+
 func secretsIn(workflow string) []string {
 	var found []string
-	for _, part := range strings.Split(workflow, "secrets.")[1:] {
-		end := strings.IndexFunc(part, func(r rune) bool {
-			return !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'))
-		})
-		if end < 0 {
-			end = len(part)
+	for _, match := range secretReference.FindAllStringSubmatch(workflow, -1) {
+		name := match[1]
+		if name == "" {
+			name = strings.TrimSpace(match[2])
 		}
-		found = append(found, part[:end])
+		found = append(found, name)
 	}
 	return found
 }
@@ -247,11 +248,21 @@ func TestTapBumpWorkflowIsSelfContained(t *testing.T) {
 }
 
 func TestSecretsInFindsEveryReference(t *testing.T) {
-	workflow := "a: ${{ secrets.GITHUB_TOKEN }}\nb: ${{ secrets.TAP_GITHUB_TOKEN }}\nc: ${{secrets.DEPLOY_KEY}}\n"
+	workflow := strings.Join([]string{
+		"a: ${{ secrets.GITHUB_TOKEN }}",
+		"b: ${{ secrets.TAP_GITHUB_TOKEN }}",
+		"c: ${{secrets.DEPLOY_KEY}}",
+		"d: ${{ secrets['BRACKET_SINGLE'] }}",
+		`e: ${{ secrets["BRACKET_DOUBLE"] }}`,
+		"f: ${{ secrets [ 'SPACED' ] }}",
+	}, "\n")
 
 	found := secretsIn(workflow)
 
-	want := []string{"GITHUB_TOKEN", "TAP_GITHUB_TOKEN", "DEPLOY_KEY"}
+	want := []string{
+		"GITHUB_TOKEN", "TAP_GITHUB_TOKEN", "DEPLOY_KEY",
+		"BRACKET_SINGLE", "BRACKET_DOUBLE", "SPACED",
+	}
 	if len(found) != len(want) {
 		t.Fatalf("secretsIn = %v, want %v", found, want)
 	}
