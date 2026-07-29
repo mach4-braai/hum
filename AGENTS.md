@@ -73,6 +73,10 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   the private key. The token is revoked when its job ends, so the bump has to live
   in the job that mints it. Dropping the job leaves the release green and
   `brew upgrade hum` on the old version.
+- The tap's `default-branch` ruleset requires pull requests, and the bump only
+  lands because `homebrew-tapper` is a bypass actor on it. That setting lives in
+  the tap, so nothing here can assert it; drop it and the release fails at the
+  push with "Changes must be made through a pull request".
 - The `tap` job skips any tag containing a hyphen. `prerelease: auto` publishes
   `v0.2.0-rc1` as a prerelease, and a formula pointing at it would make a release
   candidate the default `brew install hum`.

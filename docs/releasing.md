@@ -66,6 +66,11 @@ the App.
 `metadata: read` and nothing else. One App serves every project that publishes
 into the shared tap.
 
+The tap's `default-branch` ruleset requires pull requests, so the App is also a
+bypass actor on it. Without that the bump fails at the push with "Changes must be
+made through a pull request", and no assertion here can catch it: the setting
+lives in the tap.
+
 Recreating it: Organisation settings → Developer settings → GitHub Apps → New
 GitHub App, with the webhook unchecked, *Repository permissions → Contents: Read
 and write*, "Only this account", a generated private key, and *Install App → Only
