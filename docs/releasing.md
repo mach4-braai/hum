@@ -77,15 +77,23 @@ Organisation settings → Developer settings → GitHub Apps → New GitHub App:
 Generate a private key, then install the App on `mach4-braai/homebrew-tap` and
 nothing else: Install App → Only select repositories.
 
-### The two values
+### The two values, and where they live
 
-Organisation settings → Secrets and variables → Actions, both limited to the
-repositories that release:
+They are read by the workflow that runs, which is this repository's. Hold them as
+organisation secrets and variables limited to the repositories that release —
+`hum` today — or as repository entries on `hum` itself. The tap is not one of
+them.
+
+Organisation settings → Secrets and variables → Actions:
 
 | Kind | Name | Value |
 |---|---|---|
 | Variable | `TAP_APP_CLIENT_ID` | the App's client id, `Iv23…`. Not sensitive |
 | Secret | `TAP_APP_PRIVATE_KEY` | the private key, whole PEM including its `BEGIN`/`END` lines |
+
+The tap holds no secret, no variable and no workflow. What it holds is the App's
+installation, which is what turns the private key into write access to it. The
+credential lives with the pusher; the permission lives with the pushed-to.
 
 `internal/infra` asserts that the release workflow names exactly one secret,
 `TAP_APP_PRIVATE_KEY`, and reads the client id from `vars`. Renaming either fails
