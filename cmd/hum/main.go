@@ -32,7 +32,9 @@ Commands:
   start         announce a new work session
   stop          stop the daemon
   complete      mark a session completed
-  fail          mark a session failed
+  fail          mark a session failed — the work failed, not hum
+  cancel        mark a session abandoned without running to an end
+  update        report progress on a session without ending it
   status        report daemon and session state
   mute          silence output without stopping
   unmute        resume output

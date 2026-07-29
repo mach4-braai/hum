@@ -11,6 +11,8 @@ decision about sound belongs to `humd`.
 | `hum init` | write a project configuration |
 | `hum start` | announce a new work session |
 | `hum stop` | stop the daemon |
+| `hum complete` / `hum fail` / `hum cancel` | end a session |
+| `hum update` | report progress without ending a session |
 | `hum status` | report daemon and session state |
 | `hum mute` / `hum unmute` | silence and restore output |
 | `hum volume [N]` | report or set the output level |
@@ -18,8 +20,23 @@ decision about sound belongs to `humd`.
 | `hum doctor` | diagnose the installation |
 | `hum ping` | check that the daemon is reachable |
 
-`complete`, `fail`, `cancel` and `update` are listed in `hum help` but are not
-implemented yet; they are #41 and its successors.
+## Ending a session
+
+`complete`, `fail` and `cancel` are one code path, `sendTerminal`, differing only
+in the event they emit. They resolve `--id` then `$HUM_SESSION_ID` and, unlike
+`start`, refuse to invent one: a generated id would name a session the daemon has
+never heard of. Without an id they exit 2.
+
+A session that is unknown or already terminal exits **1** with the daemon's own
+message, so a CI script wrapping real work cannot mistake a lost session for
+success. `fail` means the work failed; Hum failing to reach the daemon is exit 3.
+`cancel` means the work was abandoned, which is not an error condition, and emits
+no cadence.
+
+`update` shares that id resolution but is not terminal: it never ends a session,
+repeated calls are expected, and `--meta agents=N` is the key the expression
+engine reads for stereo width. Other keys merge into the session's metadata and
+the engine ignores them.
 
 ## Exit codes
 
@@ -146,6 +163,20 @@ The config rows carry provenance, so a user can see which layer set `music.root`
 rather than guessing between four of them. `--audio-test` plays a two-second tone
 through the daemon and says plainly when nothing could be heard, since a
 diagnostic that reports success into silence is worse than no diagnostic at all.
+
+The supervisor row answers the first question in every bug report: whether `humd`
+is running, who started it, and where its log is. It probes `launchctl print` for
+the Homebrew label and `systemctl --user is-active humd`, and reports "started
+manually" when neither answers — a foreground `humd` is a legitimate way to run it,
+so that is not a failure. The log path is derived from the executable's own
+location: a `hum` at `<prefix>/bin/hum` implies
+`<prefix>/var/log/hum/humd.error.log`. That is the **error** log deliberately —
+`humd` writes its structured log to stderr, which the formula's `error_log_path`
+routes there, so `humd.log` beside it is the stdout file and normally empty.
+`internal/infra` asserts the formula and the path agree. It is printed even with no
+daemon, because a crash log is exactly what a user needs then, and a binary outside
+a `bin/` directory has no prefix to derive, so the row says so rather than inventing
+a path.
 
 ## `hum init`
 

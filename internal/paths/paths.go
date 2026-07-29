@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const EnvHome = "HUM_HOME"
@@ -95,6 +96,33 @@ func EnsureRuntimeDir() error {
 		return fmt.Errorf("create runtime dir %s: %w", dir, err)
 	}
 	return nil
+}
+
+const LogFileName = "humd.error.log"
+
+var executable = os.Executable
+
+func LogFile() (string, bool) {
+	exe, err := executable()
+	if err != nil {
+		return "", false
+	}
+	bin := filepath.Dir(exe)
+	if filepath.Base(bin) != "bin" {
+		return "", false
+	}
+	return filepath.Join(installPrefix(filepath.Dir(bin)), "var", "log", "hum", LogFileName), true
+}
+
+func installPrefix(dir string) string {
+	segments := strings.Split(dir, string(filepath.Separator))
+	switch {
+	case len(segments) >= 4 && segments[len(segments)-3] == "Cellar":
+		return strings.Join(segments[:len(segments)-3], string(filepath.Separator))
+	case len(segments) >= 4 && segments[len(segments)-2] == "opt":
+		return strings.Join(segments[:len(segments)-2], string(filepath.Separator))
+	}
+	return dir
 }
 
 var absolute = filepath.Abs

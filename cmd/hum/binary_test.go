@@ -25,13 +25,18 @@ var buildHum = sync.OnceValues(func() (string, error) {
 
 func runBinary(t *testing.T, socket string, args ...string) (int, string) {
 	t.Helper()
+	return runBinaryWith(t, socket, nil, args...)
+}
+
+func runBinaryWith(t *testing.T, socket string, extra []string, args ...string) (int, string) {
+	t.Helper()
 	binary, err := buildHum()
 	if err != nil {
 		t.Fatalf("build hum: %v", err)
 	}
 
 	cmd := exec.Command(binary, args...)
-	cmd.Env = append(os.Environ(), "HUM_SOCKET="+socket)
+	cmd.Env = append(append(os.Environ(), "HUM_SOCKET="+socket), extra...)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return 0, string(out)
