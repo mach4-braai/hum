@@ -66,6 +66,19 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   deletes all four.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
+- A workflow's `GITHUB_TOKEN` cannot write another repository, so the `tap` job
+  mints a GitHub App installation token: `TAP_APP_CLIENT_ID` is an organisation
+  variable, `TAP_APP_PRIVATE_KEY` an organisation secret, and `internal/infra`
+  asserts the workflow names that one secret and nothing else. The token is
+  revoked when its job ends, so the bump has to live in the job that mints it.
+  Dropping the job leaves the release green and `brew upgrade hum` on the old
+  version.
+- The `tap` job skips any tag containing a hyphen. `prerelease: auto` publishes
+  `v0.2.0-rc1` as a prerelease, and a formula pointing at it would make a release
+  candidate the default `brew install hum`.
+- The bump stages the formula before comparing it. The tap has no
+  `Formula/hum.rb` until the first release, and `git diff --quiet` on an
+  untracked file reports no change, which would skip that first bump.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
 - Voices are released before `renderer.Close`, never after. Closing first cuts

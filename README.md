@@ -112,6 +112,7 @@ usage error, `3` the daemon is unreachable.
 | [themes.md](docs/themes.md) | the theme format and the built-in theme |
 | [session.md](docs/session.md) | the session object and its state machine |
 | [transport.md](docs/transport.md) | the Unix socket server and its lifecycle |
+| [releasing.md](docs/releasing.md) | tagging a release, the Homebrew tap and the credential it needs |
 
 Contributors should read [AGENTS.md](AGENTS.md) first: it carries the comment
 policy, the coverage floor and the list of traps this codebase cannot express in

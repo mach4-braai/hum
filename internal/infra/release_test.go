@@ -203,16 +203,51 @@ func TestMiseDefinesTheSnapshotTask(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowNeedsNoCrossRepositoryCredential(t *testing.T) {
+func TestReleaseWorkflowUsesNoLongLivedCrossRepositoryCredential(t *testing.T) {
 	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
 
-	for _, forbidden := range []string{"TAP_GITHUB_TOKEN", "x-access-token", "homebrew-tap.git"} {
+	for _, forbidden := range []string{
+		"TAP_GITHUB_TOKEN", "PERSONAL_ACCESS_TOKEN", "_PAT",
+		"DEPLOY_KEY", "SSH_PRIVATE_KEY", "x-access-token", "homebrew-tap.git",
+	} {
 		if strings.Contains(workflow, forbidden) {
-			t.Errorf("release.yml references %q; pushing to the tap from here needs a long-lived secret in a public repository", forbidden)
+			t.Errorf("release.yml references %q; the tap is written with an App installation token that expires within the hour, not a long-lived secret", forbidden)
 		}
 	}
-	if found := secretsIn(workflow); len(found) != 0 {
-		t.Errorf("release.yml references secrets.%v; releasing must need no user-managed secret, so use github.token", found)
+
+	found := secretsIn(workflow)
+	if len(found) != 1 || found[0] != "TAP_APP_PRIVATE_KEY" {
+		t.Errorf("release.yml references secrets.%v; the App private key is the only secret a release may need, and the client id belongs in vars", found)
+	}
+}
+
+func TestReleaseWorkflowMintsATapScopedAppToken(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	for _, required := range []string{
+		"actions/create-github-app-token@v3",
+		"client-id: ${{ vars.TAP_APP_CLIENT_ID }}",
+		"private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}",
+		"repositories: homebrew-tap",
+		"permission-contents: write",
+	} {
+		if !strings.Contains(workflow, required) {
+			t.Errorf("release.yml does not carry %q, so the formula bump has no credential for the tap", required)
+		}
+	}
+}
+
+func TestTapBumpFollowsThePublishedRelease(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	if !strings.Contains(workflow, "needs: release") {
+		t.Error("the tap job does not wait for the release, so it would bump the formula to a tag with no published archive")
+	}
+	if !strings.Contains(workflow, "checksums.txt") {
+		t.Error("the tap job does not read the published checksum, so the formula could disagree with the release")
+	}
+	if !strings.Contains(workflow, "if: ${{ !contains(github.ref_name, '-') }}") {
+		t.Error("the tap job is not gated on a stable tag, so a prerelease would become the default brew install")
 	}
 }
 
@@ -228,23 +263,6 @@ func secretsIn(workflow string) []string {
 		found = append(found, name)
 	}
 	return found
-}
-
-func TestTapBumpWorkflowIsSelfContained(t *testing.T) {
-	workflow := readRepoFile(t, "contrib", "homebrew-tap", "bump-formula.yml")
-
-	if found := secretsIn(workflow); len(found) != 0 {
-		t.Errorf("the tap bump workflow references secrets.%v; it must need no user-managed secret, so use github.token", found)
-	}
-	if !strings.Contains(workflow, "contents: write") {
-		t.Error("the tap bump workflow cannot commit without contents: write")
-	}
-	if !strings.Contains(workflow, "workflow_dispatch") {
-		t.Error("the tap bump workflow has no manual trigger, so a release cannot be picked up on demand")
-	}
-	if !strings.Contains(workflow, "checksums.txt") {
-		t.Error("the tap bump workflow does not read the published checksum, so the formula could disagree with the release")
-	}
 }
 
 func TestSecretsInFindsEveryReference(t *testing.T) {
