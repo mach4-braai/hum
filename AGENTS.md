@@ -52,6 +52,12 @@ behaviour, boundaries and error paths — not plumbing.
   variable, not something the `env` expression context is guaranteed to carry, so
   the key is built in a shell step and falls back to `$GITHUB_RUN_ID`: a missing
   image version must miss the cache, never share one.
+- A cache is scoped to the ref that wrote it, and a run on one tag cannot restore a
+  cache written by another tag — only the current ref and the default branch. So
+  the archive is warmed by a `packages` job on `master` pushes and the release only
+  restores it. Caching inside the release job alone writes an entry no release ever
+  reads. Both call `.github/actions/linux-packages`, because a warming job that
+  downloads a different set than the release wants is a cache that never hits.
 - Exit codes and `main` wiring are asserted against the built binary. `go run`
   is useless for this: it reports 1 for any non-zero exit.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be

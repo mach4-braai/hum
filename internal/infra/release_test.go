@@ -148,27 +148,45 @@ func TestReleaseWorkflowBuildsLinuxArtefacts(t *testing.T) {
 	if !strings.Contains(workflow, "HUM_RELEASE_LINUX") {
 		t.Fatal("release.yml does not enable the Linux builds, which are skipped by default")
 	}
-	for _, want := range []string{"libasound2-dev", "aarch64-linux-gnu"} {
-		if !strings.Contains(workflow, want) {
-			t.Errorf("release.yml does not install %q, so the cgo Linux builds would fail", want)
+	action := readRepoFile(t, ".github", "actions", "linux-packages", "action.yml")
+	for _, want := range []string{"libasound2-dev", "libasound2-dev:arm64", "gcc-aarch64-linux-gnu"} {
+		if !strings.Contains(action, want) {
+			t.Errorf("the linux-packages action does not install %q, so the cgo Linux builds would fail", want)
 		}
 	}
 }
 
-func TestReleaseWorkflowInstallsLinuxPackagesFromACache(t *testing.T) {
-	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+const linuxPackages = "./.github/actions/linux-packages"
 
-	if !strings.Contains(workflow, "--download-only") || !strings.Contains(workflow, "dpkg -i") {
-		t.Fatal("release.yml installs its packages straight from the mirror, so a cache hit would save nothing")
+func TestLinuxPackagesComeFromACache(t *testing.T) {
+	action := readRepoFile(t, ".github", "actions", "linux-packages", "action.yml")
+
+	if !strings.Contains(action, "--download-only") || !strings.Contains(action, "dpkg -i") {
+		t.Fatal("the packages are installed straight from the mirror, so a cache hit would save nothing")
 	}
-	if !strings.Contains(workflow, "key: ${{ steps.image.outputs.key }}") {
-		t.Error("the cache key is not built by a shell step, and ImageVersion is a runner process variable that the env context need not carry: an empty expression collapses the key")
+	if !strings.Contains(action, "key: ${{ steps.image.outputs.key }}") {
+		t.Error("the cache key is not built by a shell step, and ImageVersion is a runner process variable the env context need not carry: an empty expression collapses the key")
 	}
-	if !strings.Contains(workflow, "${ImageVersion:-run-$GITHUB_RUN_ID}") {
+	if !strings.Contains(action, "${ImageVersion:-run-$GITHUB_RUN_ID}") {
 		t.Error("a missing ImageVersion must degrade to a cache miss; sharing one key across image revisions installs exact-version debs that dpkg cannot reconcile")
 	}
-	if !strings.Contains(workflow, "steps.packages.outputs.cache-hit != 'true'") {
-		t.Error("release.yml updates the package indices unconditionally, which is the network round trip the cache exists to skip")
+	if !strings.Contains(action, "steps.packages.outputs.cache-hit != 'true'") {
+		t.Error("the action updates the package indices unconditionally, which is the network round trip the cache exists to skip")
+	}
+}
+
+func TestTheDefaultBranchWarmsThePackageCache(t *testing.T) {
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	ci := readRepoFile(t, ".github", "workflows", "ci.yml")
+
+	if !strings.Contains(release, linuxPackages) {
+		t.Errorf("release.yml does not use %s, so the release and the warming job can install different package sets", linuxPackages)
+	}
+	if !strings.Contains(ci, linuxPackages) {
+		t.Fatalf("ci.yml does not use %s: a run on a tag cannot restore a cache created for another tag, so every release would download 62 MB again", linuxPackages)
+	}
+	if !strings.Contains(ci, "github.ref == 'refs/heads/master'") {
+		t.Error("the warming job is not restricted to the default branch, which is the only scope a tag run can restore from")
 	}
 }
 

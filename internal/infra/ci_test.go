@@ -120,20 +120,28 @@ func TestWorkflowsPinEveryActionToAReviewedCommit(t *testing.T) {
 	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+)@(\S+)`)
 	seen := make(map[string]bool, len(pinnedActions))
 
-	var workflows []string
-	for _, pattern := range []string{"*.yml", "*.yaml"} {
-		matches, err := filepath.Glob(filepath.Join(repoRoot(t), ".github", "workflows", pattern))
+	var manifests []string
+	for _, pattern := range []string{
+		filepath.Join(".github", "workflows", "*.yml"),
+		filepath.Join(".github", "workflows", "*.yaml"),
+		filepath.Join(".github", "actions", "*", "action.yml"),
+		filepath.Join(".github", "actions", "*", "action.yaml"),
+	} {
+		matches, err := filepath.Glob(filepath.Join(repoRoot(t), pattern))
 		if err != nil {
 			t.Fatalf("glob %s: %v", pattern, err)
 		}
-		workflows = append(workflows, matches...)
+		manifests = append(manifests, matches...)
 	}
-	if len(workflows) == 0 {
-		t.Fatal("no workflows found, so this asserts nothing")
+	if len(manifests) == 0 {
+		t.Fatal("no workflows or actions found, so this asserts nothing")
 	}
 
-	for _, path := range workflows {
-		file := filepath.Base(path)
+	for _, path := range manifests {
+		file, err := filepath.Rel(repoRoot(t), path)
+		if err != nil {
+			t.Fatalf("relativise %s: %v", path, err)
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatalf("read %s: %v", file, err)
