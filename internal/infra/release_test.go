@@ -290,6 +290,9 @@ func TestGoreleaserDraftsTheReleaseForImmutability(t *testing.T) {
 	if !strings.Contains(config, "draft: true") {
 		t.Error(".goreleaser.yaml publishes directly; an immutable release is frozen the moment it is created, so every asset upload after that returns 422")
 	}
+	if !strings.Contains(config, "replace_existing_draft: true") {
+		t.Error(".goreleaser.yaml leaves an existing draft in place, so re-running a failed release would add a second draft for the same tag beside a half-uploaded first")
+	}
 }
 
 func TestPromoteRunsWhenADraftIsPublished(t *testing.T) {

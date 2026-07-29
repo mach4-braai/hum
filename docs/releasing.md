@@ -12,8 +12,11 @@ git push origin v0.1.3
 
 The `Release` workflow runs `mise run check` on Linux and macOS, then GoReleaser
 builds every target and attaches the archives, the source tarball and
-`checksums.txt` to a **draft** release. Nothing is public and nothing is frozen, so
-a run that fails half way can simply be run again.
+`checksums.txt` to a **draft** release. Nothing is public and nothing is frozen.
+
+A run that dies half way can be run again: `replace_existing_draft` makes GoReleaser
+delete the draft and recreate it, so a retry cannot leave a second draft for the tag
+or a mix of assets from two builds.
 
 ## Publishing one
 

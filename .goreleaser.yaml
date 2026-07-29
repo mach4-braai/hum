@@ -125,6 +125,7 @@ changelog:
 
 release:
   draft: true
+  replace_existing_draft: true
   prerelease: auto
   footer: |
     Install with Homebrew, building from source:

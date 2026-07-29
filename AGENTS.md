@@ -89,7 +89,9 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   published — so `.goreleaser.yaml` sets `draft: true` and uploads into a draft,
   which stays mutable. Publishing directly fails every upload with 422 and leaves a
   release with no assets, as `v0.1.2` records. A deleted immutable release frees its
-  tag for deletion but the name can never be reused.
+  tag for deletion but the name can never be reused. `replace_existing_draft` is what
+  makes a retry deterministic: GoReleaser otherwise adds a second draft for the tag
+  beside the half-uploaded first.
 - Publishing the draft is the promotion, and `promote.yml` listens for it. It
   subscribes to `published` alone, which is the one activity GitHub documents as
   covering publication from a draft, stable or prerelease. `prereleased` is
