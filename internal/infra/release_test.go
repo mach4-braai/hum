@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/mach4-braai/hum/internal/paths"
 )
 
 var stampSymbols = []string{"-X main.version=", "-X main.commit=", "-X main.date="}
@@ -412,5 +414,14 @@ func TestSecretsInFindsEveryReference(t *testing.T) {
 func TestSecretsInReportsNothingWhenThereAreNoSecrets(t *testing.T) {
 	if found := secretsIn("steps:\n  - run: make\n"); len(found) != 0 {
 		t.Errorf("secretsIn = %v, want none", found)
+	}
+}
+
+func TestFormulaRoutesTheDaemonLogWhereDoctorLooks(t *testing.T) {
+	formula := readRepoFile(t, "Formula", "hum.rb")
+
+	want := `error_log_path var/"log/hum/` + paths.LogFileName + `"`
+	if !strings.Contains(formula, want) {
+		t.Errorf("Formula/hum.rb does not carry %s; humd logs to stderr, so that is the file hum doctor reports and the only one a crash lands in", want)
 	}
 }

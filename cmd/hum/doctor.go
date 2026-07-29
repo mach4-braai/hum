@@ -68,6 +68,7 @@ func doctorCollect(e *env, audioTest bool) []doctorCheck {
 	} else {
 		checks = append(checks, doctorCheck{"fail", "daemon", pingDetail})
 	}
+	checks = append(checks, doctorSupervisorCheck(pingOK))
 
 	var st protocol.StatusPayload
 	var statusOK bool

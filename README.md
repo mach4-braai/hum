@@ -77,8 +77,10 @@ Pass `--workspace <name>` to `hum start` to group sessions under a label.
 | `hum init` | write a project configuration file |
 | `hum start` | announce a new work session |
 | `hum stop` | fade out every voice and stop the daemon |
-| `hum complete` | mark a session completed — not yet implemented ([#41](https://github.com/mach4-braai/hum/issues/41)); send `session.completed` over the protocol |
-| `hum fail` | mark a session failed — not yet implemented ([#42](https://github.com/mach4-braai/hum/issues/42)); send `session.failed` over the protocol |
+| `hum complete` | mark a session completed — its drone resolves and stops |
+| `hum fail` | mark a session failed — a descending cadence, then the drone stops |
+| `hum cancel` | mark a session abandoned — the drone stops without a cadence |
+| `hum update` | report progress without ending the session; `--meta agents=N` widens the stereo image |
 | `hum status` | report daemon state and every live session |
 | `hum mute` / `hum unmute` | silence or resume output without stopping |
 | `hum volume [fraction]` | report or set the output volume |

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/mach4-braai/hum/internal/paths"
@@ -16,11 +15,11 @@ func init() {
 	register("start", runStart)
 }
 
-type startMetaFlag map[string]string
+type metaFlag map[string]string
 
-func (m startMetaFlag) String() string { return "" }
+func (m metaFlag) String() string { return "" }
 
-func (m *startMetaFlag) Set(s string) error {
+func (m *metaFlag) Set(s string) error {
 	idx := strings.IndexByte(s, '=')
 	if idx < 0 {
 		return fmt.Errorf("meta %q: expected key=value", s)
@@ -30,7 +29,7 @@ func (m *startMetaFlag) Set(s string) error {
 		return fmt.Errorf("meta: empty key in %q", s)
 	}
 	if *m == nil {
-		*m = make(startMetaFlag)
+		*m = make(metaFlag)
 	}
 	(*m)[key] = s[idx+1:]
 	return nil
@@ -45,7 +44,7 @@ func startRandomID() string {
 func runStart(e *env, words []string) int {
 	var id, workspace, title, rootFlag string
 	var priority int
-	var meta startMetaFlag
+	var meta metaFlag
 
 	rest, ok := operands(e, "start", words, func(f *flag.FlagSet) {
 		f.StringVar(&id, "id", id, "session id")
@@ -62,9 +61,7 @@ func runStart(e *env, words []string) int {
 		return unexpected(e, "start", rest[0])
 	}
 
-	if id == "" {
-		id = os.Getenv("HUM_SESSION_ID")
-	}
+	id = resolveSessionID(id)
 	if id == "" {
 		id = startRandomID()
 	}
