@@ -38,9 +38,13 @@ alternatives go in the issue or PR. Traps go in the list below.
 Every test defends an observable contract and fails on a plausible bug. Test
 behaviour, boundaries and error paths — not plumbing.
 
-- Coverage floor is 98%, enforced by `mise run coverage` and required on
+- Coverage floor is 99.3%, enforced by `mise run coverage` and required on
   `master`. The number lives once, in `mise.toml`; CI publishes it as the
   `coverage/total` status.
+- `go tool cover -func` counts only statements inside function declarations, so
+  the body of a package-level `var f = func(){}` is invisible to the total. The
+  three statements in `newOtoPlayer` open a real audio device and can never run
+  in CI; they are not what keeps the number off 100%.
 - `internal/infra` asserts the build tooling itself: mise tasks, CI workflow,
   `.gitignore`. Anything duplicated across `mise.toml`, `.goreleaser.yaml` and
   the Homebrew formula gets an assertion there, because those three cannot share

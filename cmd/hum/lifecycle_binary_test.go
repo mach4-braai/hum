@@ -147,3 +147,94 @@ func TestBinaryMissingIDNamesTheEnvironmentVariable(t *testing.T) {
 		t.Errorf("output = %q, want it to name %s", out, envSessionID)
 	}
 }
+
+func realDaemonStatus(t *testing.T, socket string) protocol.StatusPayload {
+	t.Helper()
+
+	code, out := runBinary(t, socket, "status", "--json")
+	if code != exitOK {
+		t.Fatalf("hum status exited %d, want %d\n%s", code, exitOK, out)
+	}
+	var status protocol.StatusPayload
+	if err := json.Unmarshal([]byte(out), &status); err != nil {
+		t.Fatalf("decode status payload %q: %v", out, err)
+	}
+	return status
+}
+
+func sessionByID(t *testing.T, status protocol.StatusPayload, id string) protocol.SessionPayload {
+	t.Helper()
+
+	for _, s := range status.Sessions {
+		if s.ID == id {
+			return s
+		}
+	}
+	t.Fatalf("session %q is absent from %+v", id, status.Sessions)
+	return protocol.SessionPayload{}
+}
+
+func TestBinaryLifecycleDrivesARealDaemon(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	d := startHumd(t)
+
+	for _, args := range [][]string{
+		{"start", "--id", "e2e", "--title", "compiling"},
+		{"update", "--id", "e2e", "--title", "linking", "--meta", "step=link"},
+	} {
+		if code, out := runBinary(t, d.socket, args...); code != exitOK {
+			t.Fatalf("hum %v exited %d, want %d\n%s", args, code, exitOK, out)
+		}
+	}
+
+	running := sessionByID(t, realDaemonStatus(t, d.socket), "e2e")
+	if running.State != "active" {
+		t.Errorf("state = %q, want active", running.State)
+	}
+	if running.Title != "linking" {
+		t.Errorf("title = %q, want the updated linking", running.Title)
+	}
+	if running.Updates != 1 {
+		t.Errorf("updates = %d, want 1", running.Updates)
+	}
+	if running.Metadata["step"] != "link" {
+		t.Errorf("metadata = %v, want step=link", running.Metadata)
+	}
+
+	if code, out := runBinary(t, d.socket, "complete", "--id", "e2e"); code != exitOK {
+		t.Fatalf("hum complete exited %d, want %d\n%s", code, exitOK, out)
+	}
+
+	if done := sessionByID(t, realDaemonStatus(t, d.socket), "e2e"); done.State != "completed" {
+		t.Errorf("state = %q, want completed", done.State)
+	}
+
+	code, out := runBinary(t, d.socket, "complete", "--id", "e2e")
+	if code != exitDaemonError {
+		t.Errorf("completing a completed session exited %d, want %d\n%s", code, exitDaemonError, out)
+	}
+}
+
+func TestBinaryTitleCannotForgeASecondEvent(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	d := startHumd(t)
+
+	forged := "compiling\"}\n{\"event\":\"session.failed\",\"id\":\"victim\"}"
+
+	if code, out := runBinary(t, d.socket, "start", "--id", "victim", "--title", forged); code != exitOK {
+		t.Fatalf("hum start exited %d, want %d\n%s", code, exitOK, out)
+	}
+
+	status := realDaemonStatus(t, d.socket)
+	if len(status.Sessions) != 1 {
+		t.Fatalf("daemon tracks %d sessions, want 1: a newline in a title must not open a second request", len(status.Sessions))
+	}
+
+	victim := sessionByID(t, status, "victim")
+	if victim.State != "active" {
+		t.Errorf("state = %q, want active: the forged session.failed line was obeyed", victim.State)
+	}
+	if victim.Title != forged {
+		t.Errorf("title = %q, want it stored verbatim", victim.Title)
+	}
+}

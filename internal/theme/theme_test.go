@@ -81,6 +81,23 @@ func TestLoadUnknownTheme(t *testing.T) {
 	}
 }
 
+func TestLoadCorruptEmbeddedThemeIsNotReportedAsUnknown(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+
+	original := readEmbedded
+	t.Cleanup(func() { readEmbedded = original })
+	readEmbedded = func(string) ([]byte, error) { return []byte("drone: [not a mapping]\n"), nil }
+
+	_, err := Load("minimal")
+
+	if err == nil {
+		t.Fatal("Load of a corrupt embedded theme = nil, want an error")
+	}
+	if !strings.Contains(err.Error(), "embedded theme") {
+		t.Errorf("error = %q, want it to name the embedded theme: a broken build must not read as a user naming a theme that does not exist", err)
+	}
+}
+
 func TestLoadUserThemeUnknownField(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HUM_HOME", home)

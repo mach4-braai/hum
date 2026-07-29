@@ -19,6 +19,8 @@ import (
 //go:embed themes/*.yaml
 var embeddedThemes embed.FS
 
+var readEmbedded = embeddedThemes.ReadFile
+
 var ErrInvalidName = errors.New("invalid theme name")
 
 func checkName(name string) error {
@@ -49,7 +51,7 @@ func Load(name string) (Theme, error) {
 		return Theme{}, fmt.Errorf("read user theme %q: %w", name, err)
 	}
 
-	embedded, embErr := embeddedThemes.ReadFile("themes/" + name + ".yaml")
+	embedded, embErr := readEmbedded("themes/" + name + ".yaml")
 	if embErr != nil {
 		return Theme{}, fmt.Errorf("unknown theme %q; available: %s", name, strings.Join(List(), ", "))
 	}
