@@ -105,30 +105,64 @@ func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 	}
 }
 
-func TestCIPinsActionsOnSupportedNodeRuntime(t *testing.T) {
-	minMajor := map[string]int{
-		"actions/checkout": 5,
-		"actions/cache":    5,
-		"jdx/mise-action":  4,
-	}
+var pinnedActions = map[string]struct {
+	version  string
+	minMajor int
+	commit   string
+}{
+	"actions/cache":                   {"v6.1.0", 5, "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"},
+	"actions/checkout":                {"v7.0.1", 5, "3d3c42e5aac5ba805825da76410c181273ba90b1"},
+	"actions/create-github-app-token": {"v3.2.0", 3, "bcd2ba49218906704ab6c1aa796996da409d3eb1"},
+	"jdx/mise-action":                 {"v4.2.3", 4, "9e7f7633ff6f6d6048a9418a68d48f288f50eb14"},
+}
 
-	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+)@v(\d+)`)
-	found := make(map[string]bool, len(minMajor))
-	for _, m := range uses.FindAllStringSubmatch(readWorkflow(t), -1) {
-		action, major := m[1], m[2]
-		found[action] = true
-		got, err := strconv.Atoi(major)
+func TestWorkflowsPinEveryActionToAReviewedCommit(t *testing.T) {
+	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+)@(\S+)`)
+	seen := make(map[string]bool, len(pinnedActions))
+
+	var workflows []string
+	for _, pattern := range []string{"*.yml", "*.yaml"} {
+		matches, err := filepath.Glob(filepath.Join(repoRoot(t), ".github", "workflows", pattern))
 		if err != nil {
-			t.Fatalf("parse major of %s@v%s: %v", action, major, err)
+			t.Fatalf("glob %s: %v", pattern, err)
 		}
-		if want, tracked := minMajor[action]; tracked && got < want {
-			t.Errorf("%s is pinned at v%d, want at least v%d: earlier majors run on the deprecated node20 runtime", action, got, want)
+		workflows = append(workflows, matches...)
+	}
+	if len(workflows) == 0 {
+		t.Fatal("no workflows found, so this asserts nothing")
+	}
+
+	for _, path := range workflows {
+		file := filepath.Base(path)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		for _, m := range uses.FindAllStringSubmatch(string(data), -1) {
+			action, ref := m[1], m[2]
+			pin, tracked := pinnedActions[action]
+			if !tracked {
+				t.Errorf("%s uses %s, which pinnedActions does not record", file, action)
+				continue
+			}
+			seen[action] = true
+			if ref != pin.commit {
+				t.Errorf("%s pins %s at %s, want %s (%s): a tag can be moved onto code nobody reviewed", file, action, ref, pin.commit, pin.version)
+			}
 		}
 	}
 
-	for action := range minMajor {
-		if !found[action] {
-			t.Errorf("workflow no longer uses %s; drop it from minMajor or restore it", action)
+	for action, pin := range pinnedActions {
+		if !seen[action] {
+			t.Errorf("no workflow uses %s; drop it from pinnedActions or restore it", action)
+			continue
+		}
+		major, err := strconv.Atoi(strings.SplitN(strings.TrimPrefix(pin.version, "v"), ".", 2)[0])
+		if err != nil {
+			t.Fatalf("parse major of %s %s: %v", action, pin.version, err)
+		}
+		if major < pin.minMajor {
+			t.Errorf("%s is recorded at %s, want at least v%d: earlier majors run on the deprecated node20 runtime", action, pin.version, pin.minMajor)
 		}
 	}
 }

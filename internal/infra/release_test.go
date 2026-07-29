@@ -233,7 +233,7 @@ func TestReleaseWorkflowMintsATapScopedAppToken(t *testing.T) {
 	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
 
 	for _, required := range []string{
-		"actions/create-github-app-token@v3",
+		"actions/create-github-app-token@",
 		"client-id: ${{ vars.TAP_APP_CLIENT_ID }}",
 		"private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}",
 		"repositories: homebrew-tap",
