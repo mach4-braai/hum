@@ -207,6 +207,10 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   publishes is the cache-poisoning path zizmor flags, which is also why every mise
   step there sets `cache: false`. The deb archive is the deliberate exception, and
   it is installed with `dpkg`, not compiled from.
+- `windows/arm64` ships because it compiles CGO-free and WinMM has no architecture
+  gate. Neither Windows archive has ever been executed: no runner in the matrix is
+  Windows, `SIGTERM` is not deliverable there, and the liveness probe matches
+  POSIX errnos Winsock does not use. #70 adds the leg that would find out.
 
 ## Protocol
 

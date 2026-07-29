@@ -275,11 +275,24 @@ func TestGoreleaserExcludesDocsAndChoresFromTheChangelog(t *testing.T) {
 	}
 }
 
-func TestGoreleaserExcludesWindowsArm64(t *testing.T) {
+func TestGoreleaserShipsBothArchitecturesForEveryOs(t *testing.T) {
 	release := readRepoFile(t, ".goreleaser.yaml")
 
-	if !strings.Contains(release, "goos: windows") || !strings.Contains(release, "goarch: arm64") {
-		t.Error(".goreleaser.yaml does not ignore windows/arm64, which has no supported audio backend")
+	_, builds, found := strings.Cut(release, "\nbuilds:")
+	if !found {
+		t.Fatal(".goreleaser.yaml declares no builds")
+	}
+	builds, _, _ = strings.Cut(builds, "\narchives:")
+
+	declared := strings.Count(builds, "\n  - id: ")
+	if declared == 0 {
+		t.Fatal(".goreleaser.yaml declares no build ids, so this asserts nothing")
+	}
+	if both := strings.Count(builds, "goarch: [amd64, arm64]"); both != declared {
+		t.Errorf(".goreleaser.yaml declares %d builds and %d that build both architectures", declared, both)
+	}
+	if strings.Contains(builds, "ignore:") {
+		t.Error(".goreleaser.yaml drops an os and architecture pair, so one operating system ships half the machines the others do")
 	}
 }
 

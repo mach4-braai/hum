@@ -52,7 +52,7 @@ name is burned permanently — cut the next version instead.
 ## Before a tag
 
 Every push to `master` runs the same build as a release and publishes nothing:
-`release.yml`'s `snapshot` job builds all ten binaries, the archives and the source
+`release.yml`'s `snapshot` job builds all twelve binaries, the archives and the source
 tarball into `dist/`. It is the only thing that exercises `.goreleaser.yaml`, the
 Linux cross-compile and the archive layout without cutting a tag. It cannot exercise
 publication — that starts at `gh release edit --draft=false`.
