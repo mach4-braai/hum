@@ -85,7 +85,22 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   deletes all four.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
-- A workflow's `GITHUB_TOKEN` cannot write another repository, so the `tap` job
+- Releases are immutable, which freezes assets and the tag the moment a release is
+  published — so `.goreleaser.yaml` sets `draft: true` and uploads into a draft,
+  which stays mutable. Publishing directly fails every upload with 422 and leaves a
+  release with no assets, as `v0.1.2` records. A deleted immutable release frees its
+  tag for deletion but the name can never be reused.
+- Publishing the draft is the promotion, and `promote.yml` listens for it. It
+  subscribes to `published` alone, which is the one activity GitHub documents as
+  covering publication from a draft, stable or prerelease. `prereleased` is
+  documented not to fire for a prerelease published from a draft, and subscribing to
+  `released` as well would risk two deliveries for one publication; the job guards on
+  `!prerelease` instead. Immutability limits post-publication edits to the title and
+  notes, so promoting an already published prerelease is not a path that exists.
+- `promote.yml` checks out `github.event.release.tag_name`, not the default branch.
+  A release published weeks after the tag would otherwise take whatever
+  `Formula/hum.rb` says on `master` now.
+- A workflow's `GITHUB_TOKEN` cannot write another repository, so `promote.yml`
   mints an installation token from the `homebrew-tapper` App. Its client id is
   public — `gh api /apps/homebrew-tapper --jq .client_id` needs no auth — so it is
   a variable, and `internal/infra` asserts the workflow names exactly one secret,
