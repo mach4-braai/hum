@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -229,6 +230,35 @@ func TestProbeLiveEncodeFails(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path); statErr != nil {
 		t.Fatalf("socket file must survive: %v", statErr)
+	}
+}
+
+func TestProbeLiveDecodeEOF(t *testing.T) {
+	server, client := net.Pipe()
+	orig := probeDialer
+	t.Cleanup(func() { probeDialer = orig })
+	probeDialer = func(_ string) (net.Conn, error) {
+		return client, nil
+	}
+	go func() {
+		var req protocol.Request
+		json.NewDecoder(server).Decode(&req)
+		server.Close()
+	}()
+
+	dir := seamDir(t)
+	path := filepath.Join(dir, "t.sock")
+	seamStaleSocket(t, path)
+
+	_, err := NewUnixListener(path, Options{})
+	if err == nil {
+		t.Fatal("want error when peer reads ping and closes without responding")
+	}
+	if !strings.Contains(err.Error(), "probe socket: ping read from") {
+		t.Fatalf("want 'probe socket: ping read from' in error, got: %v", err)
+	}
+	if _, statErr := os.Stat(path); statErr != nil {
+		t.Fatalf("socket file must survive ambiguous probe error: %v", statErr)
 	}
 }
 

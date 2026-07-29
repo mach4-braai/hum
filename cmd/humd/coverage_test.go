@@ -633,3 +633,49 @@ func TestServeEventsReapsBehavior(t *testing.T) {
 		t.Error("active session alive1 was reaped, want it retained")
 	}
 }
+
+func TestServeEventsTickerReapsTerminalSessions(t *testing.T) {
+	d, _ := testDaemon(t)
+	d.reapEvery = time.Millisecond
+	d.reapAfter = 0
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		<-d.stopped
+	})
+	go d.serveEvents(ctx)
+
+	for _, ev := range []protocol.Request{
+		event(protocol.SessionStarted, "tick-alive"),
+		event(protocol.SessionStarted, "tick-reaped"),
+		event(protocol.SessionCompleted, "tick-reaped"),
+	} {
+		reply := make(chan protocol.Response, 1)
+		d.calls <- call{request: ev, reply: reply}
+		if resp := <-reply; !resp.OK {
+			t.Fatalf("%+v = %+v, want ok", ev.Event, resp)
+		}
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for present(d, "tick-reaped") && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+
+	if present(d, "tick-reaped") {
+		t.Error("terminal session survived the reap ticker, so the sweep never ran")
+	}
+	if !present(d, "tick-alive") {
+		t.Error("the reap ticker dropped an active session")
+	}
+}
+
+func present(d *daemon, id string) bool {
+	for _, s := range d.registry.Snapshot() {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}

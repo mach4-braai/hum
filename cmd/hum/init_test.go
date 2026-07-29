@@ -296,3 +296,11 @@ func TestInitUnparsableFlagIsUsageError(t *testing.T) {
 		t.Error("stderr is empty, want a usage error message")
 	}
 }
+
+func TestInitProjectNameFallsBackToFinalPathElement(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "gone", "widget")
+	name := initProjectName(dir)
+	if name != "widget" {
+		t.Errorf("initProjectName = %q, want %q", name, "widget")
+	}
+}

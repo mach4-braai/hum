@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -158,5 +159,23 @@ func TestMainExitsWithRunCode(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "humd") {
 		t.Errorf("main stdout = %q, want the version line", out)
+	}
+}
+
+type errWriter struct{ err error }
+
+func (e errWriter) Write([]byte) (int, error) { return 0, e.err }
+
+func TestVersionWriteFailureExitsWithError(t *testing.T) {
+	var stderr bytes.Buffer
+	w := errWriter{err: errors.New("disk full")}
+
+	code := run([]string{"--version"}, w, &stderr)
+
+	if code != exitError {
+		t.Errorf("exit code = %d, want %d (exitError)", code, exitError)
+	}
+	if !strings.Contains(stderr.String(), "humd:") {
+		t.Errorf("stderr = %q, want it to mention humd:", stderr.String())
 	}
 }

@@ -192,6 +192,35 @@ func TestRegistryUpdatedPreservesWorkspace(t *testing.T) {
 	}
 }
 
+func TestRegistryUpdatedRelabelsWorkspace(t *testing.T) {
+	r := New()
+	_, err := r.Apply(startEvent("rw", "ws-original", "t", 0, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := r.Apply(protocol.Event{
+		Event:     protocol.SessionUpdated,
+		ID:        "rw",
+		Workspace: "ws-new",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Session.Workspace != "ws-new" {
+		t.Errorf("workspace = %q, want ws-new", c.Session.Workspace)
+	}
+	c, err = r.Apply(protocol.Event{
+		Event: protocol.SessionUpdated,
+		ID:    "rw",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Session.Workspace != "ws-new" {
+		t.Errorf("workspace after empty update = %q, want ws-new", c.Session.Workspace)
+	}
+}
+
 func TestSnapshotDeepCopy(t *testing.T) {
 	r := New()
 	_, err := r.Apply(startEvent("dc", "ws", "t", 0, map[string]string{"k": "v"}))

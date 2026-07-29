@@ -125,3 +125,17 @@ func wantLog(t *testing.T) string {
 	}
 	return noLogFile
 }
+
+func TestSupervisorLogReportsKnownPath(t *testing.T) {
+	const knownLog = "/tmp/hum-test-supervisor-log"
+	orig := logFile
+	t.Cleanup(func() { logFile = orig })
+	logFile = func() (string, bool) { return knownLog, true }
+	stubProbe(t, func(string) error { return errors.New("absent") })
+
+	check := doctorSupervisorCheck(false)
+
+	if !strings.Contains(check.Detail, knownLog) {
+		t.Errorf("detail = %q, want it to contain %q", check.Detail, knownLog)
+	}
+}

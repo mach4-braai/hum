@@ -28,7 +28,7 @@ run = "go test ./..."
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
 set -eu
-MINIMUM=98
+MINIMUM=99.3
 go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
