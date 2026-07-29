@@ -246,26 +246,30 @@ func TestMiseDefinesTheSnapshotTask(t *testing.T) {
 	}
 }
 
-func TestReleaseWorkflowUsesNoLongLivedCrossRepositoryCredential(t *testing.T) {
-	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+func TestNeitherWorkflowUsesALongLivedCrossRepositoryCredential(t *testing.T) {
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	promote := readRepoFile(t, ".github", "workflows", "promote.yml")
 
 	for _, forbidden := range []string{
 		"TAP_GITHUB_TOKEN", "PERSONAL_ACCESS_TOKEN", "_PAT",
 		"DEPLOY_KEY", "SSH_PRIVATE_KEY", "x-access-token", "homebrew-tap.git",
 	} {
-		if strings.Contains(workflow, forbidden) {
-			t.Errorf("release.yml references %q; the tap is written with an App installation token that expires within the hour, not a long-lived secret", forbidden)
+		if strings.Contains(release+promote, forbidden) {
+			t.Errorf("a workflow references %q; the tap is written with an App installation token that expires within the hour, not a long-lived secret", forbidden)
 		}
 	}
 
-	found := secretsIn(workflow)
+	if found := secretsIn(release); len(found) != 0 {
+		t.Errorf("release.yml references secrets.%v; building and drafting a release needs no user-managed secret", found)
+	}
+	found := secretsIn(promote)
 	if len(found) != 1 || found[0] != "TAP_APP_PRIVATE_KEY" {
-		t.Errorf("release.yml references secrets.%v; the App private key is the only secret a release may need, and the client id belongs in vars", found)
+		t.Errorf("promote.yml references secrets.%v; the App private key is the only secret it may need, and the client id belongs in vars", found)
 	}
 }
 
-func TestReleaseWorkflowMintsATapScopedAppToken(t *testing.T) {
-	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+func TestPromoteMintsATapScopedAppToken(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "promote.yml")
 
 	for _, required := range []string{
 		"actions/create-github-app-token@",
@@ -275,33 +279,50 @@ func TestReleaseWorkflowMintsATapScopedAppToken(t *testing.T) {
 		"permission-contents: write",
 	} {
 		if !strings.Contains(workflow, required) {
-			t.Errorf("release.yml does not carry %q, so the formula bump has no credential for the tap", required)
+			t.Errorf("promote.yml does not carry %q, so the formula bump has no credential for the tap", required)
 		}
 	}
 }
 
-func TestTapBumpFollowsThePublishedRelease(t *testing.T) {
-	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+func TestGoreleaserDraftsTheReleaseForImmutability(t *testing.T) {
+	config := readRepoFile(t, ".goreleaser.yaml")
 
-	if !strings.Contains(workflow, "needs: release") {
-		t.Error("the tap job does not wait for the release, so it would bump the formula to a tag with no published archive")
+	if !strings.Contains(config, "draft: true") {
+		t.Error(".goreleaser.yaml publishes directly; an immutable release is frozen the moment it is created, so every asset upload after that returns 422")
+	}
+	if !strings.Contains(config, "replace_existing_draft: true") {
+		t.Error(".goreleaser.yaml leaves an existing draft in place, so re-running a failed release would add a second draft for the same tag beside a half-uploaded first")
+	}
+}
+
+func TestPromoteRunsWhenADraftIsPublished(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "promote.yml")
+
+	if !strings.Contains(workflow, "types: [published]") {
+		t.Error("promote.yml does not subscribe to published, the one activity GitHub documents as covering publication from a draft; released and prereleased do not reliably fire for one")
+	}
+	if !strings.Contains(workflow, "!github.event.release.prerelease") {
+		t.Error("promote.yml does not exclude prereleases, so publishing one would make it the default brew install")
+	}
+	if !strings.Contains(workflow, "!contains(github.event.release.tag_name, '-')") {
+		t.Error("promote.yml is not gated on a stable tag name, so a candidate tag published as a release would reach the tap")
+	}
+	if !strings.Contains(workflow, "ref: ${{ github.event.release.tag_name }}") {
+		t.Error("promote.yml does not check out the released tag, so it would rewrite the formula master happens to carry now")
 	}
 	if !strings.Contains(workflow, "checksums.txt") {
-		t.Error("the tap job does not read the published checksum, so the formula could disagree with the release")
-	}
-	if !strings.Contains(workflow, "if: ${{ !contains(github.ref_name, '-') }}") {
-		t.Error("the tap job is not gated on a stable tag, so a prerelease would become the default brew install")
+		t.Error("promote.yml does not read the published checksum, so the formula could disagree with the release")
 	}
 }
 
 func TestTapBumpRefusesToGoBackwards(t *testing.T) {
-	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+	workflow := readRepoFile(t, ".github", "workflows", "promote.yml")
 
 	if !strings.Contains(workflow, "group: tap") {
-		t.Error("the tap job shares no concurrency group, so two releases can rewrite the formula at once")
+		t.Error("the promote workflow shares no concurrency group, so two publishes can rewrite the formula at once")
 	}
 	if !strings.Contains(workflow, "sort -V") {
-		t.Error("the tap job does not compare the tap's version with the tag, so a slower older release would downgrade the formula")
+		t.Error("the promote workflow does not compare the tap's version with the tag, so publishing an older release would downgrade the formula")
 	}
 }
 

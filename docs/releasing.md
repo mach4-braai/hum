@@ -1,38 +1,53 @@
 # Releasing
 
-A release is a tag. Everything else is the `Release` workflow.
+A release is a tag, then a decision. The tag builds a draft; publishing the draft
+ships it.
 
 ## Cutting one
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
-The workflow runs `mise run check` on Linux and macOS, then GoReleaser builds
-every target, publishes the archives, the source tarball and `checksums.txt`,
-and finally the `tap` job rewrites `Formula/hum.rb` in
-[`mach4-braai/homebrew-tap`](https://github.com/mach4-braai/homebrew-tap) so
+The `Release` workflow runs `mise run check` on Linux and macOS, then GoReleaser
+builds every target and attaches the archives, the source tarball and
+`checksums.txt` to a **draft** release. Nothing is public and nothing is frozen.
+
+A run that dies half way can be run again: `replace_existing_draft` makes GoReleaser
+delete the draft and recreate it, so a retry cannot leave a second draft for the tag
+or a mix of assets from two builds.
+
+## Publishing one
+
+Review the draft's assets, then publish it:
+
+```sh
+gh release edit v0.1.3 --draft=false --latest
+```
+
+Publishing is what makes the release immutable — its assets and its tag can never
+change again, and GitHub mints a release attestation binding the tag, the commit and
+the assets. It is also what ships: the `Promote` workflow listens for the
+`published` event and rewrites `Formula/hum.rb` in
+[`mach4-braai/homebrew-tap`](https://github.com/mach4-braai/homebrew-tap), so
 `brew upgrade hum` sees the new version.
 
-A tag containing a hyphen — `v0.2.0-rc1` — is published as a GitHub prerelease
-and does not reach the tap. The `tap` job is gated on the tag name for exactly
-that reason: a formula pointing at a release candidate would make it the default
+Publish with `--prerelease` instead and the tap is left alone: the promote job
+excludes prereleases, and separately excludes any tag containing a hyphen, because a
+formula pointing at `v0.2.0-rc1` would make a candidate the default
 `brew install hum`.
 
-Promoting a candidate is tagging the same commit again, so two tags point at it.
-The workflow pins `GORELEASER_CURRENT_TAG` to the tag that triggered it, because
-GoReleaser would otherwise sort those tags and pick `v0.1.0-rc1` over `v0.1.0`,
-and the stable release would publish the candidate.
+`promote.yml` subscribes to `published` alone, the one activity GitHub documents as
+covering publication from a draft — `prereleased` is documented not to fire for one,
+and adding `released` would risk two deliveries for a single publication. It checks
+out the released tag rather than the default branch, so a release published weeks
+later still uses the formula reviewed at that tag. Publishes are serialised by a
+shared concurrency group, and the bump refuses a version the tap already exceeds, so
+publishing an old draft cannot downgrade the tap.
 
-Releases here are immutable. A run that fails after the release is created cannot
-be retried over the same tag — uploading to a release that already exists returns
-422 — so fix the cause and cut the next tag.
-
-Two tags released close together are serialised: the `tap` job takes a
-concurrency group shared by every release, and it refuses a version the tap
-already exceeds. An older tag finishing last leaves the tap alone rather than
-downgrading it.
+Never reuse a tag. Deleting an immutable release lets you delete its tag, but the
+name is burned permanently — cut the next version instead.
 
 `mise run snapshot` builds the same artefacts into `dist/` without publishing
 anything. Linux archives are skipped unless `HUM_RELEASE_LINUX=1` and an ALSA
