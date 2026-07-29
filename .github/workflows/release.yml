@@ -68,6 +68,7 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           HUM_RELEASE_LINUX: "1"
         run: goreleaser release --clean
 
