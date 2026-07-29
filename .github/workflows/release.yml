@@ -19,9 +19,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
       - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         if: runner.os == 'Linux'
@@ -37,11 +37,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
       - name: "Install the amd64 audio build dependency (drop with oto v3.5, #39)"
         run: |
@@ -80,11 +80,11 @@ jobs:
       group: tap
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Mint a token scoped to the tap alone
         id: tap-token
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
         with:
           client-id: ${{ vars.TAP_APP_CLIENT_ID }}
           private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
@@ -92,7 +92,7 @@ jobs:
           repositories: homebrew-tap
           permission-contents: write
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: ${{ github.repository_owner }}/homebrew-tap
           token: ${{ steps.tap-token.outputs.token }}

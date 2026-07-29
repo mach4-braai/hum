@@ -39,6 +39,12 @@ behaviour, boundaries and error paths — not plumbing.
   `.gitignore`. Anything duplicated across `mise.toml`, `.goreleaser.yaml` and
   the Homebrew formula gets an assertion there, because those three cannot share
   a definition and will otherwise drift apart silently.
+- Workflows pin actions to commits, not tags, so a moved tag cannot swap the code
+  a release runs. `pinnedActions` in `internal/infra` is the one place the commit
+  and its version are written down, since a bare SHA cannot say which release it
+  is. Bumping one is two edits, and the assertion fails until they agree:
+  `gh api repos/<action>/releases/latest --jq .tag_name` then
+  `gh api repos/<action>/commits/<tag> --jq .sha`.
 - Exit codes and `main` wiring are asserted against the built binary. `go run`
   is useless for this: it reports 1 for any non-zero exit.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be
