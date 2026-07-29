@@ -35,7 +35,7 @@ func TestGitignoreExcludesBuildArtefacts(t *testing.T) {
 		lines[strings.TrimSpace(l)] = true
 	}
 
-	for _, want := range []string{"/bin/", "/dist/", "/hum", "/humd", "*.test", "coverage.out"} {
+	for _, want := range []string{"/.gocache/", "/bin/", "/dist/", "/hum", "/humd", "*.test", "coverage.out"} {
 		if !lines[want] {
 			t.Errorf(".gitignore is missing the entry %q", want)
 		}

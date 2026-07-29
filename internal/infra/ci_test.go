@@ -78,14 +78,108 @@ func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	}
 }
 
-func TestCICachesGoModules(t *testing.T) {
+const goCaches = "./.github/actions/go-cache"
+
+func readGoCacheAction(t *testing.T) string {
+	t.Helper()
+	return readRepoFile(t, ".github", "actions", "go-cache", "action.yml")
+}
+
+func TestEveryCIJobRestoresTheGoCaches(t *testing.T) {
 	workflow := readWorkflow(t)
 
-	if !strings.Contains(workflow, "actions/cache") {
-		t.Error("ci workflow does not cache anything")
+	if n := strings.Count(workflow, goCaches); n != 2 {
+		t.Errorf("ci.yml uses %s %d times, want 2: check and coverage download the same modules and compile the same packages", goCaches, n)
 	}
-	if !strings.Contains(workflow, "go/pkg/mod") {
-		t.Error("ci workflow does not cache the Go module directory")
+	if strings.Contains(workflow, "go/pkg/mod") {
+		t.Error("ci.yml caches the toolchain's default directory, which is outside the workspace and named differently on every runner")
+	}
+}
+
+func cachedPath(t *testing.T, step string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(step, "path: ")
+	if !found {
+		t.Fatalf("no path in cache step %q", step)
+	}
+	path, _, _ := strings.Cut(rest, "\n")
+	return strings.TrimSpace(path)
+}
+
+func TestTheModuleCacheIsSharedByEveryRunner(t *testing.T) {
+	action := readGoCacheAction(t)
+
+	modules, _, found := strings.Cut(action, "Cache the compiler output")
+	if !found {
+		t.Fatal("the go-cache action has no compiler output step, so there is nothing to separate the shared cache from")
+	}
+	if !strings.Contains(modules, "enableCrossOsArchive: true") {
+		t.Error("the module cache is written in a format only its own runner can restore, so each operating system keeps a copy of the same sources")
+	}
+	if strings.Contains(modules, "runner.os") {
+		t.Error("the module key names the runner, which is exactly the sharing enableCrossOsArchive exists to allow")
+	}
+
+	path := cachedPath(t, modules)
+	if filepath.IsAbs(path) || strings.ContainsAny(path, "~$") || strings.Contains(path, "{{") {
+		t.Errorf("the module cache path is %q: actions/cache hashes the path it is given into the cache version, so anything that expands per runner gives each one a cache of its own under the same key", path)
+	}
+	if strings.HasPrefix(path, "..") {
+		t.Errorf("the module cache path is %q: `@actions/glob` refuses a pattern that walks out of the workspace, and the step then warns and archives nothing", path)
+	}
+	if !strings.Contains(action, "GOMODCACHE=$GITHUB_WORKSPACE/") {
+		t.Errorf("the module path %q is relative to the workspace but the toolchain still writes elsewhere, so the cache would archive nothing", path)
+	}
+	if strings.Contains(action, "**/go.sum") {
+		t.Error("the key globs every go.sum in the tree, and a restored module cache puts one there per dependency: the key would depend on what it restored")
+	}
+}
+
+func TestTheCompilerOutputCacheStaysWithItsRunner(t *testing.T) {
+	action := readGoCacheAction(t)
+
+	_, build, found := strings.Cut(action, "Cache the compiler output")
+	if !found {
+		t.Fatal("the go-cache action caches no compiler output")
+	}
+	if !strings.Contains(build, "key: ${{ runner.os }}-go-build-") {
+		t.Error("object files are compiled for one GOOS and GOARCH; sharing them under one key stores a cache every runner but the first must ignore")
+	}
+	if strings.Contains(build, "enableCrossOsArchive") {
+		t.Error("the compiler output is offered across operating systems, which pays the archive cost for entries nothing can reuse")
+	}
+	if !strings.Contains(action, "GOCACHE=$GITHUB_WORKSPACE/") {
+		t.Error("the compiler output is left outside the workspace, where a relative cache path cannot reach it")
+	}
+}
+
+func TestTheGoToolsIgnoreTheRestoredCaches(t *testing.T) {
+	action := readGoCacheAction(t)
+	manifest := readRepoFile(t, "mise.toml")
+
+	dir, _, found := strings.Cut(strings.TrimPrefix(cachedPath(t, action), "./"), "/")
+	if !found {
+		t.Fatalf("the cache path %q has no directory to exclude", dir)
+	}
+	_, check, found := strings.Cut(manifest, "\n[tasks.check]")
+	if !found {
+		t.Fatal("mise.toml defines no check task")
+	}
+	check, _, _ = strings.Cut(check, "\n[tasks.")
+	if !strings.Contains(check, "-path ./"+dir+" -prune") {
+		t.Errorf("`mise run check` formats every .go file under the tree, and in CI %s holds the restored module cache: every dependency would be reported unformatted", dir)
+	}
+
+	_, coverage, found := strings.Cut(manifest, "\n[tasks.coverage]")
+	if !found {
+		t.Fatal("mise.toml defines no coverage task")
+	}
+	coverage, _, _ = strings.Cut(coverage, "\n[tasks.")
+	if strings.Contains(coverage, "-coverpkg=./...") {
+		t.Errorf("`-coverpkg` matches loaded packages by directory rather than walking one, so with the module cache in %s every dependency is instrumented and the total falls to around 54%%", dir)
+	}
+	if !strings.Contains(coverage, `-coverpkg="$MODULE/..."`) {
+		t.Error("the coverage set is not pinned to the module's own import path, which is the only pattern the module cache cannot join")
 	}
 }
 

@@ -191,6 +191,22 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `std_go_args` already passes `-trimpath` and adds `-s -w`. The formula spells
   out only the three `-X main.*` symbols, which `internal/infra` matches against
   `mise.toml`.
+- The Go caches live at `.gocache` inside the checkout, and the cache path is
+  written relative. `actions/cache` hashes the path it is given into the cache
+  version, so `/home/runner/go/pkg/mod` and `/Users/runner/go/pkg/mod` are two
+  caches under one key and neither restores the other; `@actions/glob` then
+  refuses any pattern containing `..`, warning and archiving nothing. Relative and
+  inside is the only placement left, and it costs two guards: `mise run check`
+  prunes `.gocache` because gofmt walks dot-directories that `go vet ./...` skips,
+  and coverage measures `$MODULE/...` because `-coverpkg` matches loaded packages
+  by directory rather than by walking one — `./...` instruments every restored
+  dependency and reports about 54%. Only the downloads are shared —
+  `enableCrossOsArchive`, no `runner.os` in the key — since object files are built
+  for one GOOS and GOARCH.
+- Nothing in `release.yml` restores a Go cache. A cache restored into the job that
+  publishes is the cache-poisoning path zizmor flags, which is also why every mise
+  step there sets `cache: false`. The deb archive is the deliberate exception, and
+  it is installed with `dpkg`, not compiled from.
 
 ## Protocol
 

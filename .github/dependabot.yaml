@@ -3,6 +3,7 @@ updates:
   - package-ecosystem: github-actions
     directories:
       - /
+      - /.github/actions/go-cache
       - /.github/actions/linux-packages
     groups:
       github-actions:

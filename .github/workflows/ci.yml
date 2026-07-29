@@ -27,14 +27,8 @@ jobs:
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
-      - name: Cache Go modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-go-
+      - name: Cache the Go modules and the compiler output
+        uses: ./.github/actions/go-cache
 
       - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         if: runner.os == 'Linux'
@@ -57,14 +51,8 @@ jobs:
 
       - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
 
-      - name: Cache Go modules
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-go-
+      - name: Cache the Go modules and the compiler output
+        uses: ./.github/actions/go-cache
 
       - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
         run: |
