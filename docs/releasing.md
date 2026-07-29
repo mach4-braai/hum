@@ -20,6 +20,15 @@ and does not reach the tap. The `tap` job is gated on the tag name for exactly
 that reason: a formula pointing at a release candidate would make it the default
 `brew install hum`.
 
+Promoting a candidate is tagging the same commit again, so two tags point at it.
+The workflow pins `GORELEASER_CURRENT_TAG` to the tag that triggered it, because
+GoReleaser would otherwise sort those tags and pick `v0.1.0-rc1` over `v0.1.0`,
+and the stable release would publish the candidate.
+
+Releases here are immutable. A run that fails after the release is created cannot
+be retried over the same tag — uploading to a release that already exists returns
+422 — so fix the cause and cut the next tag.
+
 Two tags released close together are serialised: the `tap` job takes a
 concurrency group shared by every release, and it refuses a version the tap
 already exceeds. An older tag finishing last leaves the tap alone rather than

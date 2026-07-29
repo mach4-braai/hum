@@ -134,6 +134,14 @@ func TestReleaseWorkflowInstallsGoreleaser(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowPinsTheTagGoreleaserBuilds(t *testing.T) {
+	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	if !strings.Contains(workflow, "GORELEASER_CURRENT_TAG: ${{ github.ref_name }}") {
+		t.Error("release.yml lets goreleaser choose among the tags pointing at HEAD, so promoting a candidate would rebuild the candidate")
+	}
+}
+
 func TestReleaseWorkflowBuildsLinuxArtefacts(t *testing.T) {
 	workflow := readRepoFile(t, ".github", "workflows", "release.yml")
 

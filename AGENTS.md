@@ -77,6 +77,14 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   lands because `homebrew-tapper` is a bypass actor on it. That setting lives in
   the tap, so nothing here can assert it; drop it and the release fails at the
   push with "Changes must be made through a pull request".
+- `GORELEASER_CURRENT_TAG` pins the release to the tag that triggered the run.
+  GoReleaser otherwise takes the first of `git tag --points-at HEAD
+  --sort=-version:refname`, and promoting a candidate means tagging the commit its
+  candidate already tags, where that sort puts `v0.1.0-rc1` ahead of `v0.1.0`. The
+  stable release then builds and publishes the candidate.
+- Releases in this repository are immutable, so a publish that fails part way
+  cannot be re-run over the same tag: uploading to a release that exists returns
+  422. Fix the cause and cut a new tag.
 - The `tap` job skips any tag containing a hyphen. `prerelease: auto` publishes
   `v0.2.0-rc1` as a prerelease, and a formula pointing at it would make a release
   candidate the default `brew install hum`.
