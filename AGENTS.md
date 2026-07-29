@@ -61,11 +61,11 @@ behaviour, boundaries and error paths — not plumbing.
   the key is built in a shell step and falls back to `$GITHUB_RUN_ID`: a missing
   image version must miss the cache, never share one.
 - A cache is scoped to the ref that wrote it, and a run on one tag cannot restore a
-  cache written by another tag — only the current ref and the default branch. So
-  the archive is warmed by a `packages` job on `master` pushes and the release only
+  cache written by another tag — only the current ref and the default branch. So the
+  archive is warmed by the `snapshot` job on `master` pushes and the release only
   restores it. Caching inside the release job alone writes an entry no release ever
-  reads. Both call `.github/actions/linux-packages`, because a warming job that
-  downloads a different set than the release wants is a cache that never hits.
+  reads. Both call `.github/actions/linux-packages`, because a job that warms a
+  different set than the release wants is a cache that never hits.
 - Exit codes and `main` wiring are asserted against the built binary. `go run`
   is useless for this: it reports 1 for any non-zero exit.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be
@@ -99,8 +99,7 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   name is given. Renaming a job to something prettier renames its status check, and
   every pull request then waits forever for one that never reports.
 - A push to `master` runs `mise run snapshot` in `release.yml`, builds every target
-  and publishes nothing. It is also what warms the package cache, so `ci.yml` has no
-  warming job of its own. It exercises the build, the archives and the config; it
+  and publishes nothing. It exercises the build, the archives and the config; it
   cannot exercise publication, so it would not have caught either of the two burnt
   tags.
 - Releases are immutable, which freezes assets and the tag the moment a release is
