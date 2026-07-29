@@ -49,18 +49,25 @@ publishing an old draft cannot downgrade the tap.
 Never reuse a tag. Deleting an immutable release lets you delete its tag, but the
 name is burned permanently — cut the next version instead.
 
-`mise run snapshot` builds the same artefacts into `dist/` without publishing
-anything. Linux archives are skipped unless `HUM_RELEASE_LINUX=1` and an ALSA
-cross-toolchain are present, so a snapshot on macOS covers macOS and Windows
-only.
+## Before a tag
 
-The `aarch64` cross-compiler and the ALSA headers are restored from a cached deb
-archive rather than downloaded. They are 62 MB, and the Ubuntu mirror served them
-at 49 kB/s once — twenty-one minutes, for a build that takes fifty seconds.
+Every push to `master` runs the same build as a release and publishes nothing:
+`release.yml`'s `snapshot` job builds all ten binaries, the archives and the source
+tarball into `dist/`. It is the only thing that exercises `.goreleaser.yaml`, the
+Linux cross-compile and the archive layout without cutting a tag. It cannot exercise
+publication — that starts at `gh release edit --draft=false`.
 
-The cache is written by a `packages` job on every `master` push, not by the release
-itself: a run on a tag can restore only its own ref and the default branch, so an
-archive saved under `v0.1.1` would be invisible to `v0.1.2`. Both use
+`mise run snapshot` is the same command locally. Linux archives are skipped unless
+`HUM_RELEASE_LINUX=1` and an ALSA cross-toolchain are present, so a snapshot on
+macOS covers macOS and Windows only; the job sets that variable and installs the
+toolchain, or it would silently build two thirds of a release.
+
+That job is also what warms the package cache. The `aarch64` cross-compiler and the
+ALSA headers are restored from a cached deb archive rather than downloaded — 62 MB,
+which the Ubuntu mirror once served at 49 kB/s, twenty-one minutes for a build that
+takes fifty seconds. It has to be warmed from the default branch, because a run on a
+tag can restore only its own ref and the default branch: an archive saved under
+`v0.1.1` is invisible to `v0.1.2`. The snapshot job and the release job both call
 `.github/actions/linux-packages`, so the set that is warmed is the set that is
 wanted. Issue #39 deletes all of it when oto ships a stable CGO-free Linux driver.
 

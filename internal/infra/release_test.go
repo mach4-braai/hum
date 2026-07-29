@@ -177,16 +177,59 @@ func TestLinuxPackagesComeFromACache(t *testing.T) {
 
 func TestTheDefaultBranchWarmsThePackageCache(t *testing.T) {
 	release := readRepoFile(t, ".github", "workflows", "release.yml")
-	ci := readRepoFile(t, ".github", "workflows", "ci.yml")
 
-	if !strings.Contains(release, linuxPackages) {
-		t.Errorf("release.yml does not use %s, so the release and the warming job can install different package sets", linuxPackages)
+	if strings.Count(release, linuxPackages) < 2 {
+		t.Fatalf("release.yml uses %s once: a run on a tag cannot restore a cache created for another tag, so the snapshot job on the default branch is what warms it", linuxPackages)
 	}
-	if !strings.Contains(ci, linuxPackages) {
-		t.Fatalf("ci.yml does not use %s: a run on a tag cannot restore a cache created for another tag, so every release would download 62 MB again", linuxPackages)
+	if !strings.Contains(release, "if: github.ref == 'refs/heads/master'") {
+		t.Error("no job is restricted to the default branch, which is the only scope a tag run can restore a cache from")
 	}
-	if !strings.Contains(ci, "github.ref == 'refs/heads/master'") {
-		t.Error("the warming job is not restricted to the default branch, which is the only scope a tag run can restore from")
+	if !strings.Contains(release, "mise run snapshot") {
+		t.Error("the default branch builds no snapshot, so nothing exercises the release path until a tag is cut")
+	}
+	if strings.Count(release, "goreleaser release") != 1 {
+		t.Error("release.yml invokes a publishing goreleaser more than once; a push to the default branch must build artefacts and release nothing")
+	}
+}
+
+func TestReleaseJobsRunOnlyForTags(t *testing.T) {
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+
+	if strings.Count(release, "if: startsWith(github.ref, 'refs/tags/v')") != 2 {
+		t.Error("the check and release jobs are not both gated on a tag, so a push to the default branch would publish or double-run the suite ci.yml already runs")
+	}
+}
+
+func TestWorkflowsSurviveTheZizmorAudits(t *testing.T) {
+	for _, file := range []string{"ci.yml", "promote.yml", "release.yml"} {
+		workflow := readRepoFile(t, ".github", "workflows", file)
+
+		checkouts := strings.Count(workflow, "uses: actions/checkout@")
+		guarded := strings.Count(workflow, "persist-credentials: false") + strings.Count(workflow, "zizmor: ignore[artipacked]")
+		if checkouts != guarded {
+			t.Errorf("%s has %d checkouts but %d that say what becomes of the token: artipacked persists it for everything later in the job", file, checkouts, guarded)
+		}
+
+		_, body, found := strings.Cut(workflow, "\njobs:\n")
+		if !found {
+			t.Fatalf("%s declares no jobs", file)
+		}
+		lines := strings.Split(body, "\n")
+		for i, line := range lines {
+			id, isJob := strings.CutSuffix(line, ":")
+			if !isJob || !strings.HasPrefix(id, "  ") || strings.HasPrefix(id, "   ") {
+				continue
+			}
+			id = strings.TrimPrefix(id, "  ")
+			if want := "    name: " + id; i+1 >= len(lines) || lines[i+1] != want {
+				t.Errorf("%s job %q is not followed by %q: zizmor --pedantic reports an unnamed job, and GitHub derives the status check the master ruleset requires from the id", file, id, want)
+			}
+		}
+	}
+
+	release := readRepoFile(t, ".github", "workflows", "release.yml")
+	if strings.Count(release, "uses: jdx/mise-action@") != strings.Count(release, "cache: false") {
+		t.Error("a mise step in release.yml caches by default, and a cache restored into the job that publishes is the cache-poisoning path zizmor flags")
 	}
 }
 
