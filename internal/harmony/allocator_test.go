@@ -59,8 +59,7 @@ func TestAllocatorReleaseReuse(t *testing.T) {
 	if v.Degree != 1 {
 		t.Errorf("want degree 1 reused, got %d", v.Degree)
 	}
-	want := scale.Degree(root, 1)
-	if v.Pitch != want {
+	if want := mustParsePitch(t, "F3"); v.Pitch != want {
 		t.Errorf("want pitch %v, got %v", want, v.Pitch)
 	}
 }
@@ -110,17 +109,17 @@ func TestAllocatorCap(t *testing.T) {
 	scale := mustLookupScale(t, "minor_pentatonic")
 	a := NewAllocator(root, scale)
 
+	var highest Voice
 	for i := range MaxVoices {
-		a.Acquire(fmt.Sprintf("s%d", i))
+		highest = a.Acquire(fmt.Sprintf("s%d", i))
 	}
 
 	extra := a.Acquire("overflow")
 	if extra.Degree != MaxVoices-1 {
 		t.Errorf("capped voice: want degree %d, got %d", MaxVoices-1, extra.Degree)
 	}
-	wantPitch := scale.Degree(root, MaxVoices-1)
-	if extra.Pitch != wantPitch {
-		t.Errorf("capped voice: want pitch %v, got %v", wantPitch, extra.Pitch)
+	if extra.Pitch != highest.Pitch {
+		t.Errorf("capped voice: want pitch %v shared with the highest degree, got %v", highest.Pitch, extra.Pitch)
 	}
 	if a.Active() != MaxVoices+1 {
 		t.Errorf("want %d active, got %d", MaxVoices+1, a.Active())
@@ -246,5 +245,55 @@ func TestVoicesOrderIsDeterministicPastTheCap(t *testing.T) {
 		if got := order(); !reflect.DeepEqual(got, first) {
 			t.Fatalf("Voices() order = %v on attempt %d, want the stable %v; sessions sharing the capped degree must not depend on map order", got, attempt, first)
 		}
+	}
+}
+
+func TestVoicingLiftsHarmoniesAnOctave(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+	a := NewAllocator(root, scale)
+
+	want := []string{"D2", "F3", "G3", "A3", "C4", "D4"}
+	for degree, name := range want {
+		v := a.Acquire(fmt.Sprintf("s%d", degree))
+		if v.Degree != degree {
+			t.Fatalf("s%d: want degree %d, got %d", degree, degree, v.Degree)
+		}
+		if got := v.Pitch.String(); got != name {
+			t.Errorf("degree %d sounds %s, want %s: harmonies sit an octave above the root", degree, got, name)
+		}
+	}
+}
+
+func TestVoicingStaysWithinTwoOctavesOfTheRoot(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	ceiling := root.Midi() + 24
+
+	for _, name := range ScaleNames() {
+		scale := mustLookupScale(t, name)
+		reached := false
+		for degree := range MaxVoices {
+			p := voicing(root, scale, degree)
+			if p.Midi() < root.Midi() || p.Midi() > ceiling {
+				t.Errorf("%s degree %d sounds %v (midi %d), want within [%d, %d]", name, degree, p, p.Midi(), root.Midi(), ceiling)
+			}
+			reached = reached || p.Midi() == ceiling
+		}
+		if !reached {
+			t.Errorf("%s never reaches %d, want the top harmony exactly two octaves above the root", name, ceiling)
+		}
+	}
+}
+
+func TestVoicingFoldsBackOnceTheScaleRunsOut(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+	steps := len(scale.Intervals)
+
+	if first, folded := voicing(root, scale, 1), voicing(root, scale, steps+1); first != folded {
+		t.Errorf("degree %d sounds %v, want %v shared with degree 1", steps+1, folded, first)
+	}
+	if p := voicing(root, scale, -1); p != root {
+		t.Errorf("negative degree sounds %v, want the root %v", p, root)
 	}
 }

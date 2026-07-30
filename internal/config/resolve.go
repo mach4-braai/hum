@@ -29,9 +29,10 @@ type layerProject struct {
 }
 
 type layerMusic struct {
-	Root  *string `yaml:"root"`
-	Scale *string `yaml:"scale"`
-	Theme *string `yaml:"theme"`
+	Root   *string `yaml:"root"`
+	Octave *int    `yaml:"octave"`
+	Scale  *string `yaml:"scale"`
+	Theme  *string `yaml:"theme"`
 }
 
 type layerAudio struct {
@@ -76,6 +77,10 @@ func applyLayer(out *Config, prov Provenance, d *layerData, layer Layer) {
 	if d.Music.Root != nil {
 		out.Music.Root = *d.Music.Root
 		prov["music.root"] = layer
+	}
+	if d.Music.Octave != nil {
+		out.Music.Octave = *d.Music.Octave
+		prov["music.octave"] = layer
 	}
 	if d.Music.Scale != nil {
 		out.Music.Scale = *d.Music.Scale
@@ -141,6 +146,7 @@ func ResolveSources(s Sources) (*Config, Provenance, error) {
 	prov := Provenance{
 		"project.name": LayerDefault,
 		"music.root":   LayerDefault,
+		"music.octave": LayerDefault,
 		"music.scale":  LayerDefault,
 		"music.theme":  LayerDefault,
 		"audio.volume": LayerDefault,
@@ -184,6 +190,13 @@ func ResolveSources(s Sources) (*Config, Provenance, error) {
 		case "music.root":
 			out.Music.Root = v
 			prov["music.root"] = LayerCLI
+		case "music.octave":
+			iv, parseErr := strconv.Atoi(v)
+			if parseErr != nil {
+				return nil, nil, fmt.Errorf("music.octave: %q is not a valid integer", v)
+			}
+			out.Music.Octave = iv
+			prov["music.octave"] = LayerCLI
 		case "music.scale":
 			out.Music.Scale = v
 			prov["music.scale"] = LayerCLI

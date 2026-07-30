@@ -15,7 +15,7 @@ drone:
   tremolo_hz: 5.0
   detune_cents: 8.0
 phrases:
-  completion_octaves: 2
+  completion_octaves: 1
   completion_duration: 0.2
   completion_gain: 0.7
   failure_interval: -3
@@ -74,7 +74,7 @@ overflows that conversion into a meaningless value. Sixty seconds is far past an
 musically sensible phrase, so the bound rejects the mistake without constraining
 real themes. The same reasoning applies to `drone.attack` and `drone.release`.
 
-**`completion_octaves` note.** `PRD.md` §8 prose says "one or two octaves higher"; the worked example in §8 shows three octaves. The daemon uses two octaves because the prose is the normative statement and three octaves would push a root of A4 above MIDI 127 on a standard keyboard range. This discrepancy is documented here rather than silently resolved.
+**`completion_octaves` note.** `PRD.md` §8 prose says "one or two octaves higher"; the worked example in §8 shows three octaves. `minimal` ships 1, the low end of the prose. Two was right when the drone sat at octave 2, but `music.octave` now defaults to 3 and harmonies sound up to two octaves above that, so a completing voice at C5 would chime at C7 — around 2 kHz at `completion_gain: 0.7`, which is piercing rather than informative. One octave keeps the whole set inside the register the drone already occupies. The daemon's own `DefaultPhraseSpec` still says 2; it has no production caller, and a theme always supplies the real value.
 
 **`cancelled_sounds` rationale.** Cancellation is silent by default. Inventing a third audible cadence risks users conflating cancellation with failure. The flag exists as a seam for future themes that want the distinction.
 

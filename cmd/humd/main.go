@@ -30,7 +30,6 @@ const (
 )
 
 const (
-	droneOctave     = 2
 	shutdownMargin  = 500 * time.Millisecond
 	defaultRenderer = "audio"
 	nopRendererName = "nop"

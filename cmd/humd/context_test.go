@@ -73,8 +73,8 @@ func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
 		t.Fatalf("session.started in project A = %+v", response)
 	}
 	status := statusOf(t, socket)
-	if status.Root != "D2" || status.Scale != "dorian" {
-		t.Fatalf("context after project A = root %q scale %q, want D2 dorian", status.Root, status.Scale)
+	if status.Root != "D3" || status.Scale != "dorian" {
+		t.Fatalf("context after project A = root %q scale %q, want D3 dorian", status.Root, status.Scale)
 	}
 	if status.ContextOwner != a {
 		t.Errorf("context owner = %q, want project A at %q", status.ContextOwner, a)
@@ -84,8 +84,8 @@ func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
 		t.Fatalf("session.started in project B = %+v", response)
 	}
 	status = statusOf(t, socket)
-	if status.Root != "D2" || status.Scale != "dorian" {
-		t.Errorf("context after project B joined = root %q scale %q, want project A's D2 dorian retained", status.Root, status.Scale)
+	if status.Root != "D3" || status.Scale != "dorian" {
+		t.Errorf("context after project B joined = root %q scale %q, want project A's D3 dorian retained", status.Root, status.Scale)
 	}
 	if status.ContextOwner != a {
 		t.Errorf("context owner = %q, want project A still attributed", status.ContextOwner)
@@ -103,8 +103,8 @@ func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
 		t.Fatalf("session.started in project B once idle = %+v", response)
 	}
 	status = statusOf(t, socket)
-	if status.Root != "A2" || status.Scale != "minor_pentatonic" {
-		t.Errorf("context once idle = root %q scale %q, want project B's A2 minor_pentatonic", status.Root, status.Scale)
+	if status.Root != "A3" || status.Scale != "minor_pentatonic" {
+		t.Errorf("context once idle = root %q scale %q, want project B's A3 minor_pentatonic", status.Root, status.Scale)
 	}
 	if status.ContextOwner != b {
 		t.Errorf("context owner = %q, want project B at %q", status.ContextOwner, b)
@@ -129,8 +129,31 @@ func TestProjectConfigIsHonouredFromAnUnrelatedWorkingDirectory(t *testing.T) {
 	}
 
 	status := statusOf(t, socket)
-	if status.Root != "F2" || status.Scale != "lydian" {
-		t.Errorf("context = root %q scale %q, want the project's F2 lydian even though the daemon runs elsewhere", status.Root, status.Scale)
+	if status.Root != "F3" || status.Scale != "lydian" {
+		t.Errorf("context = root %q scale %q, want the project's F3 lydian even though the daemon runs elsewhere", status.Root, status.Scale)
+	}
+}
+
+func TestProjectOctaveSetsTheDroneRegister(t *testing.T) {
+	proj := project(t, "music:\n  root: D\n  octave: 2\n  scale: minor_pentatonic\n")
+
+	d, _ := testDaemon(t)
+	socket, signals, done := startDaemon(t, d)
+	t.Cleanup(func() {
+		signals <- syscall.SIGTERM
+		<-done
+	})
+
+	if response := start(t, socket, "s1", proj); !response.OK {
+		t.Fatalf("session.started = %+v", response)
+	}
+
+	status := statusOf(t, socket)
+	if status.Root != "D2" {
+		t.Errorf("context root = %q, want D2 from the project's octave", status.Root)
+	}
+	if len(status.Sessions) != 1 || status.Sessions[0].Pitch != "D2" {
+		t.Errorf("sessions = %+v, want the first voice sounding D2", status.Sessions)
 	}
 }
 
@@ -147,7 +170,7 @@ func TestSessionWithoutARootUsesGlobalConfig(t *testing.T) {
 	}
 
 	status := statusOf(t, socket)
-	if status.Root != "D2" || status.Scale != "minor_pentatonic" {
+	if status.Root != "D3" || status.Scale != "minor_pentatonic" {
 		t.Errorf("context = root %q scale %q, want the defaults", status.Root, status.Scale)
 	}
 	if status.ContextOwner != "" {
@@ -197,8 +220,8 @@ func TestSymlinkedRootResolvesToTheCanonicalContext(t *testing.T) {
 	}
 
 	status := statusOf(t, socket)
-	if status.Root != "G2" {
-		t.Errorf("context root = %q, want G2 resolved through the symlink", status.Root)
+	if status.Root != "G3" {
+		t.Errorf("context root = %q, want G3 resolved through the symlink", status.Root)
 	}
 	if status.ContextOwner != proj {
 		t.Errorf("context owner = %q, want the canonical path %q so a session is not double-counted", status.ContextOwner, proj)

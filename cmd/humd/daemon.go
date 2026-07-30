@@ -58,7 +58,7 @@ func tuning(cfg *config.Config) (harmony.Pitch, harmony.Scale, error) {
 	if err != nil {
 		return harmony.Pitch{}, harmony.Scale{}, fmt.Errorf("music.scale: %w", err)
 	}
-	return harmony.Pitch{Class: class, Octave: droneOctave}, scale, nil
+	return harmony.Pitch{Class: class, Octave: cfg.Music.Octave}, scale, nil
 }
 
 func releaseWaitFor(th theme.Theme) time.Duration {

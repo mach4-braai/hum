@@ -148,8 +148,8 @@ daemon that writes them and the client that renders them cannot drift.
 
 ```json
 {"ok":true,"data":{
-  "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","pitch":"D2","updates":0,"seconds":12.4}],
-  "theme":"minimal","root":"D2","scale":"minor_pentatonic","context_owner":"/Users/dev/projects/tofu",
+  "sessions":[{"id":"a1","workspace":"tofu","title":"Validate PR #142","state":"active","pitch":"D3","updates":0,"seconds":12.4}],
+  "theme":"minimal","root":"D3","scale":"minor_pentatonic","context_owner":"/Users/dev/projects/tofu",
   "renderer":"audio","renderer_requested":"audio","sample_rate":48000,"version":"0.1.0",
   "volume":0.6,"muted":false,"sounding_voices":1
 }}

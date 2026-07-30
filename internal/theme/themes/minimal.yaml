@@ -8,7 +8,7 @@ drone:
   tremolo_hz: 5.0
   detune_cents: 8.0
 phrases:
-  completion_octaves: 2
+  completion_octaves: 1
   completion_duration: 0.2
   completion_gain: 0.7
   failure_interval: -3

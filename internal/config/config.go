@@ -7,6 +7,11 @@ import (
 	"github.com/mach4-braai/hum/internal/harmony"
 )
 
+const (
+	MinOctave = 1
+	MaxOctave = 6
+)
+
 type Config struct {
 	Project ProjectConfig `yaml:"project"`
 	Music   MusicConfig   `yaml:"music"`
@@ -18,9 +23,10 @@ type ProjectConfig struct {
 }
 
 type MusicConfig struct {
-	Root  string `yaml:"root"`
-	Scale string `yaml:"scale"`
-	Theme string `yaml:"theme"`
+	Root   string `yaml:"root"`
+	Octave int    `yaml:"octave"`
+	Scale  string `yaml:"scale"`
+	Theme  string `yaml:"theme"`
 }
 
 type AudioConfig struct {
@@ -31,9 +37,10 @@ type AudioConfig struct {
 func Default() Config {
 	return Config{
 		Music: MusicConfig{
-			Root:  "D",
-			Scale: "minor_pentatonic",
-			Theme: "minimal",
+			Root:   "D",
+			Octave: 3,
+			Scale:  "minor_pentatonic",
+			Theme:  "minimal",
 		},
 		Audio: AudioConfig{
 			Volume: 0.6,
@@ -47,6 +54,9 @@ func (c Config) Validate() error {
 	}
 	if _, err := harmony.ParseNoteClass(c.Music.Root); err != nil {
 		return fmt.Errorf("music.root: %w", err)
+	}
+	if o := c.Music.Octave; o < MinOctave || o > MaxOctave {
+		return fmt.Errorf("music.octave: %d out of range [%d, %d]", o, MinOctave, MaxOctave)
 	}
 	if c.Music.Scale == "" {
 		return errors.New("music.scale: must not be empty")

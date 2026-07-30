@@ -76,6 +76,8 @@ func initDocument(name string) string {
 	b.WriteString("\n")
 	b.WriteString("music:\n")
 	fmt.Fprintf(&b, "  root: %s\n", d.Music.Root)
+	fmt.Fprintf(&b, "  octave: %d\n", d.Music.Octave)
+	fmt.Fprintf(&b, "  # the drone root sounds here; %d is lowest, %d highest\n", config.MinOctave, config.MaxOctave)
 	fmt.Fprintf(&b, "  scale: %s\n", d.Music.Scale)
 	fmt.Fprintf(&b, "  # valid scales: %s\n", strings.Join(harmony.ScaleNames(), ", "))
 	fmt.Fprintf(&b, "  theme: %s\n", d.Music.Theme)
