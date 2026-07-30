@@ -18,11 +18,11 @@ func readWorkflow(t *testing.T) string {
 	return string(data)
 }
 
-func jobBlock(t *testing.T, workflow, name string) string {
+func jobBlockIn(t *testing.T, data, workflow, name string) string {
 	t.Helper()
-	_, rest, found := strings.Cut(workflow, "\n  "+name+":\n")
+	_, rest, found := strings.Cut(data, "\n  "+name+":\n")
 	if !found {
-		t.Fatalf("ci.yml has no %s job", name)
+		t.Fatalf("%s has no %s job", workflow, name)
 	}
 	if next := regexp.MustCompile(`\n  [a-z0-9-]+:\n`).FindStringIndex(rest); next != nil {
 		rest = rest[:next[0]]
@@ -30,12 +30,39 @@ func jobBlock(t *testing.T, workflow, name string) string {
 	return rest
 }
 
-func TestCIChecksEverySupportedPlatform(t *testing.T) {
+func jobBlock(t *testing.T, workflow, name string) string {
+	t.Helper()
+	return jobBlockIn(t, workflow, "ci.yml", name)
+}
+
+func TestCIChecksBothPOSIXPlatforms(t *testing.T) {
 	block := jobBlock(t, readWorkflow(t), "check")
 
-	for _, runner := range []string{"ubuntu-latest", "macos-latest", "windows-latest"} {
+	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
 		if !strings.Contains(block, runner) {
-			t.Errorf("the check job does not run on %s, so its archives would ship untested", runner)
+			t.Errorf("the check job does not run on %s", runner)
+		}
+	}
+	if strings.Contains(block, "windows-latest") {
+		t.Error("the check job claims windows-latest; `mise run check` does not pass there yet (#82) and the Windows job is what covers that platform")
+	}
+}
+
+func TestCIExecutesAWindowsBinary(t *testing.T) {
+	for _, workflow := range []string{"ci.yml", "release.yml"} {
+		data := readRepoFile(t, ".github", "workflows", workflow)
+		block := jobBlockIn(t, data, workflow, "windows")
+
+		if !strings.Contains(block, "windows-latest") {
+			t.Errorf("%s: the windows job does not run on a Windows runner", workflow)
+		}
+		if !strings.Contains(block, "go vet ./...") {
+			t.Errorf("%s: the windows job does not vet, so a Windows-only compile break could ship", workflow)
+		}
+		for _, want := range []string{"bin/humd.exe", "bin/hum.exe", "stop"} {
+			if !strings.Contains(block, want) {
+				t.Errorf("%s: the windows job does not exercise %s; the archives would ship unexecuted again", workflow, want)
+			}
 		}
 	}
 }

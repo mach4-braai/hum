@@ -140,16 +140,21 @@ through purego on macOS and needs no cgo; Linux links ALSA, so Linux builds
 require a C toolchain until [#39](https://github.com/mach4-braai/hum/issues/39)
 lands.
 
-Windows archives are built for `amd64` and `arm64` and are **best-effort**.
-`mise run check` runs on `windows-latest` on every pull request and on every
-release tag, and a smoke step there starts `humd`, answers `hum status`, and
-stops it through `hum stop` with the socket removed — so the archives are no
-longer shipped unexecuted. What is *not* covered:
+Windows archives are built for `amd64` and `arm64` and are **best-effort**. A
+`windows` job runs on every pull request and gates every release tag: it vets the
+whole module and then starts `humd`, answers `hum status`, and stops it through
+`hum stop` with the socket removed. So the archives are no longer shipped
+unexecuted. What is *not* covered:
 
+- **The unit suite does not pass on Windows.** `mise run check` runs on macOS and
+  Linux only. Roughly forty tests assume POSIX — file modes, `chmod`-enforced
+  read-only directories, `/`-rooted absolute paths, executables without `.exe` —
+  and one hangs. [#82](https://github.com/mach4-braai/hum/issues/82) enumerates
+  them.
 - The acceptance suite (`mise run e2e`) runs on macOS and Linux only. It drives
   `SIGTERM`, which Windows does not deliver.
 - `SIGINT` and `SIGTERM` do not stop a Windows daemon. `hum stop` over the socket
-  is the supported way, and it is the path the smoke step exercises.
+  is the supported way, and it is the path the job exercises.
 - Terminal width is not detected, so `hum status` never truncates long titles —
   the same behaviour as a piped stdout.
 - No supervisor integration. There is no `brew services` and no systemd unit.

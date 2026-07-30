@@ -205,16 +205,29 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   matching it proves nothing. The liveness probe therefore goes through
   `notListening`, split across `probe_other.go` and `probe_windows.go`, rather
   than comparing errnos inline.
-- The `check` task pins `shell = "bash -c"`. Its script is POSIX — `find`,
-  `xargs`, `$(…)` — and mise runs task scripts under `cmd` on Windows, where none
-  of that parses. Every task the Windows leg runs needs the same pin.
-- `check (windows-latest)` is a new status context. The `master` ruleset requires
-  `check (ubuntu-latest)`, `check (macos-latest)` and `coverage`; adding the leg
-  does not add it to the ruleset, so it can go red without blocking a merge until
-  someone adds it there.
-- `mise run e2e` is macOS and Linux only. It sends `SIGTERM` to a daemon, which
-  Windows does not deliver, and `internal/infra` asserts the `e2e` job does not
-  claim `windows-latest` so nobody adds it back on a hunch.
+- The `build` and `check` tasks pin `shell = "bash -c"`. Their scripts are POSIX —
+  `find`, `xargs`, `$(…)` — and mise runs task scripts under `cmd` on Windows,
+  where none of that parses. Anything the `windows` job runs needs the same pin.
+  The build stamps live inside `build` for the same reason: a `[tasks.build]`
+  script can pin a shell, an `[env]` entry cannot, and mise evaluates `[env]`
+  before every command, so `date -u +…` there breaks `mise install` itself.
+- `-o bin/hum` is taken literally, so a Windows build without `$(go env GOEXE)`
+  produces an extension-less file that `CreateProcess` will not run — the error
+  is `executable file not found in %PATH%` for a file that plainly exists.
+- `.gitattributes` pins `eol=lf`. Git for Windows checks out CRLF by default and
+  `gofmt -l` then reports every file in the repository as unformatted, which is a
+  symptom that names the wrong tool entirely.
+- Windows is covered by its own `windows` job, not by the `check` matrix.
+  `mise run check` does **not** pass there: about forty tests assume POSIX file
+  modes, `chmod`-enforced read-only directories, `/`-rooted absolute paths and
+  extension-less executables, and `TestWriteReportsSyncFailureOnPipe` hangs until
+  the package times out. #82 enumerates them from a real run. `internal/infra`
+  asserts the `check` and `e2e` jobs do not claim `windows-latest`, so nobody adds
+  either back on a hunch.
+- `protocol.Event.Validate` calls `filepath.IsAbs`, so `/tmp/project` is not an
+  absolute root on Windows. `internal/protocol` is a published contract and
+  `docs/protocol.md` says `root` is absolute without saying whose absolute, which
+  is a protocol question rather than a test bug. Part of #82.
 - The Linux release builds are skipped unless `HUM_RELEASE_LINUX=1`, so
   `mise run snapshot` works on macOS where no ALSA cross-toolchain exists. The
   release workflow sets it; forgetting it ships a release with no Linux archives.
