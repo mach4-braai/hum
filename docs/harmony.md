@@ -153,6 +153,11 @@ makes `root + 24` semitones the exact ceiling: on `minor_pentatonic` degree 5
 sounds D4, and degree 6 shares F3 with degree 1. The top harmony of every
 built-in scale lands exactly two octaves above the root.
 
+The root's own register is `music.octave`, defaulting to 3, so the voices a
+default install actually sounds are D3, F4, G4, A4, C5, D5. The table above is
+rooted at D2 because that is what the change to lifted voicing replaced; both
+the register and the lift are visible in `hum status`.
+
 The price is shared pitches beyond `len(Intervals) + 1` concurrent sessions —
 six voices on a pentatonic, eight on a seven-note scale — where the old mapping
 kept all twelve distinct by climbing to F4. That is deliberate: three concurrent

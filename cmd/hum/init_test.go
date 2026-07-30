@@ -54,6 +54,9 @@ func TestInitWritesValidConfigWithGitRoot(t *testing.T) {
 	if cfg.Music.Root != d.Music.Root {
 		t.Errorf("music.root = %q, want %q", cfg.Music.Root, d.Music.Root)
 	}
+	if cfg.Music.Octave != d.Music.Octave {
+		t.Errorf("music.octave = %d, want %d", cfg.Music.Octave, d.Music.Octave)
+	}
 	if cfg.Music.Scale != d.Music.Scale {
 		t.Errorf("music.scale = %q, want %q", cfg.Music.Scale, d.Music.Scale)
 	}

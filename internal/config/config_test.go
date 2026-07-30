@@ -4,11 +4,32 @@ import (
 	"math"
 	"strings"
 	"testing"
+
+	"github.com/mach4-braai/hum/internal/harmony"
 )
 
 func TestDefaultPassesValidate(t *testing.T) {
 	if err := Default().Validate(); err != nil {
 		t.Fatalf("Default().Validate() = %v, want nil", err)
+	}
+}
+
+func TestOctaveBoundsKeepEveryHarmonyInsideMidi(t *testing.T) {
+	scale := harmony.Scale{Intervals: []int{0}}
+	for _, octave := range []int{MinOctave, MaxOctave} {
+		c := Default()
+		c.Music.Octave = octave
+		if err := c.Validate(); err != nil {
+			t.Fatalf("octave %d rejected: %v", octave, err)
+		}
+		for class := range 12 {
+			root := harmony.Pitch{Class: class, Octave: octave}
+			ceiling := scale.Degree(root, 0).Transpose(24)
+			if root.Midi() < harmony.MinMidi || ceiling.Midi() > harmony.MaxMidi {
+				t.Errorf("octave %d class %d spans midi %d..%d, want inside [%d, %d]",
+					octave, class, root.Midi(), ceiling.Midi(), harmony.MinMidi, harmony.MaxMidi)
+			}
+		}
 	}
 }
 
@@ -42,6 +63,16 @@ func TestValidateFieldErrors(t *testing.T) {
 			name:   "root carries an octave",
 			mutate: func(c *Config) { c.Music.Root = "D2" },
 			want:   "music.root",
+		},
+		{
+			name:   "octave below the floor",
+			mutate: func(c *Config) { c.Music.Octave = MinOctave - 1 },
+			want:   "music.octave",
+		},
+		{
+			name:   "octave above the ceiling",
+			mutate: func(c *Config) { c.Music.Octave = MaxOctave + 1 },
+			want:   "music.octave",
 		},
 		{
 			name:   "scale is not a built-in",

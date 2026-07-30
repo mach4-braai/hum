@@ -302,8 +302,8 @@ func TestPhraseSpecFromMinimal(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	ps := th.PhraseSpec()
-	if ps.CompletionOctaves != 2 {
-		t.Errorf("CompletionOctaves = %d, want 2", ps.CompletionOctaves)
+	if ps.CompletionOctaves != 1 {
+		t.Errorf("CompletionOctaves = %d, want 1: a completion an octave over the drone stays out of the shrill register", ps.CompletionOctaves)
 	}
 	if ps.FailureInterval != -3 {
 		t.Errorf("FailureInterval = %d, want -3", ps.FailureInterval)

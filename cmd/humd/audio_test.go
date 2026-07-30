@@ -122,8 +122,8 @@ func TestStatusReportsTheSoundingPitchOfEachSession(t *testing.T) {
 	if len(status.Sessions) != 1 {
 		t.Fatalf("status reported %d sessions, want 1", len(status.Sessions))
 	}
-	if status.Sessions[0].Pitch != "D2" {
-		t.Errorf("pitch = %q, want D2 so an operator can correlate what they hear", status.Sessions[0].Pitch)
+	if status.Sessions[0].Pitch != "D3" {
+		t.Errorf("pitch = %q, want D3 so an operator can correlate what they hear", status.Sessions[0].Pitch)
 	}
 
 	send(t, socket, event(protocol.SessionCompleted, "s1"))

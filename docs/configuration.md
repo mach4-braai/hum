@@ -74,8 +74,8 @@ maps to the layer that supplied it. Fields untouched by any layer report
 `LayerDefault`. `hum doctor` uses provenance to explain which layer set a
 given field.
 
-Field paths tracked: `project.name`, `music.root`, `music.scale`,
-`music.theme`, `audio.volume`, `audio.muted`.
+Field paths tracked: `project.name`, `music.root`, `music.octave`,
+`music.scale`, `music.theme`, `audio.volume`, `audio.muted`.
 
 ## Keys and defaults
 
@@ -83,6 +83,7 @@ Field paths tracked: `project.name`, `music.root`, `music.scale`,
 |---|---|---|---|
 | `project.name` | `""` (empty) | `project.name` | `project.name` |
 | `music.root` | `"D"` | `music.root` | `music.root` |
+| `music.octave` | `3` | `music.octave` | `music.octave` |
 | `music.scale` | `"minor_pentatonic"` | `music.scale` | `music.scale` |
 | `music.theme` | `"minimal"` | `music.theme` | `music.theme` |
 | `audio.volume` | `0.6` | `audio.volume` | `audio.volume` |
@@ -91,8 +92,26 @@ Field paths tracked: `project.name`, `music.root`, `music.scale`,
 `minimal` is the default theme because PRD.md §20 permits exactly one
 built-in theme for the MVP. `orchestra` from the §13 example is Phase 2.
 
-`music.root` is a bare note class: `D` and `F#` resolve; `D2` does not,
-because the octave is the engine's choice and not the user's.
+`music.root` is a bare note class: `D` and `F#` resolve; `D2` does not. The
+register lives in `music.octave` instead, so the class and the register can be
+set from different layers — a project may pick the note while the global file
+decides how low the machine plays it.
+
+`music.octave` is the octave the drone root sounds in, in scientific pitch
+notation: `3` puts a root of D at D3, 146.8 Hz. Harmonies sound above it, up to
+two octaves higher, so the audible span at octave 3 is D3 to D5. Valid range is
+`[1, 6]` (`config.MinOctave`, `config.MaxOctave`): octave 1 keeps the
+fundamental above about 30 Hz, and 6 is the highest octave whose two-octave
+harmony ceiling still lands inside MIDI 127 for every note class.
+
+The default is 3 rather than 2 on register grounds, not physiology. Huron
+reports F2–G5 as the region of maximum pitch weight, the earcon literature
+recommends a floor around 125–150 Hz for tones meant to carry information, and
+small laptop drivers roll off below roughly 150–200 Hz — a 73 Hz fundamental is
+felt more than heard, and what reaches the ear is largely the second harmonic
+the drone adds at `2f`. Pitch weight varies continuously, so this is a taste
+default, not a threshold: set `octave: 2` for a deeper bed and accept the
+roughness that comes with it.
 
 `music.scale` and `music.theme` are validated on resolution. Root and scale
 are checked against the harmony tables (`harmony.ParseNoteClass`,
@@ -111,6 +130,7 @@ project:
 
 music:
   root: D
+  octave: 3
   scale: minor_pentatonic
   theme: minimal
 

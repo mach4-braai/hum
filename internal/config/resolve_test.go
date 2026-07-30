@@ -173,6 +173,7 @@ func TestResolveCLIAllFields(t *testing.T) {
 	overrides := map[string]string{
 		"project.name": "myproject",
 		"music.root":   "A",
+		"music.octave": "2",
 		"music.scale":  "major",
 		"music.theme":  "minimal",
 		"audio.volume": "0.3",
@@ -188,16 +189,55 @@ func TestResolveCLIAllFields(t *testing.T) {
 	if c.Music.Root != "A" {
 		t.Errorf("Root = %q, want A", c.Music.Root)
 	}
+	if c.Music.Octave != 2 {
+		t.Errorf("Octave = %d, want 2", c.Music.Octave)
+	}
 	if c.Audio.Volume != 0.3 {
 		t.Errorf("Volume = %v, want 0.3", c.Audio.Volume)
 	}
 	if !c.Audio.Muted {
 		t.Error("Muted = false, want true")
 	}
-	for _, key := range []string{"project.name", "music.root", "music.scale", "music.theme", "audio.volume", "audio.muted"} {
+	for _, key := range []string{"project.name", "music.root", "music.octave", "music.scale", "music.theme", "audio.volume", "audio.muted"} {
 		if prov[key] != LayerCLI {
 			t.Errorf("prov[%s] = %q, want cli", key, prov[key])
 		}
+	}
+}
+
+func TestResolveCLIInvalidOctave(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := Resolve(map[string]string{"music.octave": "low"}, dir)
+	if err == nil {
+		t.Fatal("expected error for a non-integer octave")
+	}
+	if !strings.Contains(err.Error(), "music.octave") {
+		t.Errorf("error %q does not identify music.octave", err)
+	}
+}
+
+func TestResolveOctaveFromProjectLayer(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	projDir := filepath.Join(tmp, "myproject")
+	writeYAML(t, filepath.Join(projDir, ".hum"), "music:\n  root: D\n  octave: 2\n")
+
+	c, prov, err := Resolve(nil, projDir)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if c.Music.Octave != 2 {
+		t.Errorf("Octave = %d, want the project's 2", c.Music.Octave)
+	}
+	if prov["music.octave"] != LayerProject {
+		t.Errorf("prov[music.octave] = %q, want project", prov["music.octave"])
 	}
 }
 
