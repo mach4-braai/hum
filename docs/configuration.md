@@ -62,7 +62,7 @@ to a project file; it wins over it.
 | `default` | Hard-coded in `Default()` | `LayerDefault` |
 | `global` | `~/.hum/config.yaml` (or `$HUM_HOME`) | `LayerGlobal` |
 | `project` | Nearest `.hum/config.yaml` upward | `LayerProject` |
-| `cli` | `cliOverrides` map passed by the CLI | `LayerCLI` |
+| `cli` | `cliOverrides` map passed to `Resolve` | `LayerCLI` |
 
 `Resolve` finds the global path via `paths.GlobalConfigFile()` and the
 project path via `paths.ProjectConfigFile(startDir)`.
@@ -79,7 +79,7 @@ Field paths tracked: `project.name`, `music.root`, `music.octave`,
 
 ## Keys and defaults
 
-| Field path | Default | YAML key | CLI override key |
+| Field path | Default | YAML key | `cliOverrides` key |
 |---|---|---|---|
 | `project.name` | `""` (empty) | `project.name` | `project.name` |
 | `music.root` | `"D"` | `music.root` | `music.root` |
@@ -88,6 +88,11 @@ Field paths tracked: `project.name`, `music.root`, `music.octave`,
 | `music.theme` | `"minimal"` | `music.theme` | `music.theme` |
 | `audio.volume` | `0.6` | `audio.volume` | `audio.volume` |
 | `audio.muted` | `false` | `audio.muted` | `audio.muted` |
+
+Every key is settable in YAML only. The last column names the `cli` layer's key
+in `Resolve`'s `cliOverrides` map, which neither `hum` nor `humd` passes — no
+flag reaches it. It is a seam for a future flag set, not a documented user
+interface.
 
 `minimal` is the default theme because PRD.md §20 permits exactly one
 built-in theme for the MVP. `orchestra` from the §13 example is Phase 2.

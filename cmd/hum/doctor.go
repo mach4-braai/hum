@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/mach4-braai/hum/internal/config"
@@ -170,6 +171,7 @@ func doctorConfigChecks(cfg *config.Config, prov config.Provenance) []doctorChec
 	fields := []field{
 		{"project.name", cfg.Project.Name},
 		{"music.root", cfg.Music.Root},
+		{"music.octave", strconv.Itoa(cfg.Music.Octave)},
 		{"music.scale", cfg.Music.Scale},
 		{"music.theme", cfg.Music.Theme},
 		{"audio.volume", fmt.Sprintf("%g", cfg.Audio.Volume)},
@@ -201,13 +203,15 @@ func doctorThemeCheck(name string) doctorCheck {
 }
 
 func doctorMusicCheck(cfg *config.Config) doctorCheck {
-	if _, err := harmony.ParseNoteClass(cfg.Music.Root); err != nil {
+	class, err := harmony.ParseNoteClass(cfg.Music.Root)
+	if err != nil {
 		return doctorCheck{"fail", "music", fmt.Sprintf("root %q: %v", cfg.Music.Root, err)}
 	}
 	if _, err := harmony.LookupScale(cfg.Music.Scale); err != nil {
 		return doctorCheck{"fail", "music", fmt.Sprintf("scale %q: %v", cfg.Music.Scale, err)}
 	}
-	return doctorCheck{"pass", "music", fmt.Sprintf("root %s, scale %s", cfg.Music.Root, cfg.Music.Scale)}
+	sounding := harmony.Pitch{Class: class, Octave: cfg.Music.Octave}
+	return doctorCheck{"pass", "music", fmt.Sprintf("root %s, scale %s", sounding, cfg.Music.Scale)}
 }
 
 func doctorAudioCheck(st protocol.StatusPayload) doctorCheck {

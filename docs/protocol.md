@@ -203,6 +203,19 @@ $ printf '{"event":"session.started","id":"a1","title":"build"}\n{"event":"sessi
 {"ok":true}
 ```
 
-`nc -U` is used above because macOS ships it. Where `nc` has no `-U`,
-`socat - UNIX-CONNECT:$HOME/.hum/humd.sock` opens the same connection. Every
-example here is verified against `nc -U` only.
+`nc -U` is used above because macOS ships it. Where `nc` has no `-U`, `socat`
+opens the same connection, and the same two examples were run through it against
+a live daemon:
+
+```
+$ printf '{"command":"ping"}\n' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
+{"ok":true}
+$ printf '{"event":"session.started","id":"s1","title":"socat check"}\n{"command":"status"}\n' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
+{"ok":true}
+{"ok":true,"data":{"sessions":[{"id":"s1","title":"socat check","state":"active","pitch":"D3",...}],...}}
+```
+
+Despite the name `socat` is a separate program, not a variant of `cat`: `cat`
+only opens a path, and a Unix socket needs `socket` plus `connect`. Against a
+live daemon `cat humd.sock` fails with `No such device or address` and
+`cat > humd.sock` with `Operation not supported on socket`.
