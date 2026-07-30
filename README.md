@@ -32,8 +32,8 @@ brew services stop hum
 ```
 
 Logs go to `$(brew --prefix)/var/log/hum/humd.log` and `humd.error.log`. The
-supervisor restarts `humd` only if it crashes, so a deliberate `hum stop` stays
-stopped.
+supervisor restarts `humd` when it exits abnormally, so a crash is recovered
+while a deliberate `hum stop` stays stopped.
 
 ### From source
 
@@ -43,9 +43,21 @@ also need ALSA headers (`libasound2-dev` and `pkg-config`); macOS needs neither.
 ```sh
 git clone https://github.com/mach4-braai/hum
 cd hum
-mise run build              # binaries into bin/
-PREFIX=/usr/local mise run install
+mise run build                     # binaries into bin/
+PREFIX="$HOME/.local" mise run install
 ```
+
+On Linux, `contrib/systemd/humd.service` runs that install under the session
+manager. It is a **user** unit — Hum needs the calling user's audio session, and
+a system unit has no reachable PulseAudio or PipeWire socket:
+
+```sh
+install -Dm644 contrib/systemd/humd.service ~/.config/systemd/user/humd.service
+systemctl --user enable --now humd
+```
+
+`ExecStart` is `%h/.local/bin/humd`; edit that line if you installed under a
+different `PREFIX`.
 
 ## Quickstart
 

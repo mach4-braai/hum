@@ -141,6 +141,41 @@ Voices are released strictly before the renderer closes. The reverse order would
 close the device while a fade was still owed, which is the click the envelope
 exists to prevent.
 
+## Supervision
+
+`humd` is meant to run under a supervisor, and the only supervisor policy that
+works is "restart on abnormal exit". A clean `hum stop` must stay stopped, or the
+stop command is a no-op from the user's point of view.
+
+Homebrew's `keep_alive` expresses this differently on each platform, so
+`Formula/hum.rb` branches on `OS.mac?`:
+
+| Platform | `keep_alive` | Generated |
+|---|---|---|
+| macOS | `successful_exit: false` | `KeepAlive = { SuccessfulExit = false }` |
+| Linux | `crashed: true` | `Restart=on-failure` |
+
+Neither value works on both. `crashed: true` maps to launchd's
+`KeepAlive { Crashed = true }`, which restarts only a process killed **by a
+signal** — and a Go program is never killed by one. The runtime installs handlers
+for the fatal signals, prints a traceback, and exits **2**. Measured against
+v0.1.6 under `brew services`: `kill -9` left `runs = 1`, `last exit code = 2` and
+no restart, and so did `SIGABRT` and `SIGSEGV`, each after a full runtime crash
+dump. A panic takes the same exit. So on launchd, `Crashed` never fires for
+`humd` and the daemon simply stays dead.
+
+`successful_exit: false` is right there — launchd restarts on any non-zero exit,
+which is what a Go crash is, and `hum stop` exits 0 and is left alone. But
+Homebrew's systemd translation tests `@keep_alive[:successful_exit].present?`, and
+`false.present?` is false in ActiveSupport, so that branch emits **no** `Restart=`
+line at all. On Linux `crashed: true` is the value that produces
+`Restart=on-failure`, which is the intended semantics there.
+
+`contrib/systemd/humd.service` covers source installs and says
+`Restart=on-failure` directly. `RestartSec=5` bounds a restart loop: a daemon
+respawning ten times a second on a bad config would out-log anything the daemon
+itself writes.
+
 ## Reaping
 
 A terminal session is dropped once it is older than the reap window, on a ticker

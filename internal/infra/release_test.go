@@ -94,16 +94,46 @@ func TestFormulaServiceSurvivesACleanStop(t *testing.T) {
 	if !strings.Contains(formula, "service do") {
 		t.Fatal("Formula/hum.rb has no service block, so brew services cannot run humd")
 	}
-	if !strings.Contains(formula, "keep_alive crashed: true") {
-		t.Error("Formula/hum.rb does not restrict keep_alive to crashes; a clean `hum stop` would be resurrected")
+	if !strings.Contains(formula, "keep_alive successful_exit: false") {
+		t.Error("Formula/hum.rb does not restart humd on a non-zero exit under launchd; a Go crash exits 2 and KeepAlive Crashed never fires for it")
 	}
-	if strings.Contains(formula, "keep_alive true") {
+	if !strings.Contains(formula, "keep_alive crashed: true") {
+		t.Error("Formula/hum.rb does not set keep_alive crashed: true, which is the only value Homebrew translates to systemd Restart=on-failure")
+	}
+	if !strings.Contains(formula, "if OS.mac?") {
+		t.Error("Formula/hum.rb does not branch keep_alive per platform; one value cannot be right on both launchd and systemd")
+	}
+	if strings.Contains(formula, "keep_alive true") || strings.Contains(formula, "keep_alive always: true") {
 		t.Error("Formula/hum.rb keeps the service alive unconditionally, which defeats `hum stop`")
 	}
 	for _, want := range []string{"log_path", "error_log_path", "working_dir"} {
 		if !strings.Contains(formula, want) {
 			t.Errorf("Formula/hum.rb service block does not set %s", want)
 		}
+	}
+}
+
+func TestSystemdUnitIsAUserUnitThatHonoursACleanStop(t *testing.T) {
+	unit := readRepoFile(t, "contrib", "systemd", "humd.service")
+
+	for _, want := range []string{
+		"Type=simple",
+		"ExecStart=%h/.local/bin/humd",
+		"Restart=on-failure",
+		"WantedBy=default.target",
+	} {
+		if !strings.Contains(unit, want) {
+			t.Errorf("contrib/systemd/humd.service does not carry %q", want)
+		}
+	}
+	if strings.Contains(unit, "Restart=always") {
+		t.Error("contrib/systemd/humd.service restarts unconditionally, so `hum stop` would be resurrected")
+	}
+	if strings.Contains(unit, "multi-user.target") {
+		t.Error("contrib/systemd/humd.service is wired system-wide; a system unit cannot reach the user's audio session")
+	}
+	if strings.Contains(unit, "User=") {
+		t.Error("contrib/systemd/humd.service sets User=, which only a system unit needs")
 	}
 }
 

@@ -30,7 +30,11 @@ class Hum < Formula
   service do
     run [opt_bin/"humd"]
     run_type :immediate
-    keep_alive crashed: true
+    if OS.mac?
+      keep_alive successful_exit: false
+    else
+      keep_alive crashed: true
+    end
     log_path var/"log/hum/humd.log"
     error_log_path var/"log/hum/humd.error.log"
     working_dir Dir.home
