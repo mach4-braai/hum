@@ -75,6 +75,46 @@ func TestCIVerifiesTheSystemdUnit(t *testing.T) {
 	}
 }
 
+func TestCIRunsTheAcceptanceSuiteAsItsOwnJob(t *testing.T) {
+	workflow := readWorkflow(t)
+
+	if !strings.Contains(workflow, "mise run e2e") {
+		t.Fatal("ci workflow does not run the acceptance suite")
+	}
+	if !strings.Contains(workflow, "  e2e:") {
+		t.Error("the acceptance suite is not a job of its own, so an acceptance failure could not be told apart from a unit test failure")
+	}
+	if strings.Count(workflow, "os: [ubuntu-latest, macos-latest]") < 2 {
+		t.Error("the acceptance suite does not run on both supported platforms")
+	}
+}
+
+func TestTheAcceptanceSuiteIsTaggedOutOfTheDefaultRun(t *testing.T) {
+	root := repoRoot(t)
+	entries, err := os.ReadDir(filepath.Join(root, "e2e"))
+	if err != nil {
+		t.Fatalf("read e2e directory: %v", err)
+	}
+
+	files := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") {
+			continue
+		}
+		files++
+		data, err := os.ReadFile(filepath.Join(root, "e2e", entry.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", entry.Name(), err)
+		}
+		if !strings.HasPrefix(string(data), "//go:build e2e\n") {
+			t.Errorf("e2e/%s does not open with //go:build e2e, so `go test ./...` would spawn binaries and take minutes", entry.Name())
+		}
+	}
+	if files == 0 {
+		t.Error("the e2e directory holds no Go files")
+	}
+}
+
 func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	workflow := readWorkflow(t)
 
@@ -99,8 +139,9 @@ func readGoCacheAction(t *testing.T) string {
 func TestEveryCIJobRestoresTheGoCaches(t *testing.T) {
 	workflow := readWorkflow(t)
 
-	if n := strings.Count(workflow, goCaches); n != 2 {
-		t.Errorf("ci.yml uses %s %d times, want 2: check and coverage download the same modules and compile the same packages", goCaches, n)
+	jobs := strings.Count(workflow, "runs-on:")
+	if n := strings.Count(workflow, goCaches); n != jobs {
+		t.Errorf("ci.yml has %d jobs but restores the Go caches %d times: every job downloads the same modules and compiles the same packages", jobs, n)
 	}
 	if strings.Contains(workflow, "go/pkg/mod") {
 		t.Error("ci.yml caches the toolchain's default directory, which is outside the workspace and named differently on every runner")

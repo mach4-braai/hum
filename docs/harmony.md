@@ -214,6 +214,15 @@ One note: the session pitch transposed up `CompletionOctaves × 12` semitones (d
 
 **PRD §8 discrepancy.** The §8 prose reads "one or two octaves higher"; the §8 example shows a D2 session with a D5 completion note — three octaves, not two. The engine implements two octaves, following the prose. This discrepancy is recorded here rather than silently resolved.
 
+**`DefaultPhraseSpec` is not what a default install hears.** The daemon builds its
+engine from `theme.PhraseSpec()`, and the built-in `minimal` theme sets
+`completion_octaves: 1`, `completion_duration: 0.2`, `failure_duration: 1.2` and
+`failure_gain: 0.35`. So a default install completes **one** octave above the
+drone — D3 becomes D4, not D5. `DefaultPhraseSpec` is the fallback for a theme
+that names none of them, and every number in this section is the engine's
+default, not the audible one. `e2e/buffer_test.go` asserts against the theme's
+spec for that reason.
+
 ### Failure
 
 Two notes in sequence: the session pitch at offset 0, then the session pitch transposed by `FailureInterval` semitones (default −3, a descending minor third) at offset `FailureDuration`. This creates a recognisable descending cadence that is neither alarming nor easily confused with completion. `DefaultPhraseSpec` sets `FailureDuration = 800 ms` and `FailureGain = 0.5`, making the failure phrase longer and quieter than completion. "No sharp attack" is the renderer's responsibility; this package emits abstract notes, not waveforms.

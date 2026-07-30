@@ -315,3 +315,4 @@ loss nothing else reports.
 | Audio engine, mixer, oscillator | `docs/audio.md` |
 | Themes and phrase specs | `docs/themes.md` |
 | Configuration layers | `docs/configuration.md` |
+| The acceptance suite's audible gaps | `docs/manual-verification.md` |

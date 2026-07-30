@@ -24,6 +24,11 @@ var newAudioRenderer = func(opts renderer.Options) (renderer.Renderer, error) {
 	return r, nil
 }
 
+func NewCaptureRenderer(f Format, opts renderer.Options) (*AudioRenderer, *Mixer) {
+	m := NewMixer(f)
+	return newRendererWithMixer(m, f, opts), m
+}
+
 func init() {
 	renderer.Register("audio", newAudioRenderer)
 }

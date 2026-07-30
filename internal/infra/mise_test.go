@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var requiredTasks = []string{"build", "check", "clean", "coverage", "fmt", "install", "test", "vet"}
+var requiredTasks = []string{"build", "check", "clean", "coverage", "e2e", "fmt", "install", "snapshot", "test", "vet"}
 
 func TestMiseDefinesRequiredTasks(t *testing.T) {
 	if _, err := exec.LookPath("mise"); err != nil {
