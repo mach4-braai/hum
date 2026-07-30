@@ -57,6 +57,7 @@ run = "find . -path ./.gocache -prune -o -name '*.go' -print0 | xargs -0 gofmt -
 
 [tasks.check]
 description = "Formatting, vet, unit tests and build-tooling assertions"
+shell = "bash -c"
 run = '''
 set -eu
 unformatted=$(find . -path ./.gocache -prune -o -name '*.go' -print0 | xargs -0 gofmt -l)

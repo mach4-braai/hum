@@ -18,12 +18,24 @@ func readWorkflow(t *testing.T) string {
 	return string(data)
 }
 
-func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
-	workflow := readWorkflow(t)
+func jobBlock(t *testing.T, workflow, name string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(workflow, "\n  "+name+":\n")
+	if !found {
+		t.Fatalf("ci.yml has no %s job", name)
+	}
+	if next := regexp.MustCompile(`\n  [a-z0-9-]+:\n`).FindStringIndex(rest); next != nil {
+		rest = rest[:next[0]]
+	}
+	return rest
+}
 
-	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
-		if !strings.Contains(workflow, runner) {
-			t.Errorf("ci workflow does not run on %s", runner)
+func TestCIChecksEverySupportedPlatform(t *testing.T) {
+	block := jobBlock(t, readWorkflow(t), "check")
+
+	for _, runner := range []string{"ubuntu-latest", "macos-latest", "windows-latest"} {
+		if !strings.Contains(block, runner) {
+			t.Errorf("the check job does not run on %s, so its archives would ship untested", runner)
 		}
 	}
 }
@@ -81,11 +93,14 @@ func TestCIRunsTheAcceptanceSuiteAsItsOwnJob(t *testing.T) {
 	if !strings.Contains(workflow, "mise run e2e") {
 		t.Fatal("ci workflow does not run the acceptance suite")
 	}
-	if !strings.Contains(workflow, "  e2e:") {
-		t.Error("the acceptance suite is not a job of its own, so an acceptance failure could not be told apart from a unit test failure")
+	block := jobBlock(t, workflow, "e2e")
+	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
+		if !strings.Contains(block, runner) {
+			t.Errorf("the e2e job does not run on %s", runner)
+		}
 	}
-	if strings.Count(workflow, "os: [ubuntu-latest, macos-latest]") < 2 {
-		t.Error("the acceptance suite does not run on both supported platforms")
+	if strings.Contains(block, "windows-latest") {
+		t.Error("the e2e job claims Windows; the acceptance suite drives POSIX signals and has never been run there")
 	}
 }
 

@@ -198,6 +198,23 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   `width_unix.go` and `width_windows.go`; `TIOCGWINSZ` does not exist there. The
   Windows implementation returns 0, which means "unknown" and disables title
   truncation exactly as a piped stdout does.
+- Go's stdlib `syscall` package defines only `WSAECONNABORTED` and
+  `WSAECONNRESET` on Windows — there is no `syscall.WSAECONNREFUSED`, so
+  `probe_windows.go` writes out 10061 itself. `syscall.ECONNREFUSED` exists there
+  but is an `APPLICATION_ERROR`-based placeholder Winsock never returns, so
+  matching it proves nothing. The liveness probe therefore goes through
+  `notListening`, split across `probe_other.go` and `probe_windows.go`, rather
+  than comparing errnos inline.
+- The `check` task pins `shell = "bash -c"`. Its script is POSIX — `find`,
+  `xargs`, `$(…)` — and mise runs task scripts under `cmd` on Windows, where none
+  of that parses. Every task the Windows leg runs needs the same pin.
+- `check (windows-latest)` is a new status context. The `master` ruleset requires
+  `check (ubuntu-latest)`, `check (macos-latest)` and `coverage`; adding the leg
+  does not add it to the ruleset, so it can go red without blocking a merge until
+  someone adds it there.
+- `mise run e2e` is macOS and Linux only. It sends `SIGTERM` to a daemon, which
+  Windows does not deliver, and `internal/infra` asserts the `e2e` job does not
+  claim `windows-latest` so nobody adds it back on a hunch.
 - The Linux release builds are skipped unless `HUM_RELEASE_LINUX=1`, so
   `mise run snapshot` works on macOS where no ALSA cross-toolchain exists. The
   release workflow sets it; forgetting it ships a release with no Linux archives.

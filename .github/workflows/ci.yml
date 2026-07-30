@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -44,6 +44,22 @@ jobs:
           PREFIX="$HOME/.local" mise run install
           install -Dm644 contrib/systemd/humd.service "$HOME/.config/systemd/user/humd.service"
           systemd-analyze --user verify "$HOME/.config/systemd/user/humd.service"
+
+      - name: Prove humd serves and stops on Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mise run build
+          export HUM_HOME="$RUNNER_TEMP/hh"
+          export HUM_SOCKET="$HUM_HOME/humd.sock"
+          mkdir -p "$HUM_HOME"
+          ./bin/humd --no-audio --log-level debug &
+          for _ in $(seq 100); do [ -e "$HUM_SOCKET" ] && break; sleep 0.2; done
+          ./bin/hum status
+          ./bin/hum start --id ci --title "windows leg"
+          ./bin/hum status --json
+          ./bin/hum stop
+          test ! -e "$HUM_SOCKET" || { echo "the socket outlived the daemon" >&2; exit 1; }
 
   e2e:
     name: e2e

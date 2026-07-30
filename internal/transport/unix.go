@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/mach4-braai/hum/internal/paths"
@@ -117,7 +116,7 @@ func NewUnixListener(path string, opts Options) (Listener, error) {
 func probeLive(path string) (bool, error) {
 	conn, err := probeDialer(path)
 	if err != nil {
-		if errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.ENOENT) {
+		if notListening(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("dial %s: %w", path, err)
