@@ -40,6 +40,14 @@ func TestCIChecksEverySupportedPlatform(t *testing.T) {
 	}
 }
 
+func TestTheCheckoutIsLineEndingNeutral(t *testing.T) {
+	attributes := readRepoFile(t, ".gitattributes")
+
+	if !strings.Contains(attributes, "eol=lf") {
+		t.Error(".gitattributes does not pin eol=lf; Git for Windows checks out CRLF by default and gofmt then reports every file as unformatted")
+	}
+}
+
 func TestCIDerivesToolchainFromMise(t *testing.T) {
 	workflow := readWorkflow(t)
 

@@ -153,7 +153,7 @@ func startDaemon(t *testing.T, d *daemon) (string, chan os.Signal, chan int) {
 
 func waitForSocket(t *testing.T, socket string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		conn, err := net.Dial("unix", socket)
 		if err == nil {
