@@ -5,17 +5,25 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
 )
+
+var exeSuffix = func() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}()
 
 var buildHum = sync.OnceValues(func() (string, error) {
 	dir, err := os.MkdirTemp("", "hum-bin")
 	if err != nil {
 		return "", err
 	}
-	binary := filepath.Join(dir, "hum")
+	binary := filepath.Join(dir, "hum"+exeSuffix)
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		return "", errors.New(string(out))

@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -123,8 +124,9 @@ func TestEventValidation(t *testing.T) {
 	})
 
 	t.Run("accepts an absolute project root", func(t *testing.T) {
-		if err := (Event{Event: SessionStarted, ID: "1", Root: "/tmp/project"}).Validate(); err != nil {
-			t.Errorf("Validate() with an absolute root = %v, want nil", err)
+		root := filepath.Join(t.TempDir(), "project")
+		if err := (Event{Event: SessionStarted, ID: "1", Root: root}).Validate(); err != nil {
+			t.Errorf("Validate() with the absolute root %q = %v, want nil", root, err)
 		}
 	})
 

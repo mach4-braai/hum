@@ -453,8 +453,8 @@ func TestSecondSignalShortCircuitsTheFade(t *testing.T) {
 		if code != exitInterrupted {
 			t.Errorf("serve returned %d, want %d after a second signal", code, exitInterrupted)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("a second signal did not short-circuit the fade deadline")
+	case <-time.After(20 * time.Second):
+		t.Fatal("a second signal did not short-circuit the 30s fade deadline")
 	}
 
 	if rec.closeCount() != 1 {

@@ -8,21 +8,28 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
+var exeSuffix = func() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}()
+
 var buildHumd = sync.OnceValues(func() (string, error) {
 	dir, err := os.MkdirTemp("", "humd-bin")
 	if err != nil {
 		return "", err
 	}
-	binary := filepath.Join(dir, "humd")
+	binary := filepath.Join(dir, "humd"+exeSuffix)
 	build := exec.Command("go", "build", "-o", binary, ".")
 	if out, err := build.CombinedOutput(); err != nil {
 		return "", errors.New(string(out))
@@ -122,6 +129,14 @@ func waitExit(t *testing.T, cmd *exec.Cmd, within time.Duration) int {
 	return -1
 }
 
+func stopOverTheSocket(t *testing.T, p *process) {
+	t.Helper()
+	if responses := send(t, p.socket, protocol.Request{Command: protocol.CmdShutdown}); !responses[0].OK {
+		t.Fatalf("shutdown = %+v", responses[0])
+	}
+	waitExit(t, p.cmd, 30*time.Second)
+}
+
 func TestBinaryVersionExitsZero(t *testing.T) {
 	binary, err := buildHumd()
 	if err != nil {
@@ -200,15 +215,14 @@ func TestBinaryRefusesASecondInstance(t *testing.T) {
 		t.Errorf("survivor ping = %+v (%v), want ok", response, err)
 	}
 
-	p.cmd.Process.Signal(syscall.SIGTERM)
-	waitExit(t, p.cmd, 30*time.Second)
+	stopOverTheSocket(t, p)
 }
 
 func TestBinaryReclaimsAStaleSocket(t *testing.T) {
 	p := startProcess(t)
 	socket := p.socket
 
-	if err := p.cmd.Process.Signal(syscall.SIGKILL); err != nil {
+	if err := p.cmd.Process.Kill(); err != nil {
 		t.Fatalf("kill: %v", err)
 	}
 	p.cmd.Wait()
@@ -238,7 +252,9 @@ func TestBinaryReclaimsAStaleSocket(t *testing.T) {
 		t.Errorf("ping after reclaiming a stale socket = %+v", responses[0])
 	}
 
-	restarted.Process.Signal(syscall.SIGTERM)
+	if responses := send(t, socket, protocol.Request{Command: protocol.CmdShutdown}); !responses[0].OK {
+		t.Fatalf("shutdown = %+v", responses[0])
+	}
 	waitExit(t, restarted, 30*time.Second)
 }
 

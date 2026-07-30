@@ -217,17 +217,47 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `.gitattributes` pins `eol=lf`. Git for Windows checks out CRLF by default and
   `gofmt -l` then reports every file in the repository as unformatted, which is a
   symptom that names the wrong tool entirely.
-- Windows is covered by its own `windows` job, not by the `check` matrix.
-  `mise run check` does **not** pass there: about forty tests assume POSIX file
-  modes, `chmod`-enforced read-only directories, `/`-rooted absolute paths and
-  extension-less executables, and `TestWriteReportsSyncFailureOnPipe` hangs until
-  the package times out. #82 enumerates them from a real run. `internal/infra`
-  asserts the `check` and `e2e` jobs do not claim `windows-latest`, so nobody adds
-  either back on a hunch.
-- `protocol.Event.Validate` calls `filepath.IsAbs`, so `/tmp/project` is not an
-  absolute root on Windows. `internal/protocol` is a published contract and
-  `docs/protocol.md` says `root` is absolute without saying whose absolute, which
-  is a protocol question rather than a test bug. Part of #82.
+- Tests that build a binary and then run it must append the executable suffix. The
+  packages that do carry a local `exeSuffix`; forgetting it fails with
+  `executable file not found in %PATH%` for a file that plainly exists.
+- POSIX-only tests live in `*_posix_test.go` behind `//go:build !windows`, and the
+  assertions Windows cannot make are abstracted rather than deleted:
+  `assertFilePerm` and `assertPrivateDir` have a real body on POSIX and a
+  stat-only one on Windows, so the behaviour either side of them is still checked.
+  Three premises genuinely do not exist there — a directory's mode bits do not
+  gate writes, an open file cannot be removed, and `FlushFileBuffers` on a pipe
+  **blocks** instead of failing, which hung `internal/config` until the package
+  timed out at ten minutes.
+- `EnsureRuntimeDir` asks `MkdirAll` for `0700` and Windows ignores it, so the
+  socket's parent is not access-restricted there. Fixing it needs ACL calls from
+  `golang.org/x/sys`, which is a third dependency. Stated in `README.md` rather
+  than silently tolerated.
+- `os.UserHomeDir` reads `USERPROFILE` on Windows, not `HOME`. A test that clears
+  only `HOME` still sees the real home; `setHome` in `internal/paths` sets both.
+- `Reap(0)` cannot work on Windows: clock granularity puts a session that just
+  ended at exactly `now`, and the cutoff comparison is `Before`. Tests that mean
+  "everything terminal" pass a negative window.
+- `protocol.Event.Validate` calls `filepath.IsAbs`, so `root` must be absolute for
+  the **daemon's** platform — `/srv/x` on POSIX, `C:\srv\x` on Windows. That is
+  forced: the daemon `os.Stat`s the path, so its own platform is the only notion it
+  can act on. `docs/protocol.md` says so now; changing the wire format to mandate
+  POSIX separators would be a contract change and needs its own issue.
+- `serve` waits `<-served` **before** draining, and `transport.Options.Grace`
+  defaults to 5s, so a shutdown can spend that long waiting for in-flight
+  handlers before the fade even starts. A test that budgets 5s for a shutdown is
+  therefore racing the shutdown path against itself; it passed only where a
+  client's close was noticed instantly, and Windows was where it stopped being.
+  Budget past `Grace`, and well under `releaseWait`.
+- `windows/arm64` runs on `windows-11-arm`; the suite itself runs only on
+  `windows-latest`, so the arm64 leg proves a real daemon starts and stops rather
+  than that every test passes. `GOARCH: arm64 go vet` from the x64 runner covers
+  compilation, which is not execution.
+- `darwin/amd64` and `linux/arm64` are the two archives nothing executes. That is
+  a wiring gap, not a platform limit: `macos-15-intel` and `ubuntu-24.04-arm` are
+  available hosted runners. Say "not wired up", never "no runner exists".
+- `.goreleaser.yaml`'s `release.footer` and the Platforms section of `README.md`
+  say what Windows support means, and #70 requires them to agree. Neither can be
+  derived from the other, so changing one means changing both.
 - The Linux release builds are skipped unless `HUM_RELEASE_LINUX=1`, so
   `mise run snapshot` works on macOS where no ALSA cross-toolchain exists. The
   release workflow sets it; forgetting it ships a release with no Linux archives.

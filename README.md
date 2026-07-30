@@ -135,29 +135,46 @@ code.
 
 ## Platforms
 
-macOS and Linux, `amd64` and `arm64`. The audio backend reaches AudioToolbox
-through purego on macOS and needs no cgo; Linux links ALSA, so Linux builds
-require a C toolchain until [#39](https://github.com/mach4-braai/hum/issues/39)
-lands.
+macOS and Linux are supported. The audio backend reaches AudioToolbox through
+purego on macOS and needs no cgo; Linux links ALSA, so Linux builds require a C
+toolchain until [#39](https://github.com/mach4-braai/hum/issues/39) lands.
 
-Windows archives are built for `amd64` and `arm64` and are **best-effort**. A
-`windows` job runs on every pull request and gates every release tag: it vets the
-whole module and then starts `humd`, answers `hum status`, and stops it through
-`hum stop` with the socket removed. So the archives are no longer shipped
-unexecuted. What is *not* covered:
+Six archives ship. CI executes four of them:
 
-- **The unit suite does not pass on Windows.** `mise run check` runs on macOS and
-  Linux only. Roughly forty tests assume POSIX — file modes, `chmod`-enforced
-  read-only directories, `/`-rooted absolute paths, executables without `.exe` —
-  and one hangs. [#82](https://github.com/mach4-braai/hum/issues/82) enumerates
-  them.
+| Archive | Test suite run on it | A daemon started on it | Runner |
+|---|---|---|---|
+| `darwin/arm64` | yes | yes | `macos-latest` |
+| `linux/amd64` | yes | yes | `ubuntu-latest` |
+| `windows/amd64` | yes | yes | `windows-latest` |
+| `windows/arm64` | no | yes | `windows-11-arm` |
+| `darwin/amd64` | no | no | `macos-15-intel` exists; not wired up |
+| `linux/arm64` | no | no | `ubuntu-24.04-arm` exists; not wired up |
+
+`windows/arm64` is additionally cross-vetted from the x64 runner, which proves it
+compiles but not that it runs — the `windows-11-arm` leg is what proves that.
+
+The last two rows are a deliberate gap, not a platform limitation: GitHub offers
+hosted runners for both, and nothing here uses them. They are the same code as
+their executed siblings, differing only in the compiler's target, which is an
+argument rather than evidence.
+
+Windows is **best-effort**. It runs the suite and a real daemon on every pull
+request and on every release tag, so the archives are not shipped unexecuted, but
+these differences remain:
+
+- **The socket's parent directory is not access-restricted.** `EnsureRuntimeDir`
+  asks for `0700`, which Windows ignores; restricting it properly needs ACL calls
+  that live outside the standard library, and Hum takes no third dependency for
+  it. On macOS and Linux the directory is `0700` and the socket `0600`.
 - The acceptance suite (`mise run e2e`) runs on macOS and Linux only. It drives
   `SIGTERM`, which Windows does not deliver.
 - `SIGINT` and `SIGTERM` do not stop a Windows daemon. `hum stop` over the socket
-  is the supported way, and it is the path the job exercises.
+  is the supported way, and it is the path the `windows` job exercises.
 - Terminal width is not detected, so `hum status` never truncates long titles —
   the same behaviour as a piped stdout.
 - No supervisor integration. There is no `brew services` and no systemd unit.
+- A few tests are POSIX-only, in files named `*_posix_test.go`: they stage
+  failures Windows cannot produce, such as a read-only directory refusing a write.
 
 ## Licence
 

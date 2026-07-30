@@ -91,7 +91,7 @@ func TestVersionIsUsageListed(t *testing.T) {
 
 func buildStamped(t *testing.T, dir, name, pkg string, ldflags string) string {
 	t.Helper()
-	binary := filepath.Join(dir, name)
+	binary := filepath.Join(dir, name+exeSuffix)
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", binary, pkg)
 	cmd.Dir = ".."
 	if out, err := cmd.CombinedOutput(); err != nil {

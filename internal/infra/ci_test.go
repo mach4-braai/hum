@@ -35,33 +35,35 @@ func jobBlock(t *testing.T, workflow, name string) string {
 	return jobBlockIn(t, workflow, "ci.yml", name)
 }
 
-func TestCIChecksBothPOSIXPlatforms(t *testing.T) {
-	block := jobBlock(t, readWorkflow(t), "check")
-
-	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
-		if !strings.Contains(block, runner) {
-			t.Errorf("the check job does not run on %s", runner)
-		}
-	}
-	if strings.Contains(block, "windows-latest") {
-		t.Error("the check job claims windows-latest; `mise run check` does not pass there yet (#82) and the Windows job is what covers that platform")
-	}
-}
-
 func TestCIExecutesAWindowsBinary(t *testing.T) {
 	for _, workflow := range []string{"ci.yml", "release.yml"} {
 		data := readRepoFile(t, ".github", "workflows", workflow)
 		block := jobBlockIn(t, data, workflow, "windows")
 
-		if !strings.Contains(block, "windows-latest") {
-			t.Errorf("%s: the windows job does not run on a Windows runner", workflow)
+		for _, runner := range []string{"windows-latest", "windows-11-arm"} {
+			if !strings.Contains(block, runner) {
+				t.Errorf("%s: the windows job does not run on %s, so that architecture's archive would ship unexecuted", workflow, runner)
+			}
 		}
-		if !strings.Contains(block, "go vet ./...") {
-			t.Errorf("%s: the windows job does not vet, so a Windows-only compile break could ship", workflow)
+		if !strings.Contains(block, "GOARCH: arm64") {
+			t.Errorf("%s: the windows job does not cross-vet the other Windows architecture", workflow)
 		}
 		for _, want := range []string{"bin/humd.exe", "bin/hum.exe", "stop"} {
 			if !strings.Contains(block, want) {
 				t.Errorf("%s: the windows job does not exercise %s; the archives would ship unexecuted again", workflow, want)
+			}
+		}
+	}
+}
+
+func TestBothWorkflowsCheckEverySupportedPlatform(t *testing.T) {
+	for _, workflow := range []string{"ci.yml", "release.yml"} {
+		data := readRepoFile(t, ".github", "workflows", workflow)
+		block := jobBlockIn(t, data, workflow, "check")
+
+		for _, runner := range []string{"ubuntu-latest", "macos-latest", "windows-latest"} {
+			if !strings.Contains(block, runner) {
+				t.Errorf("%s: the check job does not run on %s, so a release could ship a platform the suite never covered", workflow, runner)
 			}
 		}
 	}
