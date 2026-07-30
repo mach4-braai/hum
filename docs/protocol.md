@@ -210,9 +210,9 @@ a live daemon:
 ```
 $ printf '{"command":"ping"}\n' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
 {"ok":true}
-$ printf '{"event":"session.started","id":"s1","title":"socat check"}\n{"command":"status"}\n' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
+$ printf '{"event":"session.started","id":"a1","title":"build"}\n{"event":"session.completed","id":"a1"}\n' | socat - UNIX-CONNECT:$HOME/.hum/humd.sock
 {"ok":true}
-{"ok":true,"data":{"sessions":[{"id":"s1","title":"socat check","state":"active","pitch":"D3",...}],...}}
+{"ok":true}
 ```
 
 Despite the name `socat` is a separate program, not a variant of `cat`: `cat`
