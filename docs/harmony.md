@@ -97,11 +97,14 @@ For `minor_pentatonic` (5 notes) rooted at D2:
 
 PRD §7 shows four simultaneous work sessions allocated D2, F2, A2, C3 against root D and scale `minor_pentatonic`.
 
-Consecutive scale degrees 0, 1, 2, 3 yield D2, F2, **G2**, **A2** — the fourth is G, not A, and C3 does not appear. The PRD example is not consecutive degrees.
+Consecutive scale degrees 0, 1, 2, 3 yield D2, F3, **G3**, **A3** — the third
+voice is G, not A, and C does not appear. The PRD example is not consecutive
+degrees.
 
 The engine does **not** reproduce that example. Issue #14 fixes allocation as the
-lowest free degree, so four concurrent sessions rooted at D2 sound D2, F2, G2,
-A2 — consecutive degrees. Lowest-free is what makes allocation deterministic and
+lowest free degree, so four concurrent sessions rooted at D2 sound D2, F3, G3,
+A3 — consecutive degrees, with every harmony lifted an octave (see **Voicing**
+below). Lowest-free is what makes allocation deterministic and
 makes a released pitch immediately reusable, which `PRD.md` §7 also requires when
 it says completed sessions disappear.
 
@@ -115,11 +118,50 @@ the divergence from the §7 example is recorded here as a decision.
 
 ## Allocation
 
-`Allocator` owns the mapping between session IDs and musical voices. It maintains a sorted free list of degrees (integers 0 through `MaxVoices−1`). `Acquire` always takes the smallest available degree, so sessions assigned in order receive consecutive scale degrees: three sessions rooted at D2 on `minor_pentatonic` sound D2, F2, G2 (degrees 0, 1, 2). When a session is released that degree returns immediately to the free pool; the next session to arrive reuses it without any re-voicing of the drones still sounding. This is the direct consequence of the PRD §7 requirement that "completed sessions disappear" — see the **PRD §7 allocation example** section above for why consecutive degrees diverge from the four-voice voicing shown in the PRD.
+`Allocator` owns the mapping between session IDs and musical voices. It maintains a sorted free list of degrees (integers 0 through `MaxVoices−1`). `Acquire` always takes the smallest available degree, so sessions assigned in order receive consecutive scale degrees: three sessions rooted at D2 on `minor_pentatonic` sound D2, F3, G3 (degrees 0, 1, 2). When a session is released that degree returns immediately to the free pool; the next session to arrive reuses it without any re-voicing of the drones still sounding. This is the direct consequence of the PRD §7 requirement that "completed sessions disappear" — see the **PRD §7 allocation example** section above for why consecutive degrees diverge from the four-voice voicing shown in the PRD.
 
-`MaxVoices` is 12. When all 12 degrees are in use the allocator is at capacity: new sessions receive `Degree = MaxVoices−1` and the same pitch as the highest allocated voice. They are still tracked by session ID so `hum status` can list them; the audio mixer, however, sees at most 12 distinct oscillator pitches. Releasing a capped session removes it from the tracking table but returns nothing to the free pool, because no degree was consumed. Releasing any of the 12 normal voices puts that degree back, restoring the cap headroom immediately.
+`MaxVoices` is 12. When all 12 degrees are in use the allocator is at capacity: new sessions receive `Degree = MaxVoices−1` and the same pitch as that degree. They are still tracked by session ID so `hum status` can list them, and `audio.Renderer` keys an oscillator per session ID, so more than 12 concurrent sessions really do open more than 12 oscillators — what the cap bounds is the number of *distinct* pitches, which the voicing fold below lowers further to `len(Intervals) + 1`. Releasing a capped session removes it from the tracking table but returns nothing to the free pool, because no degree was consumed. Releasing any of the 12 normal voices puts that degree back, restoring the cap headroom immediately.
 
 The allocator guards its state with a mutex. `Apply` on the engine is called from the daemon's single event goroutine, but the allocator is also exercised under `-race` in tests, so the lock is non-negotiable.
+
+### Voicing
+
+Degree 0 sounds the root exactly. Every degree above it keeps its scale step but
+sounds one octave higher.
+
+| degree | before | after |
+|--------|--------|-------|
+| 0      | D2     | D2    |
+| 1      | F2     | F3    |
+| 2      | G2     | G3    |
+| 3      | A2     | A3    |
+| 4      | C3     | C4    |
+| 5      | D3     | D4    |
+| 6 … 10 | F3 … D4 | unchanged |
+| 11     | F4     | F3    |
+
+`Degree` was never bounded, so the twelve voices always spanned nearly three
+octaves; what crowded was the *bottom* of that span, and the bottom is where the
+first few sessions land. One to five concurrent sessions — the common case — all
+sounded inside the root's own octave, a minor third and a fourth apart at 73 Hz
+where a critical band is around 100 Hz wide, which is the definition of
+roughness. Lifting them puts an octave of air between the bass anchor and the
+harmonies.
+
+The step folds back into `1 … len(Intervals)` once it runs past the scale, which
+makes `root + 24` semitones the exact ceiling: on `minor_pentatonic` degree 5
+sounds D4, and degree 6 shares F3 with degree 1. The top harmony of every
+built-in scale lands exactly two octaves above the root.
+
+The price is shared pitches beyond `len(Intervals) + 1` concurrent sessions —
+six voices on a pentatonic, eight on a seven-note scale — where the old mapping
+kept all twelve distinct by climbing to F4. That is deliberate: three concurrent
+voices is roughly the limit a listener can denumerate anyway, so audible
+separation low down matters more than a unique note for the seventh simultaneous
+session.
+
+`Scale.Degree` is untouched by this: it remains a general scale function whose
+`n` is a plain degree index, and the voicing rule lives in the allocator.
 
 ---
 

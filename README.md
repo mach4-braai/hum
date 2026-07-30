@@ -65,7 +65,7 @@ what you hear with what is running:
 ```
 ID     WORKSPACE  TITLE       STATE   NOTE  AGE
 build             Build       active  D2    1s
-tests             Test suite  active  F2    1s
+tests             Test suite  active  F3    1s
 ```
 
 Pass `--workspace <name>` to `hum start` to group sessions under a label.

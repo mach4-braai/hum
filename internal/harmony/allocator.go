@@ -54,7 +54,7 @@ func (a *Allocator) Acquire(sessionID string) Voice {
 	v := Voice{
 		SessionID: sessionID,
 		Degree:    degree,
-		Pitch:     a.scale.Degree(a.root, degree),
+		Pitch:     voicing(a.root, a.scale, degree),
 	}
 	a.voices[sessionID] = v
 	if isCapped {
@@ -108,4 +108,12 @@ func (a *Allocator) VoiceFor(sessionID string) (Voice, bool) {
 	defer a.mu.Unlock()
 	v, ok := a.voices[sessionID]
 	return v, ok
+}
+
+func voicing(root Pitch, scale Scale, degree int) Pitch {
+	if degree <= 0 {
+		return root
+	}
+	steps := len(scale.Intervals)
+	return scale.Degree(root, (degree-1)%steps+1).Transpose(12)
 }
