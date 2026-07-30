@@ -127,9 +127,10 @@ through purego on macOS and needs no cgo; Linux links ALSA, so Linux builds
 require a C toolchain until [#39](https://github.com/mach4-braai/hum/issues/39)
 lands.
 
-Windows compiles but is unsupported and untested: no CI job exercises it, and
-terminal width is not detected there, so `hum status` will not truncate long
-titles.
+Windows archives are built for `amd64` and `arm64` and are unsupported: no CI job
+executes them, and terminal width is not detected there, so `hum status` will not
+truncate long titles. [#70](https://github.com/mach4-braai/hum/issues/70) is what
+would change that.
 
 ## Licence
 

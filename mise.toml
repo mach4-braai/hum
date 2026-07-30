@@ -29,7 +29,8 @@ description = "Run the unit tests under coverage and enforce the minimum"
 run = '''
 set -eu
 MINIMUM=99.3
-go test -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
+MODULE=$(go list -m)
+go test -covermode=atomic -coverpkg="$MODULE/..." -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
 awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
@@ -48,13 +49,13 @@ run = "go vet ./..."
 
 [tasks.fmt]
 description = "Format all Go source in place"
-run = "gofmt -w ."
+run = "find . -path ./.gocache -prune -o -name '*.go' -print0 | xargs -0 gofmt -w"
 
 [tasks.check]
 description = "Formatting, vet, unit tests and build-tooling assertions"
 run = '''
 set -eu
-unformatted=$(gofmt -l .)
+unformatted=$(find . -path ./.gocache -prune -o -name '*.go' -print0 | xargs -0 gofmt -l)
 if [ -n "$unformatted" ]; then
   echo "unformatted files:" >&2
   echo "$unformatted" >&2

@@ -1,0 +1,29 @@
+name: Go caches
+description: Move the module downloads and the compiler output inside the workspace, so one module cache entry serves every runner
+
+runs:
+  using: composite
+  steps:
+    - name: Point the toolchain at the workspace
+      shell: bash
+      run: |
+        set -eu
+        {
+          echo "GOMODCACHE=$GITHUB_WORKSPACE/.gocache/mod"
+          echo "GOCACHE=$GITHUB_WORKSPACE/.gocache/build"
+        } >>"$GITHUB_ENV"
+
+    - name: Cache the module downloads
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .gocache/mod
+        key: go-mod-${{ hashFiles('go.sum') }}
+        restore-keys: go-mod-
+        enableCrossOsArchive: true
+
+    - name: Cache the compiler output
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .gocache/build
+        key: ${{ runner.os }}-go-build-${{ hashFiles('go.sum') }}
+        restore-keys: ${{ runner.os }}-go-build-
