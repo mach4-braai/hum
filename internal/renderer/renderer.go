@@ -38,6 +38,10 @@ type Sampled interface {
 	SampleRate() int
 }
 
+type PhraseDropper interface {
+	DroppedPhrases() int
+}
+
 type constructor func(Options) (Renderer, error)
 
 var (

@@ -55,14 +55,16 @@ type AudioRenderer struct {
 	seq          uint64
 	phraseIDs    []string
 	phraseSeq    uint64
+	dropped      int
 	rampGen      uint64
 	rampDuration time.Duration
 }
 
 var (
-	_ renderer.Renderer  = (*AudioRenderer)(nil)
-	_ renderer.Themeable = (*AudioRenderer)(nil)
-	_ renderer.Sampled   = (*AudioRenderer)(nil)
+	_ renderer.Renderer      = (*AudioRenderer)(nil)
+	_ renderer.Themeable     = (*AudioRenderer)(nil)
+	_ renderer.Sampled       = (*AudioRenderer)(nil)
+	_ renderer.PhraseDropper = (*AudioRenderer)(nil)
 )
 
 func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRenderer {
@@ -186,10 +188,17 @@ func (r *AudioRenderer) schedulePhraseSource(id string, src *phraseSource) {
 		oldest := r.phraseIDs[0]
 		r.phraseIDs = r.phraseIDs[1:]
 		r.mixer.Remove(oldest)
+		r.dropped++
 	}
 
 	r.mixer.Add(id, src)
 	r.phraseIDs = append(r.phraseIDs, id)
+}
+
+func (r *AudioRenderer) DroppedPhrases() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.dropped
 }
 
 func (r *AudioRenderer) SetVolume(v float64) error {

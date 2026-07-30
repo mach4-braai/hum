@@ -509,6 +509,32 @@ func TestTrigger_CapDropsOldest(t *testing.T) {
 	}
 }
 
+func TestDroppedPhrasesCountsWhatTheCapDiscarded(t *testing.T) {
+	r := newTestRenderer(t)
+	longNote := harmony.Note{
+		Pitch:    harmony.Pitch{Class: 9, Octave: 4},
+		Duration: 10 * time.Second,
+		Gain:     0.5,
+	}
+	for range maxPhraseVoices {
+		if err := r.Trigger(harmony.Phrase{Notes: []harmony.Note{longNote}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := r.DroppedPhrases(); got != 0 {
+		t.Fatalf("dropped = %d while still under the cap, want 0", got)
+	}
+
+	for range 3 {
+		if err := r.Trigger(harmony.Phrase{Notes: []harmony.Note{longNote}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := r.DroppedPhrases(); got != 3 {
+		t.Errorf("dropped = %d after three phrases over the cap, want 3: an operator cannot see phrase loss the mixer does not count", got)
+	}
+}
+
 func TestSetVolume_WhileMuted(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)

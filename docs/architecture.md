@@ -257,6 +257,48 @@ This resolves the conflict between PRD §7 (single key) and §12
 (per-project config); the decision is tracked in issue #49 and
 documented in `docs/daemon.md` under "Musical context".
 
+## Log volume
+
+PRD §2 requires Hum to run continuously, so the daemon's output has to be
+bounded by state rather than by traffic. At the default `info` level:
+
+| What | Level | Rate |
+|---|---|---|
+| Startup and shutdown | info | 2 lines per daemon lifetime |
+| Lifecycle transitions | info | 1 line per non-`updated` event |
+| Context adoption | info | 1 line per **change** of root, scale or owner |
+| `session.updated` | debug | 0 lines by default |
+| Reaping | debug | 0 lines by default |
+| A repeating renderer fault | error | at most 1 line per fault per minute |
+| A repeating theme fault | warn | at most 1 line per fault per minute |
+| Periodic summary | info | 1 line per 5 minutes **with activity** |
+
+**With no active sessions the steady-state volume is zero bytes per hour.**
+The summary ticker fires every five minutes but returns without logging when
+the interval saw no events, no reaping, no suppressed faults, and nothing is
+sounding — an idle daemon has nothing to say, and `hum status` answers "what
+now" on demand. One session held open across an idle hour costs 12 summary
+lines, around 1.8 KB.
+
+A session driven through 1000 `session.updated` events logs **one** line, for
+the start. `--log-level=debug` restores every one of them: the detail is
+demoted, never discarded.
+
+Repeated identical faults are coalesced by `throttle`, keyed on message plus
+error text, with a one-minute window. Both the renderer errors and the
+"keeping the current theme" warning go through it — a project whose config
+names a theme that will not load re-triggers that warning on every
+`session.started` the daemon adopts, which is unbounded without it. The first
+occurrence is logged immediately; the next admitted line carries `repeats=N`
+for what was suppressed in between, and the summary reports the running total.
+The key map is bounded at `maxThrottleKeys` and reset when it fills, because a
+daemon running for months must not accumulate error strings.
+
+`dropped_phrases` in the summary comes from `renderer.PhraseDropper`, which
+the audio renderer implements by counting what the phrase-voice cap
+discarded. Phrases arriving faster than they can finish is the one kind of
+loss nothing else reports.
+
 ---
 
 ## Further reading

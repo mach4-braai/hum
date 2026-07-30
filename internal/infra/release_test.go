@@ -95,7 +95,7 @@ func TestFormulaServiceSurvivesACleanStop(t *testing.T) {
 		t.Fatal("Formula/hum.rb has no service block, so brew services cannot run humd")
 	}
 	if !strings.Contains(formula, "keep_alive successful_exit: false") {
-		t.Error("Formula/hum.rb does not restart humd on a non-zero exit under launchd; a Go crash exits 2 and KeepAlive Crashed never fires for it")
+		t.Error("Formula/hum.rb does not restart humd on a non-zero exit under launchd; Go turns the crash signals into exit 2, so KeepAlive Crashed never fires for it")
 	}
 	if !strings.Contains(formula, "keep_alive crashed: true") {
 		t.Error("Formula/hum.rb does not set keep_alive crashed: true, which is the only value Homebrew translates to systemd Restart=on-failure")
