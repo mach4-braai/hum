@@ -497,6 +497,41 @@ func TestDoctorMusicCheckInvalidScale(t *testing.T) {
 	}
 }
 
+func TestDoctorReportsOctaveWithItsLayer(t *testing.T) {
+	humHome := t.TempDir()
+	t.Setenv("HUM_HOME", humHome)
+	unreachableSocket(t)
+	if err := os.WriteFile(filepath.Join(humHome, "config.yaml"), []byte("music:\n  octave: 5\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	run([]string{"doctor"}, &stdout, &stderr)
+	out := stdout.String()
+
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "music.octave") {
+			continue
+		}
+		if !strings.Contains(line, "5") || !strings.Contains(line, "layer: global") {
+			t.Errorf("music.octave row does not report 5 from the global layer: %q", line)
+		}
+		return
+	}
+	t.Errorf("no music.octave row in output:\n%s", out)
+}
+
+func TestDoctorMusicCheckNamesTheSoundingPitch(t *testing.T) {
+	cfg := &config.Config{Music: config.MusicConfig{Root: "D", Octave: 5, Scale: "minor_pentatonic"}}
+	c := doctorMusicCheck(cfg)
+	if c.Status != "pass" {
+		t.Fatalf("status = %q, want pass", c.Status)
+	}
+	if !strings.Contains(c.Detail, "root D5") {
+		t.Errorf("detail should name the sounding pitch; got %q", c.Detail)
+	}
+}
+
 func TestDoctorSocketCheckNotASocket(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "notsock")
 	if err != nil {
