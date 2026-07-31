@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -678,4 +680,102 @@ func present(d *daemon, id string) bool {
 		}
 	}
 	return false
+}
+
+func TestSummaryTickerFiresInEventLoop(t *testing.T) {
+	d, _ := testDaemon(t)
+	d.summaryEvery = time.Millisecond
+	buf := captureLog(d, slog.LevelInfo)
+
+	ev := protocol.Event{Event: protocol.SessionStarted, ID: "summary-tick"}
+	reply := make(chan protocol.Response, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go d.serveEvents(ctx)
+
+	d.calls <- call{request: protocol.Request{Event: &ev}, reply: reply}
+	if resp := <-reply; !resp.OK {
+		t.Fatalf("session start: %s", resp.Error)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	<-d.stopped
+
+	if len(linesWith(buf, "soundscape")) == 0 {
+		t.Error("summary ticker never produced a soundscape log line")
+	}
+}
+
+func TestAdoptContextTuningErrorPropagates(t *testing.T) {
+	d, _ := testDaemon(t)
+	socket, signals, done := startDaemon(t, d)
+	t.Cleanup(func() {
+		signals <- syscall.SIGTERM
+		<-done
+	})
+
+	t.Cleanup(func() { daemonTuning = tuning })
+	daemonTuning = func(*config.Config) (harmony.Pitch, harmony.Scale, error) {
+		return harmony.Pitch{}, harmony.Scale{}, errors.New("pitch parse failed")
+	}
+
+	resp := start(t, socket, "s1", project(t, "music:\n  root: C\n"))
+	if resp.OK {
+		t.Fatalf("session.started with tuning error = %+v, want rejection", resp)
+	}
+	if !strings.Contains(resp.Error, "pitch parse failed") {
+		t.Errorf("error %q does not mention the tuning failure", resp.Error)
+	}
+}
+
+func TestAdoptContextRetuneErrorPropagates(t *testing.T) {
+	t.Cleanup(func() { engineRetune = (*harmony.Engine).Retune })
+	engineRetune = func(_ *harmony.Engine, _ harmony.Pitch, _ harmony.Scale) error {
+		return harmony.ErrRetuneBusy
+	}
+
+	d, _ := testDaemon(t)
+	socket, signals, done := startDaemon(t, d)
+	t.Cleanup(func() {
+		signals <- syscall.SIGTERM
+		<-done
+	})
+
+	resp := start(t, socket, "s1", project(t, "music:\n  root: C\n"))
+	if resp.OK {
+		t.Fatalf("session.started with ErrRetuneBusy = %+v, want rejection", resp)
+	}
+	if !strings.Contains(resp.Error, "retune") {
+		t.Errorf("error %q does not mention retune", resp.Error)
+	}
+}
+
+func TestDaemonStartFailureClosesRenderer(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	rec := &recorder{}
+	t.Cleanup(func() {
+		openRendererFn = openRenderer
+		daemonTuning = tuning
+	})
+	openRendererFn = func(_ string, _ bool, _ renderer.Options, _ *slog.Logger) (renderer.Renderer, error) {
+		return rec, nil
+	}
+	daemonTuning = func(*config.Config) (harmony.Pitch, harmony.Scale, error) {
+		return harmony.Pitch{}, harmony.Scale{}, errors.New("music.root: unusable")
+	}
+
+	socket := shortSocket(t)
+	var stderr bytes.Buffer
+	code := run([]string{"--no-audio", "--socket", socket}, io.Discard, &stderr)
+
+	if code != exitError {
+		t.Errorf("exit code = %d, want %d", code, exitError)
+	}
+	if rec.closeCount() != 1 {
+		t.Errorf("renderer closed %d times, want exactly 1: a daemon that never started must not leak the audio device", rec.closeCount())
+	}
+	if !strings.Contains(stderr.String(), "cannot start the daemon") {
+		t.Errorf("stderr = %q, want the daemon start failure named", stderr.String())
+	}
 }

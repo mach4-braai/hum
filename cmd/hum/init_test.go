@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -305,5 +306,21 @@ func TestInitProjectNameFallsBackToFinalPathElement(t *testing.T) {
 	name := initProjectName(dir)
 	if name != "widget" {
 		t.Errorf("initProjectName = %q, want %q", name, "widget")
+	}
+}
+
+func TestInitFailsWhenGetWdErrors(t *testing.T) {
+	orig := osGetwd
+	t.Cleanup(func() { osGetwd = orig })
+	osGetwd = func() (string, error) { return "", errors.New("wd gone") }
+	var stdout, stderr bytes.Buffer
+
+	code := run([]string{"init"}, &stdout, &stderr)
+
+	if code != exitDaemonError {
+		t.Errorf("exit code = %d, want %d", code, exitDaemonError)
+	}
+	if !strings.Contains(stderr.String(), "hum init") {
+		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), "hum init")
 	}
 }

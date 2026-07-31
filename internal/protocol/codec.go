@@ -87,10 +87,7 @@ func NewEncoder(w io.Writer) *Encoder {
 }
 
 func (e *Encoder) Encode(ev Event) error {
-	data, err := json.Marshal(ev)
-	if err != nil {
-		return fmt.Errorf("encode event: %w", err)
-	}
+	data, _ := json.Marshal(ev)
 	if len(data) > MaxMessageLen {
 		return fmt.Errorf("%w: event is %d bytes, limit is %d", ErrMessageTooLarge, len(data), MaxMessageLen)
 	}

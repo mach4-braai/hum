@@ -12,6 +12,12 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
+func setConnDeadline(c net.Conn, t time.Time) error {
+	return c.SetDeadline(t)
+}
+
+var connSetDeadline = setConnDeadline
+
 var errNoDaemon = errors.New("no daemon listening")
 
 type answer struct {
@@ -27,7 +33,7 @@ func query(request protocol.Request, timeout time.Duration) (answer, error) {
 	}
 	defer conn.Close()
 
-	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+	if err := connSetDeadline(conn, time.Now().Add(timeout)); err != nil {
 		return answer{}, fmt.Errorf("cannot set a deadline on %s: %w", socket, err)
 	}
 	if err := json.NewEncoder(conn).Encode(request); err != nil {

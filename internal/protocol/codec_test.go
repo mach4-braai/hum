@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -228,5 +229,32 @@ func TestEncoderReportsWriteFailures(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "connection reset by peer") {
 		t.Errorf("Encode() = %v, want the underlying write error preserved", err)
+	}
+}
+
+func TestEveryEventFieldIsMarshalable(t *testing.T) {
+	populated := Event{
+		Event:     SessionStarted,
+		ID:        "s1",
+		Workspace: "ws",
+		Title:     "title",
+		Root:      "/tmp/project",
+		Metadata:  map[string]string{"k": "v"},
+	}
+
+	if _, err := json.Marshal(populated); err != nil {
+		t.Fatalf("json.Marshal(Event) = %v, want nil: Encoder.Encode ignores this error because no Event field can produce one, so a field that can is a wire-format bug", err)
+	}
+
+	var buf bytes.Buffer
+	if err := NewEncoder(&buf).Encode(populated); err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var round Event
+	if err := json.Unmarshal(buf.Bytes(), &round); err != nil {
+		t.Fatalf("the encoded event does not decode: %v", err)
+	}
+	if !reflect.DeepEqual(round, populated) {
+		t.Errorf("round trip = %+v, want %+v", round, populated)
 	}
 }

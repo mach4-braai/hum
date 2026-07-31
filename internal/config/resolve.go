@@ -13,6 +13,8 @@ import (
 	"github.com/mach4-braai/hum/internal/paths"
 )
 
+var evalSymlinks = filepath.EvalSymlinks
+
 type Layer string
 
 const (
@@ -120,7 +122,7 @@ func CanonicalRoot(projectRoot string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("%w: %q is not a directory", ErrProjectRoot, projectRoot)
 	}
-	resolved, err := filepath.EvalSymlinks(projectRoot)
+	resolved, err := evalSymlinks(projectRoot)
 	if err != nil {
 		return "", fmt.Errorf("%w: %q: %w", ErrProjectRoot, projectRoot, err)
 	}

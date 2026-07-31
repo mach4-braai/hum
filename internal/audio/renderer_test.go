@@ -655,3 +655,43 @@ func TestNewCaptureRendererMixesWithoutADevice(t *testing.T) {
 		t.Errorf("mixer holds %d sources, want the one drone", m.Len())
 	}
 }
+
+func TestOpenAudioRendererUsesTheRequestedSampleRate(t *testing.T) {
+	stubSeams(t, true)
+
+	r, err := openAudioRenderer(renderer.Options{SampleRate: 22050})
+	if err != nil {
+		t.Fatalf("openAudioRenderer: %v", err)
+	}
+	t.Cleanup(func() { r.Close() })
+
+	if got := r.(*AudioRenderer).SampleRate(); got != 22050 {
+		t.Errorf("SampleRate = %d, want the requested 22050", got)
+	}
+}
+
+func TestOpenAudioRendererFallsBackToTheDefaultFormat(t *testing.T) {
+	stubSeams(t, true)
+
+	r, err := openAudioRenderer(renderer.Options{})
+	if err != nil {
+		t.Fatalf("openAudioRenderer: %v", err)
+	}
+	t.Cleanup(func() { r.Close() })
+
+	if got, want := r.(*AudioRenderer).SampleRate(), DefaultFormat().SampleRate; got != want {
+		t.Errorf("SampleRate = %d, want the default %d when none is requested", got, want)
+	}
+}
+
+func TestOpenAudioRendererFailsWhenNoDeviceOpens(t *testing.T) {
+	orig := newOtoContext
+	t.Cleanup(func() { newOtoContext = orig })
+	newOtoContext = func(*oto.NewContextOptions) (*oto.Context, chan struct{}, error) {
+		return nil, nil, errors.New("stub: no device")
+	}
+
+	if _, err := openAudioRenderer(renderer.Options{}); err == nil {
+		t.Error("openAudioRenderer = nil error, want the device failure surfaced rather than a silent renderer")
+	}
+}

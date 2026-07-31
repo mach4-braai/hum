@@ -2,10 +2,13 @@ package config
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -237,5 +240,48 @@ func TestWriteLeavesTheTargetAloneWhenTheTemporaryFileIsUnwritable(t *testing.T)
 	}
 	if got.Audio.Volume != 0.2 {
 		t.Errorf("audio.volume = %v, want the original 0.2 left intact", got.Audio.Volume)
+	}
+}
+
+type failingEncoder struct {
+	encodeErr error
+	closeErr  error
+}
+
+func (f *failingEncoder) SetIndent(int)    {}
+func (f *failingEncoder) Encode(any) error { return f.encodeErr }
+func (f *failingEncoder) Close() error     { return f.closeErr }
+
+func TestPatchReportsThePathWhenEncodingFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	writeFile(t, path, "audio:\n  volume: 0.2\n")
+
+	t.Cleanup(func() { newDocumentEncoder = newYAMLEncoder })
+	boom := errors.New("encoder boom")
+	newDocumentEncoder = func(io.Writer) documentEncoder { return &failingEncoder{encodeErr: boom} }
+
+	err := Patch(path, map[string]string{"audio.volume": "0.4"})
+	if err == nil {
+		t.Fatal("Patch = nil, want the encode failure reported")
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("err = %v, want it to wrap the encoder error", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("err = %v, want the path named so the user knows which file failed", err)
+	}
+}
+
+func TestEncodeFailsWhenTheEncoderCannotClose(t *testing.T) {
+	t.Cleanup(func() { newDocumentEncoder = newYAMLEncoder })
+	boom := errors.New("close boom")
+	newDocumentEncoder = func(io.Writer) documentEncoder { return &failingEncoder{closeErr: boom} }
+
+	node := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{
+		{Kind: yaml.MappingNode, Tag: "!!map"},
+	}}
+	if _, err := encode(node); !errors.Is(err, boom) {
+		t.Errorf("encode = %v, want it to wrap the close error: a document that cannot be flushed is not a document", err)
 	}
 }

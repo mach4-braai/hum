@@ -29,13 +29,31 @@ description = "Run the end-to-end acceptance suite against the real binaries"
 run = "go test -tags e2e -count=1 ./e2e/..."
 
 [tasks.coverage]
-description = "Run the unit tests under coverage and enforce the minimum"
+description = "Run the unit tests under coverage and enforce that every statement runs"
 run = '''
 set -eu
-MINIMUM=99.3
+MINIMUM=100
+UNEXERCISABLE='internal/audio/format.go:26\.'
 MODULE=$(go list -m)
 go test -covermode=atomic -coverpkg="$MODULE/..." -coverprofile=coverage.out ./...
 go tool cover -func=coverage.out
+awk -v skip="$UNEXERCISABLE" 'NR > 1 {
+  if ($1 ~ skip) next
+  statements[$1] = $2
+  hits[$1] += $3
+}
+END {
+  for (block in statements) {
+    if (statements[block] + 0 > 0 && hits[block] + 0 == 0) {
+      printf "never executed: %s\n", block > "/dev/stderr"
+      dead++
+    }
+  }
+  if (dead) {
+    printf "%d block(s) never execute; the percentage below rounds them away\n", dead > "/dev/stderr"
+    exit 1
+  }
+}' coverage.out
 total=$(go tool cover -func=coverage.out | awk '$1 == "total:" { print $3 }' | tr -d '%')
 awk -v total="$total" -v minimum="$MINIMUM" 'BEGIN {
   below = (total + 0 < minimum + 0)

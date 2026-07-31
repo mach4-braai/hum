@@ -38,13 +38,25 @@ alternatives go in the issue or PR. Traps go in the list below.
 Every test defends an observable contract and fails on a plausible bug. Test
 behaviour, boundaries and error paths — not plumbing.
 
-- Coverage floor is 99.3%, enforced by `mise run coverage` and required on
-  `master`. The number lives once, in `mise.toml`; CI publishes it as the
-  `coverage/total` status.
-- `go tool cover -func` counts only statements inside function declarations, so
-  the body of a package-level `var f = func(){}` is invisible to the total. The
-  three statements in `newOtoPlayer` open a real audio device and can never run
-  in CI; they are not what keeps the number off 100%.
+- Every statement in the module runs under test, and `mise run coverage` enforces
+  that twice. The percentage is the weaker half: `go tool cover -func` prints one
+  decimal, so with 2,233 statements a single uncovered one is 99.955% and still
+  prints `100.0`. The real gate is the block scan over `coverage.out`, which fails
+  on any block whose aggregated hit count is zero. Aggregation matters — a block
+  appears once per test binary, covered in one section and zero in another, so the
+  counts must be summed per block key before judging.
+- `UNEXERCISABLE` in that task is the single exemption: the `newOtoPlayer` block in
+  `internal/audio/format.go`, which opens a real audio device and cannot run in CI.
+  It is keyed on the start line, so moving that function fails the gate until the
+  pattern is updated. That is deliberate — an exemption nobody notices is a hole.
+- `go tool cover -func` counts only statements inside function declarations, so the
+  body of a package-level `var f = func(){}` is invisible to it. That makes a seam
+  written as `var x = func(){ … }` a way to hide code from the counter rather than
+  test it, and the block scan sees through it anyway. Write the real work as a
+  function declaration and point a `var` at it: `terminalColumns` and
+  `readTerminalColumns` in `cmd/hum/width_unix.go` are the shape to copy, and
+  `setConnDeadline`, `runCommandQuietly`, `newYAMLEncoder` and `openAudioRenderer`
+  all follow it.
 - `internal/infra` asserts the build tooling itself: mise tasks, CI workflow,
   `.gitignore`. Anything duplicated across `mise.toml`, `.goreleaser.yaml` and
   the Homebrew formula gets an assertion there, because those three cannot share
