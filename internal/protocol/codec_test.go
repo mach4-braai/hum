@@ -233,19 +233,34 @@ func TestEncoderReportsWriteFailures(t *testing.T) {
 }
 
 func TestEveryEventFieldIsMarshalable(t *testing.T) {
+	fields := map[string]string{}
+	eventType := reflect.TypeOf(Event{})
+	for i := range eventType.NumField() {
+		field := eventType.Field(i)
+		fields[field.Name] = field.Type.String()
+	}
+	want := map[string]string{
+		"Event":     "protocol.EventType",
+		"ID":        "string",
+		"Workspace": "string",
+		"Title":     "string",
+		"Root":      "string",
+		"Priority":  "int",
+		"Metadata":  "map[string]string",
+	}
+	if !reflect.DeepEqual(fields, want) {
+		t.Fatalf("Event carries %v, want %v: Encoder.Encode discards the json.Marshal error because no field here can produce one, and a field that can would put a truncated frame on the wire", fields, want)
+	}
+
 	populated := Event{
 		Event:     SessionStarted,
 		ID:        "s1",
 		Workspace: "ws",
 		Title:     "title",
 		Root:      "/tmp/project",
+		Priority:  3,
 		Metadata:  map[string]string{"k": "v"},
 	}
-
-	if _, err := json.Marshal(populated); err != nil {
-		t.Fatalf("json.Marshal(Event) = %v, want nil: Encoder.Encode ignores this error because no Event field can produce one, so a field that can is a wire-format bug", err)
-	}
-
 	var buf bytes.Buffer
 	if err := NewEncoder(&buf).Encode(populated); err != nil {
 		t.Fatalf("Encode: %v", err)
@@ -255,6 +270,6 @@ func TestEveryEventFieldIsMarshalable(t *testing.T) {
 		t.Fatalf("the encoded event does not decode: %v", err)
 	}
 	if !reflect.DeepEqual(round, populated) {
-		t.Errorf("round trip = %+v, want %+v", round, populated)
+		t.Errorf("round trip = %+v, want %+v: every field must survive the wire", round, populated)
 	}
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -472,7 +473,10 @@ func TestCanonicalRootFailsWhenEvalSymlinksFails(t *testing.T) {
 	if !errors.Is(err, ErrProjectRoot) {
 		t.Errorf("err = %v, want to wrap ErrProjectRoot", err)
 	}
-	if !strings.Contains(err.Error(), dir) {
-		t.Errorf("err = %v, want to contain path %q", err, dir)
+	if !strings.Contains(err.Error(), fmt.Sprintf("%q", dir)) {
+		t.Errorf("err = %v, want it to name the offending root %q; the message quotes the path, which doubles separators on Windows", err, dir)
+	}
+	if !strings.Contains(err.Error(), "lstat: no such file") {
+		t.Errorf("err = %v, want the underlying resolver failure kept", err)
 	}
 }
