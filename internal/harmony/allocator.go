@@ -19,19 +19,55 @@ type Allocator struct {
 	scale  Scale
 	voices map[string]Voice
 	free   []int
+	rank   []int
 	capped map[string]bool
 }
 
+var intervalRank = rankByConsonance(4, 3, 9, 8, 0, 7, 5, 10, 11, 2, 1, 6)
+
+func rankByConsonance(classes ...int) [12]int {
+	var rank [12]int
+	for position, class := range classes {
+		rank[class] = position
+	}
+	return rank
+}
+
+func degreeClass(scale Scale, degree int) int {
+	steps := len(scale.Intervals)
+	n := (degree-1)%steps + 1
+	return ((scale.Intervals[n%steps] % 12) + 12) % 12
+}
+
+func allocationOrder(scale Scale) []int {
+	harmonies := make([]int, min(len(scale.Intervals), MaxVoices-1))
+	for i := range harmonies {
+		harmonies[i] = i + 1
+	}
+	sort.SliceStable(harmonies, func(i, j int) bool {
+		return intervalRank[degreeClass(scale, harmonies[i])] < intervalRank[degreeClass(scale, harmonies[j])]
+	})
+	order := make([]int, 0, MaxVoices)
+	order = append(order, 0)
+	order = append(order, harmonies...)
+	for degree := len(harmonies) + 1; degree < MaxVoices; degree++ {
+		order = append(order, degree)
+	}
+	return order
+}
+
 func NewAllocator(root Pitch, scale Scale) *Allocator {
-	free := make([]int, MaxVoices)
-	for i := range free {
-		free[i] = i
+	free := allocationOrder(scale)
+	rank := make([]int, MaxVoices)
+	for position, degree := range free {
+		rank[degree] = position
 	}
 	return &Allocator{
 		root:   root,
 		scale:  scale,
 		voices: make(map[string]Voice),
 		free:   free,
+		rank:   rank,
 		capped: make(map[string]bool),
 	}
 }
@@ -75,7 +111,7 @@ func (a *Allocator) Release(sessionID string) {
 		delete(a.capped, sessionID)
 		return
 	}
-	idx := sort.SearchInts(a.free, v.Degree)
+	idx := sort.Search(len(a.free), func(i int) bool { return a.rank[a.free[i]] >= a.rank[v.Degree] })
 	a.free = append(a.free, 0)
 	copy(a.free[idx+1:], a.free[idx:])
 	a.free[idx] = v.Degree

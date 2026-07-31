@@ -97,28 +97,29 @@ For `minor_pentatonic` (5 notes) rooted at D2:
 
 PRD §7 shows four simultaneous work sessions allocated D2, F2, A2, C3 against root D and scale `minor_pentatonic`.
 
-Consecutive scale degrees 0, 1, 2, 3 yield D2, F3, **G3**, **A3** — the third
-voice is G, not A, and C does not appear. The PRD example is not consecutive
-degrees.
+The engine does **not** reproduce that example. Allocation is by interval
+function, so four concurrent sessions rooted at D2 sound D2, F3, D4, A3 — the
+root, its third, its octave and its fifth, with every harmony lifted an octave
+(see **Voicing** below). The PRD's C is the last pitch the scale has to offer and
+does not appear until a sixth session arrives.
 
-The engine does **not** reproduce that example. Issue #14 fixes allocation as the
-lowest free degree, so four concurrent sessions rooted at D2 sound D2, F3, G3,
-A3 — consecutive degrees, with every harmony lifted an octave (see **Voicing**
-below). Lowest-free is what makes allocation deterministic and
-makes a released pitch immediately reusable, which `PRD.md` §7 also requires when
-it says completed sessions disappear.
+Issue #14 originally fixed allocation as the lowest free degree, which spelled
+D2, F3, G3, A3. Issue #75 replaced that: two sessions holding neighbouring scale
+steps sit around half a critical band apart, which is audible roughness rather
+than harmony. Measured in ERB units, the minimum spacing between three
+concurrent voices rose from 0.66 to 3.21 by handing out degrees in order of
+interval function instead of scale order.
 
-Degrees 0, 1, 3, 4 would spell the PRD's Dm7 voicing, and `Degree` supports any
-`n` a future policy might want, but choosing pitches by chord function rather
-than by availability means a released voice cannot be handed to the next session
-without re-voicing every sounding drone. That is a Phase 2 question. Until then
-the divergence from the §7 example is recorded here as a decision.
+What made lowest-free attractive is preserved. The order is a fixed permutation
+of degrees, so a released voice still returns to the pool and is handed to the
+next session without re-voicing any drone still sounding, which is what `PRD.md`
+§7 requires when it says completed sessions disappear.
 
 ---
 
 ## Allocation
 
-`Allocator` owns the mapping between session IDs and musical voices. It maintains a sorted free list of degrees (integers 0 through `MaxVoices−1`). `Acquire` always takes the smallest available degree, so sessions assigned in order receive consecutive scale degrees: three sessions rooted at D2 on `minor_pentatonic` sound D2, F3, G3 (degrees 0, 1, 2). When a session is released that degree returns immediately to the free pool; the next session to arrive reuses it without any re-voicing of the drones still sounding. This is the direct consequence of the PRD §7 requirement that "completed sessions disappear" — see the **PRD §7 allocation example** section above for why consecutive degrees diverge from the four-voice voicing shown in the PRD.
+`Allocator` owns the mapping between session IDs and musical voices. It maintains a free list of degrees (integers 0 through `MaxVoices−1`) held in **allocation order**, and `Acquire` always takes the first entry. Allocation order is degree 0, then the harmony degrees ranked by the interval each sounds above the root — thirds, then sixths, then the octave, the fifth, the fourth, the sevenths, the seconds, and the tritone last — then any remaining degrees, which duplicate pitches already in the list. Three sessions rooted at D2 on `minor_pentatonic` therefore sound D2, F3, D4 (degrees 0, 1, 5), not the neighbouring D2, F3, G3. The ranking is over interval classes, so it adapts to the scale: `major_pentatonic` sounds D2, F#3, B3, having both a third and a sixth to offer, while `minor_pentatonic` has no sixth at all and reaches for its octave second. When a session is released its degree is reinserted at its allocation-order position, and the next session to arrive reuses it without any re-voicing of the drones still sounding. This is the direct consequence of the PRD §7 requirement that "completed sessions disappear" — see the **PRD §7 allocation example** section above for why the result diverges from the four-voice voicing shown in the PRD.
 
 `MaxVoices` is 12. When all 12 degrees are in use the allocator is at capacity: new sessions receive `Degree = MaxVoices−1` and the same pitch as that degree. They are still tracked by session ID so `hum status` can list them, and `audio.Renderer` keys an oscillator per session ID, so more than 12 concurrent sessions really do open more than 12 oscillators — what the cap bounds is the number of *distinct* pitches, which the voicing fold below lowers further to `len(Intervals) + 1`. Releasing a capped session removes it from the tracking table but returns nothing to the free pool, because no degree was consumed. Releasing any of the 12 normal voices puts that degree back, restoring the cap headroom immediately.
 
@@ -153,10 +154,12 @@ makes `root + 24` semitones the exact ceiling: on `minor_pentatonic` degree 5
 sounds D4, and degree 6 shares F3 with degree 1. The top harmony of every
 built-in scale lands exactly two octaves above the root.
 
-The root's own register is `music.octave`, defaulting to 3, so the voices a
-default install actually sounds are D3, F4, G4, A4, C5, D5. The table above is
-rooted at D2 because that is what the change to lifted voicing replaced; both
-the register and the lift are visible in `hum status`.
+The root's own register is `music.octave`, defaulting to 3, so the pitches a
+default install has to offer are D3, F4, G4, A4, C5, D5, listed by degree. The
+order sessions receive them in is **Allocation** above, not this one: D3, F4,
+D5, A4, G4, C5. The table is rooted at D2 because that is what the change to
+lifted voicing replaced; both the register and the lift are visible in
+`hum status`.
 
 The price is shared pitches beyond `len(Intervals) + 1` concurrent sessions —
 six voices on a pentatonic, eight on a seven-note scale — where the old mapping

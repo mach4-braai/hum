@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var defaultChord = []string{"D3", "F4", "G4", "A4"}
+var defaultChord = []string{"D3", "F4", "D5", "A4"}
 
 func TestFourConcurrentSessionsSoundTheDocumentedChord(t *testing.T) {
 	d := start(t)
@@ -30,7 +30,7 @@ func TestFourConcurrentSessionsSoundTheDocumentedChord(t *testing.T) {
 	assigned := []string{got["one"], got["two"], got["three"], got["four"]}
 	for i, want := range defaultChord {
 		if assigned[i] != want {
-			t.Errorf("session %d sounds %q, want %q: allocation is the lowest free degree with every harmony lifted an octave", i+1, assigned[i], want)
+			t.Errorf("session %d sounds %q, want %q: voices are allocated by interval function, every harmony lifted an octave", i+1, assigned[i], want)
 		}
 	}
 

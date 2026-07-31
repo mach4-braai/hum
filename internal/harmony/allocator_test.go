@@ -25,23 +25,50 @@ func mustLookupScale(t *testing.T, name string) Scale {
 	return s
 }
 
-func TestAllocatorSequentialDegrees(t *testing.T) {
+func TestAllocatorHandsOutConsonantIntervalsFirst(t *testing.T) {
 	root := mustParsePitch(t, "D2")
 	scale := mustLookupScale(t, "minor_pentatonic")
 	a := NewAllocator(root, scale)
 
-	v0 := a.Acquire("s0")
-	v1 := a.Acquire("s1")
-	v2 := a.Acquire("s2")
+	want := []string{"D2", "F3", "D4", "A3", "G3", "C4"}
+	for i, name := range want {
+		v := a.Acquire(fmt.Sprintf("s%d", i))
+		if got := v.Pitch.String(); got != name {
+			t.Errorf("voice %d sounds %s, want %s: voices arrive by interval function, not in scale order", i+1, got, name)
+		}
+	}
+}
 
-	if v0.Degree != 0 {
-		t.Errorf("s0: want degree 0, got %d", v0.Degree)
+func TestAllocationOrderPrefersThirdsAndSixthsWhenTheScaleHasThem(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	a := NewAllocator(root, mustLookupScale(t, "major_pentatonic"))
+
+	want := []string{"D2", "F#3", "B3"}
+	for i, name := range want {
+		if got := a.Acquire(fmt.Sprintf("s%d", i)).Pitch.String(); got != name {
+			t.Errorf("voice %d sounds %s, want %s: a scale offering a third and a sixth sounds them before its octave", i+1, got, name)
+		}
 	}
-	if v1.Degree != 1 {
-		t.Errorf("s1: want degree 1, got %d", v1.Degree)
-	}
-	if v2.Degree != 2 {
-		t.Errorf("s2: want degree 2, got %d", v2.Degree)
+}
+
+func TestConcurrentVoicesAreNeverASecondApart(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+
+	for _, name := range ScaleNames() {
+		scale := mustLookupScale(t, name)
+		a := NewAllocator(root, scale)
+
+		var sounding []Pitch
+		for i := range 3 {
+			sounding = append(sounding, a.Acquire(fmt.Sprintf("s%d", i)).Pitch)
+		}
+		for i := range sounding {
+			for j := i + 1; j < len(sounding); j++ {
+				if gap := sounding[j].Midi() - sounding[i].Midi(); gap < 3 {
+					t.Errorf("%s: %v and %v are %d semitones apart, which is the roughness a second produces", name, sounding[i], sounding[j], gap)
+				}
+			}
+		}
 	}
 }
 
@@ -251,15 +278,10 @@ func TestVoicesOrderIsDeterministicPastTheCap(t *testing.T) {
 func TestVoicingLiftsHarmoniesAnOctave(t *testing.T) {
 	root := mustParsePitch(t, "D2")
 	scale := mustLookupScale(t, "minor_pentatonic")
-	a := NewAllocator(root, scale)
 
 	want := []string{"D2", "F3", "G3", "A3", "C4", "D4"}
 	for degree, name := range want {
-		v := a.Acquire(fmt.Sprintf("s%d", degree))
-		if v.Degree != degree {
-			t.Fatalf("s%d: want degree %d, got %d", degree, degree, v.Degree)
-		}
-		if got := v.Pitch.String(); got != name {
+		if got := voicing(root, scale, degree).String(); got != name {
 			t.Errorf("degree %d sounds %s, want %s: harmonies sit an octave above the root", degree, got, name)
 		}
 	}
