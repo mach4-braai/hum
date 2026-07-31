@@ -311,6 +311,7 @@ var pinnedActions = map[string]struct {
 	"actions/cache":                   {"v6.1.0", 5, "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"},
 	"actions/checkout":                {"v7.0.1", 5, "3d3c42e5aac5ba805825da76410c181273ba90b1"},
 	"actions/create-github-app-token": {"v3.2.0", 3, "bcd2ba49218906704ab6c1aa796996da409d3eb1"},
+	"codecov/codecov-action":          {"v7.0.0", 5, "fb8b3582c8e4def4969c97caa2f19720cb33a72f"},
 	"jdx/mise-action":                 {"v4.2.3", 4, "9e7f7633ff6f6d6048a9418a68d48f288f50eb14"},
 }
 

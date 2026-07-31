@@ -1,5 +1,8 @@
 # hum
 
+[![ci](https://img.shields.io/github/actions/workflow/status/mach4-braai/hum/ci.yml?branch=master&label=ci)](https://github.com/mach4-braai/hum/actions/workflows/ci.yml?query=branch%3Amaster)
+[![coverage](https://codecov.io/gh/mach4-braai/hum/branch/master/graph/badge.svg)](https://codecov.io/gh/mach4-braai/hum)
+
 Hum is a local-first daemon that renders work-session lifecycle events as an
 ambient musical soundscape. One work session becomes one sustained drone in a
 chosen key and scale; concurrent sessions form chords; completion and failure
