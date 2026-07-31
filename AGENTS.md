@@ -60,8 +60,15 @@ behaviour, boundaries and error paths — not plumbing.
   99.82%, five misses across two files, against the gate's 100.0% of 2,233
   statements. Do not "fix" that gap by targeting 100% in `.github/codecov.yml` —
   the project status would be red on every commit. It targets `auto` with a zero
-  threshold, which forbids a regression, and the patch target is 100%, which the
-  gate already guarantees for any line a change touches.
+  threshold, which forbids a regression.
+- The patch target is 100%, and that is a **second, stricter policy rather than a
+  restatement of the gate**. It is line coverage, so it can reject a change the
+  statement gate accepts: `case <-d.shutdown:` is the standing example, a line
+  carrying zero statements that `mise run coverage` is blind to and Codecov counts
+  as a miss. A change touching lines of that shape turns `codecov/patch` red while
+  `check` and `coverage` stay green. That is the intended trade — decide on the
+  evidence in the Codecov comment, and lower the patch target rather than pretend
+  the two measures agree.
 - `use_oidc` is switched off for a pull request from a fork, matching Codecov's own
   example. A fork build is not granted `id-token: write`, so asking for OIDC there
   would yield an empty token and fall back anyway; the documented fork path is the
