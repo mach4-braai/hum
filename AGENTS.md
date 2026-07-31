@@ -51,14 +51,17 @@ behaviour, boundaries and error paths — not plumbing.
   pattern is updated. That is deliberate — an exemption nobody notices is a hole.
 - Coverage is visible from the README: a live CI badge beside a Codecov badge for
   `master`. The `coverage` job uploads `coverage.out` with `codecov/codecov-action`.
-- Codecov reads lower than the gate, by exactly three statements, and that is
-  expected. It parses the profile's blocks, so it counts the `newOtoPlayer` body
-  that `go tool cover -func` cannot see and that `UNEXERCISABLE` excuses: 2,235 of
-  2,238 statements, or 99.87%, against the gate's 100.0%. Do not "fix" the badge by
-  targeting 100% in `.github/codecov.yml` — the project status would then be red on
-  every commit. It targets `auto` with a zero threshold, which forbids a regression,
-  and the patch target is 100%, which is what the gate already guarantees for any
-  line a change touches.
+- Codecov reads lower than the gate and that is expected, but not for the reason a
+  quick guess gives. Codecov counts **lines**, where `go tool cover` counts
+  statements, and it counts every line in the profile — including the
+  `newOtoPlayer` body that `-func` cannot see and `UNEXERCISABLE` excuses, and the
+  `case <-d.shutdown:` arm in `cmd/humd/daemon.go`, which carries zero statements
+  and so cannot move the local figure at all. Measured: 2,854 of 2,859 lines,
+  99.82%, five misses across two files, against the gate's 100.0% of 2,233
+  statements. Do not "fix" that gap by targeting 100% in `.github/codecov.yml` —
+  the project status would be red on every commit. It targets `auto` with a zero
+  threshold, which forbids a regression, and the patch target is 100%, which the
+  gate already guarantees for any line a change touches.
 - `use_oidc` is switched off for a pull request from a fork, matching Codecov's own
   example. A fork build is not granted `id-token: write`, so asking for OIDC there
   would yield an empty token and fall back anyway; the documented fork path is the
