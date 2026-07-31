@@ -170,8 +170,8 @@ func TestEngineStateOrderDeterministic(t *testing.T) {
 				i, st.Voices[i].Degree, st.Voices[i-1].Degree)
 		}
 	}
-	if st.Voices[0].Degree != 0 || st.Voices[1].Degree != 1 || st.Voices[2].Degree != 2 {
-		t.Errorf("unexpected degrees: %v", st.Voices)
+	if st.Voices[0].Degree != 0 || st.Voices[1].Degree != 1 || st.Voices[2].Degree != 5 {
+		t.Errorf("degrees = %v, want the root, its third and its octave", st.Voices)
 	}
 }
 

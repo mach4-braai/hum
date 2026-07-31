@@ -34,8 +34,8 @@ func TestTwoConcurrentProjectsShareTheFirstContext(t *testing.T) {
 	}
 
 	dorianSecond := pitches(st)["b1"]
-	if dorianSecond != "E4" {
-		t.Errorf("beta's session sounds %q, want E4: dorian degree 1 is +2 semitones, lifted an octave", dorianSecond)
+	if dorianSecond != "F4" {
+		t.Errorf("beta's session sounds %q, want F4: the second dorian voice is the third, lifted an octave", dorianSecond)
 	}
 }
 
