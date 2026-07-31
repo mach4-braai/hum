@@ -38,6 +38,13 @@ jobs:
 
       - run: mise run check
 
+      - name: Verify the systemd user unit
+        if: runner.os == 'Linux'
+        run: |
+          PREFIX="$HOME/.local" mise run install
+          install -Dm644 contrib/systemd/humd.service "$HOME/.config/systemd/user/humd.service"
+          systemd-analyze --user verify "$HOME/.config/systemd/user/humd.service"
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest

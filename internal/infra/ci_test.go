@@ -64,6 +64,17 @@ func TestCIInstallsLinuxAudioBuildDependency(t *testing.T) {
 	}
 }
 
+func TestCIVerifiesTheSystemdUnit(t *testing.T) {
+	workflow := readWorkflow(t)
+
+	if !strings.Contains(workflow, "systemd-analyze --user verify") {
+		t.Error("ci workflow does not run systemd-analyze against contrib/systemd/humd.service, so a malformed unit would ship unnoticed")
+	}
+	if !strings.Contains(workflow, `PREFIX="$HOME/.local" mise run install`) {
+		t.Error("the systemd check does not install to the prefix the unit's ExecStart names, so verify would only prove the file parses")
+	}
+}
+
 func TestCIRunsOnPushAndPullRequest(t *testing.T) {
 	workflow := readWorkflow(t)
 

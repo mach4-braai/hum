@@ -1,0 +1,12 @@
+[Unit]
+Description=Hum auditory display daemon
+Documentation=https://github.com/mach4-braai/hum/blob/master/docs/daemon.md
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/humd
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
