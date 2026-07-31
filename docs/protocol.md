@@ -79,6 +79,15 @@ only the daemon shares a filesystem with the project. A missing `root` is not an
 error: it means global config only, which keeps the protocol usable from a bare
 `socat` one-liner.
 
+**Absolute means absolute for the daemon's platform.** `Validate` uses Go's
+`filepath.IsAbs`, so `/srv/project` is absolute to a daemon on macOS or Linux and
+relative to one on Windows, where `C:\srv\project` is what qualifies. This is not
+a limitation to work around: the daemon has to `os.Stat` the path and walk it for
+`.hum/config.yaml`, so the only notion of absolute it can act on is its own. A
+client always shares a filesystem with the daemon it talks to over a Unix socket,
+so the two never disagree in practice — the rule is written down because
+"absolute" is otherwise the kind of word a reader assumes is universal.
+
 ## Requests
 
 A request carries **exactly one** of an event or a command. Both is ambiguous;

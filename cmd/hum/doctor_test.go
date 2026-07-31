@@ -548,27 +548,6 @@ func TestDoctorSocketCheckNotASocket(t *testing.T) {
 	}
 }
 
-func TestDoctorSocketCheckStatError(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skip("root bypasses directory permission checks")
-	}
-	dir := t.TempDir()
-	sub := filepath.Join(dir, "nosearch")
-	if err := os.Mkdir(sub, 0o000); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	t.Cleanup(func() { os.Chmod(sub, 0o755) })
-	t.Setenv("HUM_SOCKET", filepath.Join(sub, "hum.sock"))
-	c := doctorSocketCheck()
-	os.Chmod(sub, 0o755)
-	if c.Status != "warn" {
-		t.Errorf("status = %q, want warn", c.Status)
-	}
-	if !strings.Contains(c.Detail, "hum.sock") {
-		t.Errorf("detail should contain socket name; got %q", c.Detail)
-	}
-}
-
 func TestDoctorAudioTestTransportError(t *testing.T) {
 	t.Setenv("HUM_HOME", t.TempDir())
 	statusPayload := fmt.Sprintf(

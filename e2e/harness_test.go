@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -18,13 +19,20 @@ import (
 	"github.com/mach4-braai/hum/internal/protocol"
 )
 
+var exeSuffix = func() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}()
+
 var binaries = sync.OnceValues(func() (string, error) {
 	dir, err := os.MkdirTemp("", "hum-e2e")
 	if err != nil {
 		return "", err
 	}
 	for _, target := range []string{"hum", "humd"} {
-		build := exec.Command("go", "build", "-o", filepath.Join(dir, target), "../cmd/"+target)
+		build := exec.Command("go", "build", "-o", filepath.Join(dir, target+exeSuffix), "../cmd/"+target)
 		if out, err := build.CombinedOutput(); err != nil {
 			return "", errors.New(string(out))
 		}
@@ -56,7 +64,7 @@ func start(t *testing.T, args ...string) *daemon {
 	socket := filepath.Join(home, "humd.sock")
 
 	full := append([]string{"--no-audio", "--log-level", "debug", "--socket", socket}, args...)
-	cmd := exec.Command(filepath.Join(dir, "humd"), full...)
+	cmd := exec.Command(filepath.Join(dir, "humd"+exeSuffix), full...)
 	cmd.Env = append(os.Environ(), "HUM_HOME="+home, "HUM_SOCKET="+socket)
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -100,7 +108,7 @@ func (d *daemon) waitForSocket(t *testing.T) {
 
 func (d *daemon) hum(t *testing.T, args ...string) (string, int) {
 	t.Helper()
-	cmd := exec.Command(filepath.Join(d.bin, "hum"), args...)
+	cmd := exec.Command(filepath.Join(d.bin, "hum"+exeSuffix), args...)
 	cmd.Env = append(os.Environ(), "HUM_HOME="+d.home, "HUM_SOCKET="+d.socket)
 	out, err := cmd.CombinedOutput()
 	if err == nil {

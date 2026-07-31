@@ -18,7 +18,7 @@ var buildHumd = sync.OnceValues(func() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	binary := filepath.Join(dir, "humd")
+	binary := filepath.Join(dir, "humd"+exeSuffix)
 	build := exec.Command("go", "build", "-o", binary, "../humd")
 	if out, err := build.CombinedOutput(); err != nil {
 		return "", errors.New(string(out))

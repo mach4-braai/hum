@@ -170,13 +170,10 @@ func TestSocketMode(t *testing.T) {
 	path := sockPath(t)
 	startServer(t, path, okHandler)
 
-	info, err := os.Stat(path)
-	if err != nil {
+	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("socket mode: want 0600, got %04o", got)
-	}
+	assertSocketMode(t, path)
 }
 
 func TestRelativePathRejected(t *testing.T) {

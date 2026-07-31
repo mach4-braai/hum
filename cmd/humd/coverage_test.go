@@ -611,9 +611,9 @@ func TestServeEventsReapsBehavior(t *testing.T) {
 		protocol.Request{Event: &protocol.Event{Event: protocol.SessionCompleted, ID: "dead1"}},
 	)
 
-	dropped := d.registry.Reap(0)
+	dropped := d.registry.Reap(-time.Second)
 	if dropped != 1 {
-		t.Errorf("Reap(0) dropped %d sessions, want 1 (the terminal one)", dropped)
+		t.Errorf("Reap dropped %d sessions, want 1 (the terminal one)", dropped)
 	}
 
 	status := statusOf(t, socket)

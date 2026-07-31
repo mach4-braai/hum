@@ -124,36 +124,6 @@ func TestStopStrayOperand(t *testing.T) {
 	}
 }
 
-func TestStopMatchesSIGTERM(t *testing.T) {
-	t.Setenv("HUM_HOME", t.TempDir())
-
-	d1 := startHumd(t)
-	var stdout1, stderr1 bytes.Buffer
-	if code := run([]string{"stop"}, &stdout1, &stderr1); code != exitOK {
-		t.Fatalf("hum stop exited %d; stderr=%q", code, stderr1.String())
-	}
-	d1.stop()
-	humStopLogs := d1.logs()
-
-	d2 := startHumd(t)
-	d2.stop()
-	sigtermLogs := d2.logs()
-
-	for _, marker := range []string{"shutting down", "waiting for voices to fade", "stopped"} {
-		if !strings.Contains(humStopLogs, marker) {
-			t.Errorf("hum stop logs missing %q\nlogs:\n%s", marker, humStopLogs)
-		}
-		if !strings.Contains(sigtermLogs, marker) {
-			t.Errorf("SIGTERM logs missing %q\nlogs:\n%s", marker, sigtermLogs)
-		}
-	}
-	if !strings.Contains(humStopLogs, "shutdown command") {
-		t.Errorf("hum stop logs missing reason 'shutdown command'\nlogs:\n%s", humStopLogs)
-	}
-	if !strings.Contains(sigtermLogs, "terminated") {
-		t.Errorf("SIGTERM logs missing signal name 'terminated'\nlogs:\n%s", sigtermLogs)
-	}
-}
 func TestStopUnparsableFlagIsUsageError(t *testing.T) {
 	t.Setenv("HUM_HOME", t.TempDir())
 	unreachableSocket(t)

@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+func setHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
+}
+
 func TestGlobalConfigDirPrefersHumHome(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HUM_HOME", dir)
@@ -73,7 +79,7 @@ func TestProjectConfigFileReportsNotFound(t *testing.T) {
 
 	t.Run("global config is not project config", func(t *testing.T) {
 		home := t.TempDir()
-		t.Setenv("HOME", home)
+		setHome(t, home)
 		t.Setenv("HUM_HOME", "")
 		if err := os.MkdirAll(filepath.Join(home, ".hum"), 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
@@ -152,10 +158,10 @@ func TestDefaultSocketPathStaysWithinSunPathBudget(t *testing.T) {
 	}
 }
 
-func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
+func TestEnsureRuntimeDirIsPrivate(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HUM_SOCKET", "")
-	t.Setenv("HUM_HOME", filepath.Join(home, "state", "nested"))
+	t.Setenv("HUM_HOME", "")
+	t.Setenv("HUM_SOCKET", filepath.Join(home, "state", "nested", "humd.sock"))
 
 	if err := EnsureRuntimeDir(); err != nil {
 		t.Fatalf("EnsureRuntimeDir() = %v, want nil", err)
@@ -169,9 +175,7 @@ func TestEnsureRuntimeDirCreatesSocketParentPrivately(t *testing.T) {
 	if !info.IsDir() {
 		t.Fatalf("%q is not a directory", dir)
 	}
-	if perm := info.Mode().Perm(); perm != 0o700 {
-		t.Errorf("permissions on %q = %#o, want %#o", dir, perm, 0o700)
-	}
+	assertPrivateDir(t, dir)
 }
 
 func TestEnsureRuntimeDirIsIdempotent(t *testing.T) {
@@ -188,7 +192,7 @@ func TestEnsureRuntimeDirIsIdempotent(t *testing.T) {
 
 func TestGlobalConfigDirFallsBackToProjectDirNameWithoutAHome(t *testing.T) {
 	t.Setenv("HUM_HOME", "")
-	t.Setenv("HOME", "")
+	setHome(t, "")
 
 	if got := GlobalConfigDir(); got != ProjectDirName {
 		t.Errorf("GlobalConfigDir() = %q, want %q: an absent home must not yield a bare or rooted path", got, ProjectDirName)

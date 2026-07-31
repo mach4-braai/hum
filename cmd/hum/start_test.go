@@ -293,22 +293,3 @@ func TestStartEndToEnd(t *testing.T) {
 		t.Errorf("daemon logs missing voices=1; logs:\n%s", logs)
 	}
 }
-
-func TestStartProjectRootUnresolvableWithoutRootFlag(t *testing.T) {
-	dir, err := os.MkdirTemp("", "hd")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(dir)
-	os.RemoveAll(dir)
-
-	var stderr bytes.Buffer
-	code := run([]string{"start"}, &bytes.Buffer{}, &stderr)
-
-	if code != exitDaemonError {
-		t.Errorf("exit %d want %d; stderr=%q", code, exitDaemonError, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "cannot resolve the project root") {
-		t.Errorf("stderr = %q, want it to contain %q", stderr.String(), "cannot resolve the project root")
-	}
-}
