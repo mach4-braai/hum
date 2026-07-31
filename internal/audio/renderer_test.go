@@ -634,3 +634,24 @@ func TestSampleRate_ReportsTheOutputFormat(t *testing.T) {
 		t.Fatalf("SampleRate() = %d, want %d", got, DefaultFormat().SampleRate)
 	}
 }
+
+func TestNewCaptureRendererMixesWithoutADevice(t *testing.T) {
+	f := DefaultFormat()
+	r, m := NewCaptureRenderer(f, testOpts())
+	t.Cleanup(func() { r.Close() })
+
+	if m == nil {
+		t.Fatal("no mixer returned; the caller has nothing to read")
+	}
+	if err := r.Update(harmony.State{Voices: []harmony.VoiceState{voiceState("one", 2, 3)}}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	buf := make([]byte, 512*frameSize)
+	if _, err := m.Read(buf); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if m.Len() != 1 {
+		t.Errorf("mixer holds %d sources, want the one drone", m.Len())
+	}
+}

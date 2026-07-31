@@ -24,6 +24,10 @@ run = "goreleaser release --snapshot --clean"
 description = "Run the unit test suite"
 run = "go test ./..."
 
+[tasks.e2e]
+description = "Run the end-to-end acceptance suite against the real binaries"
+run = "go test -tags e2e -count=1 ./e2e/..."
+
 [tasks.coverage]
 description = "Run the unit tests under coverage and enforce the minimum"
 run = '''

@@ -45,6 +45,31 @@ jobs:
           install -Dm644 contrib/systemd/humd.service "$HOME/.config/systemd/user/humd.service"
           systemd-analyze --user verify "$HOME/.config/systemd/user/humd.service"
 
+  e2e:
+    name: e2e
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+
+      - name: Cache the Go modules and the compiler output
+        uses: ./.github/actions/go-cache
+
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - run: mise run e2e
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest
