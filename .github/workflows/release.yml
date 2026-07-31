@@ -60,9 +60,38 @@ jobs:
 
       - run: mise run check
 
+  windows:
+    name: windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+        with:
+          cache: false
+
+      - run: go vet ./...
+
+      - name: Serve and stop a real daemon
+        shell: bash
+        run: |
+          set -eu
+          mise run build
+          export HUM_HOME="$RUNNER_TEMP/hh"
+          export HUM_SOCKET="$HUM_HOME/humd.sock"
+          mkdir -p "$HUM_HOME"
+          ./bin/humd.exe --no-audio --log-level debug &
+          for _ in $(seq 100); do [ -e "$HUM_SOCKET" ] && break; sleep 0.2; done
+          ./bin/hum.exe status
+          ./bin/hum.exe stop
+          test ! -e "$HUM_SOCKET" || { echo "the socket outlived the daemon" >&2; exit 1; }
+
   release:
     name: release
-    needs: check
+    needs: [check, windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

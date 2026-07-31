@@ -25,7 +25,7 @@ func okHandler(req protocol.Request) protocol.Response {
 
 func tmpDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "humtr")
+	dir, err := os.MkdirTemp("", "humtr")
 	if err != nil {
 		t.Fatalf("MkdirTemp: %v", err)
 	}

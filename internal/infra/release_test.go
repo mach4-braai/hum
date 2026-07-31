@@ -143,8 +143,8 @@ func TestReleaseWorkflowGatesOnTheCheckTask(t *testing.T) {
 	if !strings.Contains(workflow, "mise run check") {
 		t.Fatal("release.yml does not run mise run check, so a failing test could not block a release")
 	}
-	if !strings.Contains(workflow, "needs: check") {
-		t.Error("release.yml does not make the release job depend on the check job")
+	if !strings.Contains(workflow, "needs: [check, windows]") {
+		t.Error("release.yml does not make the release job depend on both the check job and the Windows job")
 	}
 	if !strings.Contains(workflow, `tags: ["v*"]`) {
 		t.Error("release.yml does not trigger on v* tags")
@@ -227,8 +227,8 @@ func TestTheDefaultBranchWarmsThePackageCache(t *testing.T) {
 func TestReleaseJobsRunOnlyForTags(t *testing.T) {
 	release := readRepoFile(t, ".github", "workflows", "release.yml")
 
-	if strings.Count(release, "if: startsWith(github.ref, 'refs/tags/v')") != 2 {
-		t.Error("the check and release jobs are not both gated on a tag, so a push to the default branch would publish or double-run the suite ci.yml already runs")
+	if strings.Count(release, "if: startsWith(github.ref, 'refs/tags/v')") != 3 {
+		t.Error("the check, windows and release jobs are not all gated on a tag, so a push to the default branch would publish or double-run the suite ci.yml already runs")
 	}
 }
 

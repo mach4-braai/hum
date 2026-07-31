@@ -18,13 +18,60 @@ func readWorkflow(t *testing.T) string {
 	return string(data)
 }
 
-func TestCIRunsOnBothSupportedPlatforms(t *testing.T) {
-	workflow := readWorkflow(t)
+func jobBlockIn(t *testing.T, data, workflow, name string) string {
+	t.Helper()
+	_, rest, found := strings.Cut(data, "\n  "+name+":\n")
+	if !found {
+		t.Fatalf("%s has no %s job", workflow, name)
+	}
+	if next := regexp.MustCompile(`\n  [a-z0-9-]+:\n`).FindStringIndex(rest); next != nil {
+		rest = rest[:next[0]]
+	}
+	return rest
+}
+
+func jobBlock(t *testing.T, workflow, name string) string {
+	t.Helper()
+	return jobBlockIn(t, workflow, "ci.yml", name)
+}
+
+func TestCIChecksBothPOSIXPlatforms(t *testing.T) {
+	block := jobBlock(t, readWorkflow(t), "check")
 
 	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
-		if !strings.Contains(workflow, runner) {
-			t.Errorf("ci workflow does not run on %s", runner)
+		if !strings.Contains(block, runner) {
+			t.Errorf("the check job does not run on %s", runner)
 		}
+	}
+	if strings.Contains(block, "windows-latest") {
+		t.Error("the check job claims windows-latest; `mise run check` does not pass there yet (#82) and the Windows job is what covers that platform")
+	}
+}
+
+func TestCIExecutesAWindowsBinary(t *testing.T) {
+	for _, workflow := range []string{"ci.yml", "release.yml"} {
+		data := readRepoFile(t, ".github", "workflows", workflow)
+		block := jobBlockIn(t, data, workflow, "windows")
+
+		if !strings.Contains(block, "windows-latest") {
+			t.Errorf("%s: the windows job does not run on a Windows runner", workflow)
+		}
+		if !strings.Contains(block, "go vet ./...") {
+			t.Errorf("%s: the windows job does not vet, so a Windows-only compile break could ship", workflow)
+		}
+		for _, want := range []string{"bin/humd.exe", "bin/hum.exe", "stop"} {
+			if !strings.Contains(block, want) {
+				t.Errorf("%s: the windows job does not exercise %s; the archives would ship unexecuted again", workflow, want)
+			}
+		}
+	}
+}
+
+func TestTheCheckoutIsLineEndingNeutral(t *testing.T) {
+	attributes := readRepoFile(t, ".gitattributes")
+
+	if !strings.Contains(attributes, "eol=lf") {
+		t.Error(".gitattributes does not pin eol=lf; Git for Windows checks out CRLF by default and gofmt then reports every file as unformatted")
 	}
 }
 
@@ -81,11 +128,14 @@ func TestCIRunsTheAcceptanceSuiteAsItsOwnJob(t *testing.T) {
 	if !strings.Contains(workflow, "mise run e2e") {
 		t.Fatal("ci workflow does not run the acceptance suite")
 	}
-	if !strings.Contains(workflow, "  e2e:") {
-		t.Error("the acceptance suite is not a job of its own, so an acceptance failure could not be told apart from a unit test failure")
+	block := jobBlock(t, workflow, "e2e")
+	for _, runner := range []string{"ubuntu-latest", "macos-latest"} {
+		if !strings.Contains(block, runner) {
+			t.Errorf("the e2e job does not run on %s", runner)
+		}
 	}
-	if strings.Count(workflow, "os: [ubuntu-latest, macos-latest]") < 2 {
-		t.Error("the acceptance suite does not run on both supported platforms")
+	if strings.Contains(block, "windows-latest") {
+		t.Error("the e2e job claims Windows; the acceptance suite drives POSIX signals and has never been run there")
 	}
 }
 
