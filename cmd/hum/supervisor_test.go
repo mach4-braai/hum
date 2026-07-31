@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,6 +14,12 @@ func stubProbe(t *testing.T, answer func(name string) error) {
 	original := runQuietly
 	t.Cleanup(func() { runQuietly = original })
 	runQuietly = func(name string, _ ...string) error { return answer(name) }
+}
+
+func TestRunCommandQuietlyReportsAMissingBinary(t *testing.T) {
+	if err := runCommandQuietly(filepath.Join(t.TempDir(), "no-such-binary")); err == nil {
+		t.Error("running a missing binary = nil, want an error: an absent supervisor must never read as present")
+	}
 }
 
 func TestDetectSupervisorNamesLaunchd(t *testing.T) {

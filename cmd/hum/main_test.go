@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mach4-braai/hum/internal/protocol"
 )
@@ -415,5 +417,21 @@ func TestPersistReportsAConfigItCannotWrite(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "cannot update") {
 		t.Errorf("stderr = %q, want it to say the config could not be updated", stderr.String())
+	}
+}
+
+func TestACommandIsUnreachableWhenTheDeadlineCannotBeSet(t *testing.T) {
+	serveOne(t, `{"ok":true}`+"\n")
+	t.Cleanup(func() { connSetDeadline = setConnDeadline })
+	connSetDeadline = func(net.Conn, time.Time) error { return errors.New("dial gone") }
+	var stdout, stderr bytes.Buffer
+
+	code := run([]string{"ping"}, &stdout, &stderr)
+
+	if code != exitUnreachable {
+		t.Errorf("exit code = %d, want %d", code, exitUnreachable)
+	}
+	if !strings.Contains(stderr.String(), "deadline") {
+		t.Errorf("stderr = %q, want mention of deadline", stderr.String())
 	}
 }

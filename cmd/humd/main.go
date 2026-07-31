@@ -48,9 +48,10 @@ Flags:
 `
 
 var (
-	version = buildinfo.UnknownVersion
-	commit  = buildinfo.UnknownCommit
-	date    = buildinfo.UnknownDate
+	version        = buildinfo.UnknownVersion
+	commit         = buildinfo.UnknownCommit
+	date           = buildinfo.UnknownDate
+	openRendererFn = openRenderer
 )
 
 func build() buildinfo.Info {
@@ -160,7 +161,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if opts.noAudio {
 		requested = nopRendererName
 	}
-	render, err := openRenderer(opts.rendererName, opts.noAudio, renderer.Options{
+	render, err := openRendererFn(opts.rendererName, opts.noAudio, renderer.Options{
 		Theme:  th,
 		Volume: cfg.Audio.Volume,
 		Muted:  cfg.Audio.Muted,

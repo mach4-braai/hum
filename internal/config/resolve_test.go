@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -456,5 +458,25 @@ func TestResolveAllFieldsFromProject(t *testing.T) {
 	}
 	if prov["audio.muted"] != LayerProject {
 		t.Errorf("prov[audio.muted] = %q, want project", prov["audio.muted"])
+	}
+}
+
+func TestCanonicalRootFailsWhenEvalSymlinksFails(t *testing.T) {
+	t.Cleanup(func() { evalSymlinks = filepath.EvalSymlinks })
+	evalSymlinks = func(string) (string, error) { return "", errors.New("lstat: no such file") }
+
+	dir := t.TempDir()
+	_, err := CanonicalRoot(dir)
+	if err == nil {
+		t.Fatal("CanonicalRoot = nil, want error")
+	}
+	if !errors.Is(err, ErrProjectRoot) {
+		t.Errorf("err = %v, want to wrap ErrProjectRoot", err)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%q", dir)) {
+		t.Errorf("err = %v, want it to name the offending root %q; the message quotes the path, which doubles separators on Windows", err, dir)
+	}
+	if !strings.Contains(err.Error(), "lstat: no such file") {
+		t.Errorf("err = %v, want the underlying resolver failure kept", err)
 	}
 }

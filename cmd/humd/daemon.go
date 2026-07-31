@@ -23,6 +23,9 @@ const (
 	audioTestGain     = 0.6
 )
 
+var daemonTuning = tuning
+var engineRetune = (*harmony.Engine).Retune
+
 type call struct {
 	request protocol.Request
 	reply   chan protocol.Response
@@ -70,7 +73,7 @@ func releaseWaitFor(th theme.Theme) time.Duration {
 }
 
 func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, requested, globalFile string) (*daemon, error) {
-	root, scale, err := tuning(cfg)
+	root, scale, err := daemonTuning(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -193,11 +196,11 @@ func (d *daemon) adoptContext(root string) error {
 
 	previousRoot, previousScale := d.engine.Tuning()
 
-	tune, scale, err := tuning(cfg)
+	tune, scale, err := daemonTuning(cfg)
 	if err != nil {
 		return err
 	}
-	if err := d.engine.Retune(tune, scale); err != nil {
+	if err := engineRetune(d.engine, tune, scale); err != nil {
 		return err
 	}
 

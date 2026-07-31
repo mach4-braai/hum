@@ -10,7 +10,7 @@ import (
 	"github.com/mach4-braai/hum/internal/theme"
 )
 
-var newAudioRenderer = func(opts renderer.Options) (renderer.Renderer, error) {
+func openAudioRenderer(opts renderer.Options) (renderer.Renderer, error) {
 	f := Format{SampleRate: opts.SampleRate, Channels: 2}
 	if f.SampleRate == 0 {
 		f = DefaultFormat()
@@ -23,6 +23,8 @@ var newAudioRenderer = func(opts renderer.Options) (renderer.Renderer, error) {
 	r.engine = eng
 	return r, nil
 }
+
+var newAudioRenderer = openAudioRenderer
 
 func NewCaptureRenderer(f Format, opts renderer.Options) (*AudioRenderer, *Mixer) {
 	m := NewMixer(f)

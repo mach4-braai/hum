@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,6 +22,18 @@ const (
 )
 
 var ErrUnknownKey = errors.New("unknown config key")
+
+type documentEncoder interface {
+	SetIndent(int)
+	Encode(any) error
+	Close() error
+}
+
+func newYAMLEncoder(w io.Writer) documentEncoder {
+	return yaml.NewEncoder(w)
+}
+
+var newDocumentEncoder = newYAMLEncoder
 
 func Patch(path string, values map[string]string) error {
 	scalars := make(map[string]*yaml.Node, len(values))
@@ -52,7 +65,7 @@ func Patch(path string, values map[string]string) error {
 
 func encode(doc *yaml.Node) ([]byte, error) {
 	var out bytes.Buffer
-	enc := yaml.NewEncoder(&out)
+	enc := newDocumentEncoder(&out)
 	enc.SetIndent(documentIndent)
 	if err := enc.Encode(doc); err != nil {
 		return nil, err

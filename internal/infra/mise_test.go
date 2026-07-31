@@ -84,6 +84,28 @@ func TestMiseCoverageTaskEnforcesAMinimum(t *testing.T) {
 	}
 }
 
+func TestMiseCoverageTaskFailsOnABlockThatNeverRuns(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	_, rest, found := strings.Cut(string(data), "[tasks.coverage]")
+	if !found {
+		t.Fatal("mise.toml defines no coverage task")
+	}
+	task, _, _ := strings.Cut(rest, "\n[tasks.")
+
+	if !strings.Contains(task, "never executed:") {
+		t.Error("the coverage task does not scan coverage.out for blocks that never run; go tool cover rounds a single uncovered statement away and the percentage alone would pass")
+	}
+	if !strings.Contains(task, "hits[$1] += $3") {
+		t.Error("the coverage task does not sum hit counts per block; a block appears once per test binary and judging one section alone reports covered code as dead")
+	}
+	if !strings.Contains(task, "UNEXERCISABLE=") {
+		t.Error("the coverage task carries no exemption for the audio device block, so it cannot pass at all")
+	}
+}
+
 func TestMiseCoverageTaskEmitsTheSummaryCIPublishes(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
 	if err != nil {

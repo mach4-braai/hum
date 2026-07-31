@@ -16,9 +16,11 @@ const (
 	noLogFile     = "no log file"
 )
 
-var runQuietly = func(name string, args ...string) error {
+func runCommandQuietly(name string, args ...string) error {
 	return exec.Command(name, args...).Run()
 }
+
+var runQuietly = runCommandQuietly
 
 func detectSupervisor() (string, bool) {
 	if runQuietly("launchctl", "print", "gui/"+strconv.Itoa(os.Getuid())+"/"+launchdLabel) == nil {

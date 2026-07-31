@@ -13,6 +13,8 @@ import (
 	"github.com/mach4-braai/hum/internal/theme"
 )
 
+var osGetwd = os.Getwd
+
 func init() {
 	register("init", runInit)
 }
@@ -31,7 +33,7 @@ func runInit(e *env, words []string) int {
 		return unexpected(e, "init", rest[0])
 	}
 
-	wd, err := os.Getwd()
+	wd, err := osGetwd()
 	if err != nil {
 		return e.fail("hum init: %v", err)
 	}
