@@ -156,13 +156,23 @@ Homebrew's `keep_alive` expresses this differently on each platform, so
 | Linux | `crashed: true` | `Restart=on-failure` |
 
 Neither value works on both. `crashed: true` maps to launchd's
-`KeepAlive { Crashed = true }`, which restarts only a process killed **by a
-signal** — and a Go program is never killed by one. The runtime installs handlers
-for the fatal signals, prints a traceback, and exits **2**. Measured against
-v0.1.6 under `brew services`: `kill -9` left `runs = 1`, `last exit code = 2` and
-no restart, and so did `SIGABRT` and `SIGSEGV`, each after a full runtime crash
-dump. A panic takes the same exit. So on launchd, `Crashed` never fires for
-`humd` and the daemon simply stays dead.
+`KeepAlive { Crashed = true }`, which restarts a process terminated by a signal
+"typically associated with a crash". Two separate things keep it from ever firing
+for `humd`. Both were measured against v0.1.6 under `brew services`, signalling
+the pid `launchctl print` reports:
+
+- The crash signals never reach launchd. The Go runtime installs handlers for
+  them, prints a traceback and exits **2**, so launchd records an ordinary
+  non-zero exit. `SIGSEGV` left `last exit code = 2` and no restart in 48
+  seconds; `SIGABRT` behaved the same after a full runtime dump; and
+  `humd --no-audio` killed with `SIGSEGV` from a shell reports `exit status: 2`.
+  A panic exits 2 as well, so the crash a user actually hits looks identical.
+- `SIGKILL` is not one of the signals `Crashed` covers, and launchd is right not
+  to restart on it. `kill -9` left `runs = 1` and no restart in 60 seconds. The
+  acceptance criterion in #38 expected otherwise; it was wrong about launchd, not
+  about `humd`.
+
+So `Crashed` restarts `humd` for no failure at all.
 
 `successful_exit: false` is right there — launchd restarts on any non-zero exit,
 which is what a Go crash is, and `hum stop` exits 0 and is left alone. But
@@ -187,3 +197,14 @@ session the machine ever ran. Active sessions are never reaped, however old.
 Structured `log/slog` to stderr, with no third-party logger (`PRD.md` §22).
 Under a supervisor stderr is the log file, so everything the daemon has to say
 goes there and nothing goes to stdout except `--version`.
+
+The default level is `info` and the high-frequency path is silent there:
+`session.updated` and reaping are `debug`, so a session driven through a
+thousand updates costs one log line, for its start. A repeating fault — a
+renderer erroring on every `Update`, or a project naming a theme that will not
+load, which re-triggers on every adoption — is coalesced to at most one line a
+minute, carrying `repeats=N` for what was held back. A `soundscape` summary line
+reports state — sessions, voices, events,
+reaped, dropped phrases, suppressed faults — every five minutes, and only when
+the interval had activity, so an idle daemon writes nothing at all.
+`docs/architecture.md` has the rates.

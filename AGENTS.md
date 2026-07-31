@@ -181,12 +181,14 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `hum doctor` exits 1 by design with no daemon running, so the formula's `test do`
   asserts on its output with an expected status of 1. A bare
   `system bin/"hum", "doctor"` fails `brew test`.
-- A Go program is never killed by a signal, so launchd's `KeepAlive { Crashed }`
-  never fires for `humd`. The runtime handles the fatal signals, prints a
-  traceback and exits 2; a panic exits 2 as well. Measured on v0.1.6 under
-  `brew services`: `kill -9`, `SIGABRT` and `SIGSEGV` each left `runs = 1`,
-  `last exit code = 2` and no restart. `Formula/hum.rb` therefore uses
-  `keep_alive successful_exit: false` on macOS.
+- launchd's `KeepAlive { Crashed }` restarts `humd` for no failure at all, so
+  `Formula/hum.rb` uses `keep_alive successful_exit: false` on macOS. Go handles
+  the crash signals itself — traceback, then exit 2, the same as a panic — so
+  launchd sees an ordinary non-zero exit rather than a crash: `SIGSEGV` on the pid
+  `launchctl print` reports left `last exit code = 2` and no restart in 48s. And
+  `SIGKILL` is not a signal `Crashed` covers, so `kill -9` correctly left
+  `runs = 1` and no restart in 60s. #38's criterion expected a `SIGKILL` restart
+  and was wrong about launchd.
 - That value cannot be used on Linux. Homebrew's systemd translation tests
   `@keep_alive[:successful_exit].present?` and `false.present?` is false in
   ActiveSupport, so it emits no `Restart=` line at all; `crashed: true` is what

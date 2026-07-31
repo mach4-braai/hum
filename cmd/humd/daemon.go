@@ -29,16 +29,20 @@ type call struct {
 }
 
 type daemon struct {
-	log         *slog.Logger
-	registry    *session.Registry
-	engine      *harmony.Engine
-	render      renderer.Renderer
-	requested   string
-	theme       theme.Theme
-	globalFile  string
-	releaseWait time.Duration
-	reapEvery   time.Duration
-	reapAfter   time.Duration
+	log          *slog.Logger
+	registry     *session.Registry
+	engine       *harmony.Engine
+	render       renderer.Renderer
+	requested    string
+	theme        theme.Theme
+	globalFile   string
+	releaseWait  time.Duration
+	reapEvery    time.Duration
+	reapAfter    time.Duration
+	summaryEvery time.Duration
+	throttle     *throttle
+	events       int
+	reaped       int
 
 	contextOwner string
 	volume       float64
@@ -72,21 +76,23 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 	}
 
 	return &daemon{
-		log:         log,
-		registry:    session.New(),
-		engine:      harmony.NewEngine(root, scale, th.PhraseSpec()),
-		render:      r,
-		requested:   requested,
-		theme:       th,
-		globalFile:  globalFile,
-		releaseWait: releaseWaitFor(th),
-		reapEvery:   defaultReapEvery,
-		reapAfter:   defaultReapAfter,
-		volume:      cfg.Audio.Volume,
-		muted:       cfg.Audio.Muted,
-		calls:       make(chan call),
-		stopped:     make(chan struct{}),
-		shutdown:    make(chan struct{}),
+		log:          log,
+		registry:     session.New(),
+		engine:       harmony.NewEngine(root, scale, th.PhraseSpec()),
+		render:       r,
+		requested:    requested,
+		theme:        th,
+		globalFile:   globalFile,
+		releaseWait:  releaseWaitFor(th),
+		reapEvery:    defaultReapEvery,
+		reapAfter:    defaultReapAfter,
+		summaryEvery: defaultSummaryEvery,
+		throttle:     newThrottle(defaultLogWindow),
+		volume:       cfg.Audio.Volume,
+		muted:        cfg.Audio.Muted,
+		calls:        make(chan call),
+		stopped:      make(chan struct{}),
+		shutdown:     make(chan struct{}),
 	}, nil
 }
 
@@ -95,6 +101,8 @@ func (d *daemon) serveEvents(ctx context.Context) {
 
 	reap := time.NewTicker(d.reapEvery)
 	defer reap.Stop()
+	summary := time.NewTicker(d.summaryEvery)
+	defer summary.Stop()
 
 	for {
 		select {
@@ -102,8 +110,11 @@ func (d *daemon) serveEvents(ctx context.Context) {
 			c.reply <- d.dispatch(c.request)
 		case <-reap.C:
 			if dropped := d.registry.Reap(d.reapAfter); dropped > 0 {
+				d.reaped += dropped
 				d.log.Debug("reaped terminal sessions", "count", dropped)
 			}
+		case <-summary.C:
+			d.logSummary()
 		case <-ctx.Done():
 			return
 		}
@@ -151,24 +162,20 @@ func (d *daemon) applyEvent(event protocol.Event) protocol.Response {
 
 	var rendered error
 	if err := d.render.Update(state); err != nil {
-		d.log.Error("renderer update failed", "error", err, "session", event.ID)
+		d.rendererFailed("renderer update failed", err, "session", event.ID)
 		rendered = err
 	}
 	for _, phrase := range phrases {
 		if err := d.render.Trigger(phrase); err != nil {
-			d.log.Error("renderer trigger failed", "error", err, "phrase", string(phrase.Kind))
+			d.rendererFailed("renderer trigger failed", err, "phrase", string(phrase.Kind))
 			if rendered == nil {
 				rendered = err
 			}
 		}
 	}
 
-	d.log.Info("session event",
-		"event", string(event.Event),
-		"session", event.ID,
-		"state", string(change.Session.State),
-		"voices", len(state.Voices),
-	)
+	d.events++
+	d.logEvent(event, string(change.Session.State), len(state.Voices))
 	if rendered != nil {
 		return failure(fmt.Errorf("session tracked, but the renderer failed: %w", rendered))
 	}
@@ -183,6 +190,8 @@ func (d *daemon) adoptContext(root string) error {
 	if d.sounding() {
 		return nil
 	}
+
+	previousRoot, previousScale := d.engine.Tuning()
 
 	tune, scale, err := tuning(cfg)
 	if err != nil {
@@ -201,11 +210,13 @@ func (d *daemon) adoptContext(root string) error {
 
 	if cfg.Music.Theme != d.theme.Name {
 		if err := d.useTheme(cfg.Music.Theme); err != nil {
-			d.log.Warn("keeping the current theme", "requested", cfg.Music.Theme, "error", err)
+			d.throttled(slog.LevelWarn, "keeping the current theme", err, "requested", cfg.Music.Theme)
 		}
 	}
+	changed := owner != d.contextOwner || tune != previousRoot || scale.Name != previousScale.Name
 	d.contextOwner = owner
-	d.log.Info("adopted musical context", "root", cfg.Music.Root, "scale", cfg.Music.Scale, "theme", d.theme.Name, "project", owner)
+
+	d.logContext(changed, cfg.Music.Root, scale.Name, owner)
 	return nil
 }
 
