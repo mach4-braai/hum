@@ -49,6 +49,51 @@ behaviour, boundaries and error paths — not plumbing.
   `internal/audio/format.go`, which opens a real audio device and cannot run in CI.
   It is keyed on the start line, so moving that function fails the gate until the
   pattern is updated. That is deliberate — an exemption nobody notices is a hole.
+- Coverage is visible from the README: a live CI badge beside a Codecov badge for
+  `master`. The `coverage` job uploads `coverage.out` with `codecov/codecov-action`.
+- Codecov reads lower than the gate and that is expected, but not for the reason a
+  quick guess gives. Codecov counts **lines**, where `go tool cover` counts
+  statements, and it counts every line in the profile — including the
+  `newOtoPlayer` body that `-func` cannot see and `UNEXERCISABLE` excuses, and the
+  `case <-d.shutdown:` arm in `cmd/humd/daemon.go`, which carries zero statements
+  and so cannot move the local figure at all. Measured: 2,854 of 2,859 lines,
+  99.82%, five misses across two files, against the gate's 100.0% of 2,233
+  statements. Do not "fix" that gap by targeting 100% in `.github/codecov.yml` —
+  the project status would be red on every commit. It targets `auto` with a zero
+  threshold, which forbids a regression.
+- The patch target is 100%, and that is a **second, stricter policy rather than a
+  restatement of the gate**. It is line coverage, so it can reject a change the
+  statement gate accepts: `case <-d.shutdown:` is the standing example, a line
+  carrying zero statements that `mise run coverage` is blind to and Codecov counts
+  as a miss. A change touching lines of that shape turns `codecov/patch` red while
+  `check` and `coverage` stay green. That is the intended trade — decide on the
+  evidence in the Codecov comment, and lower the patch target rather than pretend
+  the two measures agree.
+- `use_oidc` is switched off for a pull request from a fork, matching Codecov's own
+  example. A fork build is not granted `id-token: write`, so asking for OIDC there
+  would yield an empty token and fall back anyway; the documented fork path is the
+  tokenless one below.
+- A pull request from a fork uploads without a token: `codecov-action` v4 and later
+  rewrites the branch to an unprotected `forkname:branch` ref, which Codecov accepts
+  tokenlessly for a public repository. This has nothing to do with `GITHUB_TOKEN`
+  being read-only on a fork — that restriction governs the `coverage/total` status,
+  which is why the step publishing it is skipped for fork pull requests. Codecov
+  uploads never use `GITHUB_TOKEN`.
+- A push to `master` is different. Codecov treats a real branch as protected and
+  refuses an unauthenticated upload, so the step authenticates with OIDC —
+  `use_oidc: true` plus `id-token: write` on the job — rather than a stored secret.
+  Any token supplied alongside it would be ignored. codecov-action#1817 is the
+  cautionary tale and not a reason to avoid this: that report ran v5.4.0 without
+  `id-token: write`, logged `Token of length 0 detected`, fell back to a tokenless
+  upload and was rejected. Codecov closed it as fixed in 5.4.3, and the pin here is
+  v7.0.0. The permission is the load-bearing half; dropping it silently returns to
+  that failure.
+- `fail_ci_if_error` is false, because the block scan has already enforced coverage
+  before anything is uploaded and a third party being unreachable must not turn a
+  correct build red. The consequence is that a rejected upload is quiet, so the
+  README badge reading `unknown` is the signal that `master` uploads are not
+  authenticated — check the Codecov step in the run before assuming the badge is
+  merely stale. `coverage/total` remains the per-commit figure that does gate.
 - `go tool cover -func` counts only statements inside function declarations, so the
   body of a package-level `var f = func(){}` is invisible to it. That makes a seam
   written as `var x = func(){ … }` a way to hide code from the counter rather than

@@ -123,3 +123,23 @@ func TestMiseCoverageTaskEmitsTheSummaryCIPublishes(t *testing.T) {
 		t.Error("the workflow does not check the summary shape, so a malformed line would be published as the description")
 	}
 }
+
+func TestReadmeCoverageBadgeIsFedByCI(t *testing.T) {
+	root := repoRoot(t)
+
+	readme, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if !strings.Contains(string(readme), "https://codecov.io/gh/mach4-braai/hum/branch/master/graph/badge.svg") {
+		t.Error("README.md carries no Codecov badge for master, so a reader cannot see coverage without opening a workflow run")
+	}
+
+	workflow := readWorkflow(t)
+	if !strings.Contains(workflow, "codecov/codecov-action@") {
+		t.Error("the CI workflow uploads nothing to Codecov, so the README badge would show a figure that never updates")
+	}
+	if !strings.Contains(workflow, "files: coverage.out") {
+		t.Error("the Codecov step does not name coverage.out, so it would upload whatever it happens to discover rather than the profile the gate measured")
+	}
+}

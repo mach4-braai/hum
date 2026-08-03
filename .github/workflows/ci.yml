@@ -116,6 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write # authenticates the Codecov upload, which a protected branch requires
       statuses: write # posts the coverage/total commit status
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -154,6 +155,14 @@ jobs:
             echo "state=$(test "$status" -eq 0 && echo success || echo failure)"
           } >>"$GITHUB_OUTPUT"
           exit $status
+
+      - name: Upload the profile to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f
+        if: always()
+        with:
+          files: coverage.out
+          use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          fail_ci_if_error: false
 
       - name: Publish the measured total
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
