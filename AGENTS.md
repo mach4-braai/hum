@@ -199,6 +199,14 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   block in `Formula/hum.rb` depends on `alsa-lib` and `pkg-config`, and
   `.goreleaser.yaml` builds Linux only on a runner with an ALSA toolchain. #39
   deletes all four.
+- `golang.org/x/sys` is held at v0.44.0, well ahead of anything `purego` asks for,
+  because every earlier version carries GO-2026-5024 in `NewNTUnicodeString`. That
+  is the only reason `go.mod` says `go 1.25.0`: v0.44.0 requires it. Relaxing the
+  directive means relaxing the pin, and `mise run vuln` will not object — the symbol
+  is unreachable from this code, so govulncheck stays clean at either version. It
+  was Scorecard's OSV scan that saw it, because OSV matches version ranges rather
+  than call graphs, and Dependabot never offered it: an indirect dependency with no
+  matching GitHub advisory.
 - A fork's `GITHUB_TOKEN` is read-only. The `coverage/total` status is display
   only; requiring it would block every external contribution.
 - Every job carries `name:` spelled exactly like its id, because `zizmor --pedantic`
