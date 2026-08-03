@@ -106,6 +106,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # goreleaser creates the draft release and uploads its assets
+      id-token: write # actions/attest-build-provenance signs the attestation via OIDC
+      attestations: write # actions/attest-build-provenance uploads the attestation bundle
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -125,3 +127,11 @@ jobs:
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           HUM_RELEASE_LINUX: "1"
         run: goreleaser release --clean
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
