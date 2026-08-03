@@ -176,3 +176,9 @@ func TestParseEventType(t *testing.T) {
 		}
 	}
 }
+
+func TestMaxIDLenIs128(t *testing.T) {
+	if MaxIDLen != 128 {
+		t.Errorf("MaxIDLen = %d, want 128: the maximum id length is specified as 128 bytes in the wire protocol", MaxIDLen)
+	}
+}

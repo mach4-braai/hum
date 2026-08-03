@@ -273,3 +273,77 @@ func TestEveryEventFieldIsMarshalable(t *testing.T) {
 		t.Errorf("round trip = %+v, want %+v: every field must survive the wire", round, populated)
 	}
 }
+
+func TestMaxMessageLenIs64KiB(t *testing.T) {
+	if MaxMessageLen != 64<<10 {
+		t.Errorf("MaxMessageLen = %d, want %d (64 KiB): this is a published wire limit", MaxMessageLen, 64<<10)
+	}
+}
+
+func TestDecoderAcceptsAFinalLineOfExactlyTheMaximumSize(t *testing.T) {
+	line := eventLineOfLength(t, MaxMessageLen)
+	got, err := NewDecoder(strings.NewReader(line)).Decode()
+	if err != nil {
+		t.Fatalf("Decode() of a %d-byte final line without newline = %v, want success", MaxMessageLen, err)
+	}
+	if got.ID != "1" {
+		t.Errorf("Decode() id = %q, want %q", got.ID, "1")
+	}
+}
+
+func TestEncoderAcceptsAnEventAtExactlyTheMaximumSize(t *testing.T) {
+	line := eventLineOfLength(t, MaxMessageLen)
+	var ev Event
+	if err := json.Unmarshal([]byte(line), &ev); err != nil {
+		t.Fatalf("test setup unmarshal: %v", err)
+	}
+	var buf bytes.Buffer
+	if err := NewEncoder(&buf).Encode(ev); err != nil {
+		t.Errorf("Encode() on a %d-byte event = %v, want nil", MaxMessageLen, err)
+	}
+}
+
+func TestDecoderStripsLeadingWhitespace(t *testing.T) {
+	got, err := NewDecoder(strings.NewReader(" " + `{"event":"session.started","id":"ws1"}` + "\n")).Decode()
+	if err != nil {
+		t.Fatalf("Decode() with leading whitespace = %v, want success", err)
+	}
+	if got.ID != "ws1" {
+		t.Errorf("Decode() id = %q, want %q", got.ID, "ws1")
+	}
+}
+
+func TestDecoderDoesNotDropASingleByteTerminalChunk(t *testing.T) {
+	_, err := NewDecoder(strings.NewReader("{")).Decode()
+	if errors.Is(err, io.EOF) {
+		t.Error("Decode() with a 1-byte unterminated input = io.EOF; want a parse error so the byte is not silently discarded")
+	}
+	if err == nil {
+		t.Error("Decode() with a 1-byte unterminated input = nil; want an error")
+	}
+}
+
+type twoStepReader struct {
+	data []byte
+	err  error
+}
+
+func (r *twoStepReader) Read(p []byte) (int, error) {
+	if len(r.data) > 0 {
+		n := copy(p, r.data)
+		r.data = nil
+		return n, nil
+	}
+	return 0, r.err
+}
+
+func TestDecoderPropagatesNonEOFReadErrors(t *testing.T) {
+	r := &twoStepReader{
+		data: []byte(`{"event":"session.started","id":"x"`),
+		err:  io.ErrUnexpectedEOF,
+	}
+	_, err := NewDecoder(r).Decode()
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Errorf("Decode() with a mid-stream non-EOF error = %v, want io.ErrUnexpectedEOF", err)
+	}
+}

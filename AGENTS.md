@@ -132,6 +132,42 @@ behaviour, boundaries and error paths — not plumbing.
 - Package-global seams (`exit`, `absolute`) exist so unreachable failures can be
   staged. Register restoration with `t.Cleanup` *before* installing a stub. No
   test in those packages calls `t.Parallel`, and adding one would race the stub.
+- `mise run mutate` asks the second question coverage cannot: 100% of statements
+  says every line ran, not that any assertion would notice a line changing meaning.
+  It mutates `internal/harmony` and `internal/protocol` — the two packages that
+  carry logic rather than wiring — and takes about eight minutes for 573 mutants.
+  It is a local task, not a CI job: the runner cost is one `go test` per mutant, so
+  the same 573 compilations that take eight minutes here would add tens of minutes
+  to every pull request.
+- The gate is the survivor count, never the percentage. `go test` exits 1 for a
+  mutant that fails a test, for one that never compiled and for one that hung until
+  its budget ran out, and go-mutesting reads exit 1 as a kill — 47 of the 573 never
+  compile, and its `TimeOutCount` is never assigned, which is why every run of the
+  built-in runner reports zero timeouts. `scripts/mutate-exec.sh` runs the tests
+  itself and separates the three, so `EQUIVALENT` and `HUNG` in `mise.toml` are
+  exact expectations: too many is a test that stopped noticing, too few is a number
+  to lower. A mutant that never compiles is not a behaviour change at all, so its
+  count is reported and not gated.
+- The 25 survivors cannot be killed by a test, only by contorting the code they
+  live in. They are: values returned beside a non-nil error that every caller
+  discards; comparisons whose boundary value no input can produce (`base > 11` in
+  `parseNoteClass` is reached only for two-character notes, and no letter and
+  accidental combine to 11); a comparator relaxed to `<=` where every key it
+  compares is distinct; an array one element longer than any index used; assigning
+  a value the variable already holds; and the placeholder in `Release`, overwritten
+  by the shift before it is read.
+- The three hangs are one condition: relaxing `errors.Is(err, io.EOF) && len(line)+
+  len(chunk) > 0` in `Decoder.Decode` turns a clean EOF into an empty line, which
+  the loop discards and reads again forever. Nothing can make that fail faster than
+  the timeout, because the mutant never returns.
+- Four mutants looked equivalent and were not, which is the reason to read the
+  survivor list rather than trust it. Dropping `isCapped` in `Acquire` leaves a
+  capped session returning a degree it never took, and output is identical — but
+  `free` then grows without bound, so the invariant is asserted directly.
+  `sort.SliceStable` relaxed to `<=` reverses degrees of equal consonance, which a
+  scale carrying an interval of 12 produces. And the `octave > 9` guard is redundant
+  for accept-or-reject, so both mutants of it survive until a test reads the message
+  it exists to produce.
 
 ## Traps
 
@@ -141,6 +177,17 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   false, so `v < 0 || v > 1` accepts `"NaN"`.
 - `cmd/hum` parses flags in a loop. Go's `flag` stops at the first positional,
   so a single pass reads `theme use --json minimal` as a theme named `--json`.
+- go-mutesting writes each mutant over the source file it came from, runs the
+  package's tests, and puts the file back. `mise run mutate` therefore copies what
+  `git ls-files` reports into a temp directory and runs there; the binary invoked by
+  hand in the checkout leaves a mutated source file behind the moment it is
+  interrupted.
+- The fork is not interchangeable. `gremlins v0.5.1` times out on 114 of 116 mutants
+  in `internal/harmony` at ten times its budget (#90, #91); `zimmski/go-mutesting`
+  panics in its 2019 `x/tools` loader before it mutates anything; `ooze` runs, but
+  it is a library — five new `go.mod` entries against a module that allows two.
+  `avito-tech/go-mutesting` has never tagged a release, so the pin is a commit
+  pseudo-version and `go list -m -versions` offers nothing to bump.
 - `filepath.Abs` fails only when the working directory is removed, and macOS
   keeps resolving a removed one. That is why `absolute` is a variable.
 - Socket paths must fit `sun_path`: 104 bytes on macOS, 108 on Linux.

@@ -2,6 +2,7 @@ package harmony
 
 import (
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,8 @@ func TestParseNoteClass(t *testing.T) {
 		if tc.wantErr {
 			if err == nil {
 				t.Errorf("ParseNoteClass(%q): expected error, got %d", tc.in, got)
+			} else if got != 0 {
+				t.Errorf("ParseNoteClass(%q): want class 0 on error, got %d", tc.in, got)
 			}
 			continue
 		}
@@ -282,5 +285,78 @@ func TestTransposeNegativeMidi(t *testing.T) {
 	}
 	if got.Octave != -2 {
 		t.Errorf("C-1.Transpose(-3).Octave = %d, want -2", got.Octave)
+	}
+}
+
+func TestParsePitchEmptyStringError(t *testing.T) {
+	_, err := ParsePitch("")
+	if err == nil {
+		t.Errorf("ParsePitch(\"\"): want error, got nil")
+		return
+	}
+	if !strings.Contains(err.Error(), "empty string") {
+		t.Errorf("ParsePitch(\"\"): error = %q, want message containing \"empty string\"", err.Error())
+	}
+}
+
+func TestParsePitchMissingOctaveError(t *testing.T) {
+	for _, in := range []string{"C", "C#", "Ab"} {
+		_, err := ParsePitch(in)
+		if err == nil {
+			t.Errorf("ParsePitch(%q): want error, got nil", in)
+			continue
+		}
+		if !strings.Contains(err.Error(), "missing octave") {
+			t.Errorf("ParsePitch(%q): error = %q, want message containing \"missing octave\"", in, err.Error())
+		}
+	}
+}
+
+func TestParsePitchOctaveLowerBoundary(t *testing.T) {
+	if _, err := ParsePitch("C-1"); err != nil {
+		t.Errorf("ParsePitch(\"C-1\"): want success, got %v", err)
+	}
+	for _, in := range []string{"C-2", "B#-2"} {
+		if _, err := ParsePitch(in); err == nil {
+			t.Errorf("ParsePitch(%q): want error for octave below -1, got nil", in)
+		}
+	}
+}
+
+func TestParsePitchOctaveUpperBoundaryNamesTheOctave(t *testing.T) {
+	if _, err := ParsePitch("C9"); err != nil {
+		t.Errorf("ParsePitch(\"C9\"): want success, got %v", err)
+	}
+	_, err := ParsePitch("C10")
+	if err == nil {
+		t.Fatal("ParsePitch(\"C10\"): want error for octave above 9, got nil")
+	}
+	if !strings.Contains(err.Error(), "octave 10 out of range") {
+		t.Errorf("ParsePitch(\"C10\"): error = %q, want the octave named; the MIDI range check alone rejects it with a number the user never typed", err.Error())
+	}
+}
+
+func TestTransposeNegativeClassModulo(t *testing.T) {
+	c, _ := ParsePitch("C-1")
+	got := c.Transpose(-1)
+	if got.Class != 11 {
+		t.Errorf("C-1.Transpose(-1).Class = %d, want 11", got.Class)
+	}
+	if got.Octave != -2 {
+		t.Errorf("C-1.Transpose(-1).Octave = %d, want -2", got.Octave)
+	}
+	if got.String() != "B-2" {
+		t.Errorf("C-1.Transpose(-1) = %q, want B-2", got.String())
+	}
+}
+
+func TestTransposeLargeOctaveArithmetic(t *testing.T) {
+	c := Pitch{Class: 0, Octave: -1}
+	got := c.Transpose(132)
+	if got.Class != 0 {
+		t.Errorf("C-1.Transpose(132).Class = %d, want 0", got.Class)
+	}
+	if got.Octave != 10 {
+		t.Errorf("C-1.Transpose(132).Octave = %d, want 10", got.Octave)
 	}
 }

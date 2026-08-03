@@ -83,8 +83,12 @@ func TestRequestRejectsMalformedJSON(t *testing.T) {
 }
 
 func TestRequestValidateRejectsAnEmptyEnvelope(t *testing.T) {
-	if err := (Request{}).Validate(); err == nil {
+	err := (Request{}).Validate()
+	if err == nil {
 		t.Fatal("Validate() = nil for a request carrying neither an event nor a command")
+	}
+	if errors.Is(err, ErrUnknownCommand) {
+		t.Errorf("Validate() = %v, want a distinct empty-envelope error, not ErrUnknownCommand", err)
 	}
 }
 

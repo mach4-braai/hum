@@ -319,3 +319,133 @@ func TestVoicingFoldsBackOnceTheScaleRunsOut(t *testing.T) {
 		t.Errorf("negative degree sounds %v, want the root %v", p, root)
 	}
 }
+
+func TestAllocationOrderExact(t *testing.T) {
+	scale := mustLookupScale(t, "minor_pentatonic")
+	want := []int{0, 1, 5, 3, 2, 4, 6, 7, 8, 9, 10, 11}
+	if got := allocationOrder(scale); !reflect.DeepEqual(got, want) {
+		t.Errorf("allocationOrder minor_pentatonic: want %v, got %v", want, got)
+	}
+}
+
+func TestAllocationOrderExactForMajorScale(t *testing.T) {
+	scale := mustLookupScale(t, "major")
+	want := []int{0, 2, 5, 7, 4, 3, 6, 1, 8, 9, 10, 11}
+	if got := allocationOrder(scale); !reflect.DeepEqual(got, want) {
+		t.Errorf("allocationOrder major: want %v, got %v", want, got)
+	}
+}
+
+func TestAllocationOrderLengthIs12(t *testing.T) {
+	for _, name := range ScaleNames() {
+		scale := mustLookupScale(t, name)
+		if got := len(allocationOrder(scale)); got != 12 {
+			t.Errorf("allocationOrder %s: want length 12, got %d", name, got)
+		}
+	}
+}
+
+func TestNewAllocatorWithMaxIntervalScale(t *testing.T) {
+	root := mustParsePitch(t, "C4")
+	chromatic := Scale{Intervals: []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}}
+	a := NewAllocator(root, chromatic)
+	seen := make(map[int]bool)
+	for i := range MaxVoices {
+		v := a.Acquire(fmt.Sprintf("s%d", i))
+		if seen[v.Degree] {
+			t.Fatalf("session %d: degree %d allocated twice before cap", i, v.Degree)
+		}
+		seen[v.Degree] = true
+	}
+	if len(seen) != MaxVoices {
+		t.Errorf("12-interval scale: want %d distinct degrees, got %d", MaxVoices, len(seen))
+	}
+}
+
+func TestAllocatorReleaseUnknownPreservesFreeList(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+	a := NewAllocator(root, scale)
+
+	a.Release("nobody")
+
+	v0 := a.Acquire("s0")
+	v1 := a.Acquire("s1")
+	if v0.Degree == v1.Degree {
+		t.Errorf("after releasing unknown session: s0 and s1 both got degree %d, want distinct degrees", v0.Degree)
+	}
+}
+
+func TestAllocatorFreeListMaintainsAllocationOrder(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+	a := NewAllocator(root, scale)
+
+	for i := range 6 {
+		a.Acquire(fmt.Sprintf("s%d", i))
+	}
+	a.Release("s2")
+	a.Release("s4")
+
+	wantDegrees := []int{5, 2, 6, 7, 8, 9, 10, 11}
+	for i, want := range wantDegrees {
+		v := a.Acquire(fmt.Sprintf("t%d", i))
+		if v.Degree != want {
+			t.Errorf("acquire %d after releases: want degree %d, got %d", i, want, v.Degree)
+		}
+	}
+}
+
+func TestDegreeClassNormalizesModulo12(t *testing.T) {
+	s := Scale{Intervals: []int{0, 12, 13, 5}}
+	order := allocationOrder(s)
+	pos := make(map[int]int, len(order))
+	for i, d := range order {
+		pos[d] = i
+	}
+	if pos[1] >= pos[3] {
+		t.Errorf("degree 1 (interval 12 → class 0, rank 4) must precede degree 3 (interval 5, rank 6): pos1=%d pos3=%d", pos[1], pos[3])
+	}
+	if pos[3] >= pos[2] {
+		t.Errorf("degree 3 (interval 5, rank 6) must precede degree 2 (interval 13 → class 1, rank 10): pos3=%d pos2=%d", pos[3], pos[2])
+	}
+}
+
+func TestAllocationOrderMajorThirdBeforeMinorThird(t *testing.T) {
+	s := Scale{Intervals: []int{0, 3, 4, 7}}
+	order := allocationOrder(s)
+	pos := make(map[int]int, len(order))
+	for i, d := range order {
+		pos[d] = i
+	}
+	if pos[2] >= pos[1] {
+		t.Errorf("major third (degree 2, class 4, rank 0) must precede minor third (degree 1, class 3, rank 1): pos2=%d pos1=%d", pos[2], pos[1])
+	}
+}
+
+func TestAllocatorCappedReleaseReturnsNoDegree(t *testing.T) {
+	root := mustParsePitch(t, "D2")
+	scale := mustLookupScale(t, "minor_pentatonic")
+	a := NewAllocator(root, scale)
+	for i := range MaxVoices {
+		a.Acquire(fmt.Sprintf("s%d", i))
+	}
+
+	for i := range 5 {
+		id := fmt.Sprintf("over%d", i)
+		a.Acquire(id)
+		a.Release(id)
+	}
+
+	if len(a.free) != 0 {
+		t.Errorf("free list after five capped acquire and release cycles = %v, want empty: a capped session never took a degree, and returning one each time grows the list without bound", a.free)
+	}
+}
+
+func TestAllocationOrderKeepsEqualConsonanceInDegreeOrder(t *testing.T) {
+	doubledRoot := Scale{Intervals: []int{0, 12, 4, 7}}
+	want := []int{0, 2, 1, 4, 3, 5, 6, 7, 8, 9, 10, 11}
+	if got := allocationOrder(doubledRoot); !reflect.DeepEqual(got, want) {
+		t.Errorf("allocationOrder with degrees 1 and 4 both sounding the root: want %v, got %v; equal consonance must keep the lower degree first", want, got)
+	}
+}

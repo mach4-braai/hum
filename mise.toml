@@ -3,6 +3,7 @@ go = "1.25.12"
 goreleaser = "2.17.1"
 gotestsum = "1.13.0"
 syft = "1.50.0"
+"go:github.com/avito-tech/go-mutesting/cmd/go-mutesting" = "0.0.0-20251226130216-48d0401f00fb"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 
 [tasks.build]
@@ -79,6 +80,58 @@ run = "govulncheck ./..."
 [tasks.fuzz]
 description = "Fuzz the protocol decoder against untrusted input"
 run = "go test -run '^$' -fuzz FuzzDecoder -fuzztime ${FUZZTIME:-30s} ./internal/protocol/"
+
+[tasks.mutate]
+description = "Mutate the two packages that carry the logic and fail on a mutant no test notices"
+shell = "bash -c"
+run = '''
+set -eu
+EQUIVALENT=25
+HUNG=3
+BUDGET=10
+snapshot=$(mktemp -d)
+trap 'rm -rf "$snapshot"' EXIT
+sources="$snapshot/.sources"
+git ls-files -z --cached --others --exclude-standard >"$sources"
+tar -cf - --null -T "$sources" | tar -xf - -C "$snapshot"
+rm "$sources"
+cd "$snapshot"
+go-mutesting --exec "bash scripts/mutate-exec.sh" --exec-timeout="$BUDGET" ./internal/harmony/ ./internal/protocol/ | tee mutate.log
+awk -v equivalent="$EQUIVALENT" -v budgeted="$HUNG" -v budget="$BUDGET" '
+function judge(actual, expected, tooMany, tooFew) {
+  if (actual > expected) {
+    printf "%d %s\n", actual - expected, tooMany > "/dev/stderr"
+    return 1
+  }
+  if (actual < expected) {
+    printf "%d %s\n", expected - actual, tooFew > "/dev/stderr"
+    return 1
+  }
+  return 0
+}
+/UNKOWN exit code/ { hung++ }
+/^The mutation score is/ {
+  scored = 1
+  killed = $6
+  escaped = $8
+  skipped = $12
+  total = $NF
+  gsub(/[^0-9]/, "", killed)
+  gsub(/[^0-9]/, "", escaped)
+  gsub(/[^0-9]/, "", skipped)
+  gsub(/[^0-9]/, "", total)
+}
+END {
+  if (!scored) {
+    print "no mutation score was reported; the run did not finish" > "/dev/stderr"
+    exit 1
+  }
+  failed = judge(escaped + 0, equivalent + 0, "mutant(s) changed behaviour and no test failed", "fewer mutant(s) survive than EQUIVALENT claims; lower it")
+  failed += judge(hung + 0, budgeted + 0, "mutant(s) hung a test rather than failing it, so the suite notices only by running out of its " budget "s budget", "fewer mutant(s) hang than HUNG claims; lower it")
+  printf "%d of %d mutants killed, %d survived, %d hung, %d never compiled\n", killed, total, escaped, hung + 0, skipped
+  exit (failed > 0)
+}' mutate.log
+'''
 
 [tasks.junit]
 description = "Run the unit tests and write a JUnit report for test analytics"

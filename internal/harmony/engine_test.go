@@ -74,11 +74,14 @@ func TestEngineCompletionD2(t *testing.T) {
 	if p.Notes[0].Pitch != want {
 		t.Errorf("completion pitch: want D4 (%v), got %v", want, p.Notes[0].Pitch)
 	}
-	if p.Notes[0].Duration != DefaultPhraseSpec().CompletionDuration {
-		t.Errorf("completion duration mismatch")
+	if p.Notes[0].Duration != 500*time.Millisecond {
+		t.Errorf("completion note Duration: want 500ms, got %v", p.Notes[0].Duration)
 	}
-	if p.Notes[0].Gain != DefaultPhraseSpec().CompletionGain {
-		t.Errorf("completion gain mismatch")
+	if p.Notes[0].Gain != 0.8 {
+		t.Errorf("completion note Gain: want 0.8, got %v", p.Notes[0].Gain)
+	}
+	if p.Notes[0].Offset != 0 {
+		t.Errorf("completion note Offset: want 0, got %v", p.Notes[0].Offset)
 	}
 }
 
@@ -105,8 +108,11 @@ func TestEngineFailureDescends(t *testing.T) {
 		t.Errorf("failure: second note must be below first: %v >= %v",
 			p.Notes[1].Pitch, p.Notes[0].Pitch)
 	}
-	if p.Notes[1].Offset != DefaultPhraseSpec().FailureDuration {
-		t.Errorf("failure: second note offset should equal FailureDuration")
+	if p.Notes[0].Offset != 0 {
+		t.Errorf("failure: first note Offset: want 0, got %v", p.Notes[0].Offset)
+	}
+	if p.Notes[1].Offset != 800*time.Millisecond {
+		t.Errorf("failure: second note Offset: want 800ms, got %v", p.Notes[1].Offset)
 	}
 }
 
@@ -141,11 +147,14 @@ func TestEngineCancelledWithSounds(t *testing.T) {
 		t.Errorf("want PhraseCancelled, got %q", phrases[0].Kind)
 	}
 	note := phrases[0].Notes[0]
-	if note.Duration != spec.CancelledDuration {
-		t.Errorf("cancelled note duration = %v, want the spec's %v", note.Duration, spec.CancelledDuration)
+	if note.Duration != 400*time.Millisecond {
+		t.Errorf("cancelled note Duration: want 400ms, got %v", note.Duration)
 	}
-	if note.Gain != spec.CancelledGain {
-		t.Errorf("cancelled note gain = %v, want the spec's %v", note.Gain, spec.CancelledGain)
+	if note.Gain != 0.3 {
+		t.Errorf("cancelled note Gain: want 0.3, got %v", note.Gain)
+	}
+	if note.Offset != 0 {
+		t.Errorf("cancelled note Offset: want 0, got %v", note.Offset)
 	}
 	if note.Pitch != mustParsePitch(t, "D2") {
 		t.Errorf("cancelled note pitch = %v, want the sounding pitch D2", note.Pitch)
@@ -352,18 +361,46 @@ func TestEngineDefaultPhraseSpec(t *testing.T) {
 	if spec.CompletionOctaves != 2 {
 		t.Errorf("CompletionOctaves: want 2, got %d", spec.CompletionOctaves)
 	}
+	if spec.CompletionDuration != 500*time.Millisecond {
+		t.Errorf("CompletionDuration: want 500ms, got %v", spec.CompletionDuration)
+	}
+	if spec.CompletionGain != 0.8 {
+		t.Errorf("CompletionGain: want 0.8, got %v", spec.CompletionGain)
+	}
 	if spec.FailureInterval != -3 {
 		t.Errorf("FailureInterval: want -3, got %d", spec.FailureInterval)
+	}
+	if spec.FailureDuration != 800*time.Millisecond {
+		t.Errorf("FailureDuration: want 800ms, got %v", spec.FailureDuration)
+	}
+	if spec.FailureGain != 0.5 {
+		t.Errorf("FailureGain: want 0.5, got %v", spec.FailureGain)
 	}
 	if spec.CancelledSounds {
 		t.Error("CancelledSounds: want false")
 	}
-	if spec.FailureDuration <= spec.CompletionDuration {
-		t.Errorf("FailureDuration should exceed CompletionDuration: %v <= %v",
-			spec.FailureDuration, spec.CompletionDuration)
+	if spec.CancelledDuration != 400*time.Millisecond {
+		t.Errorf("CancelledDuration: want 400ms, got %v", spec.CancelledDuration)
 	}
-	if spec.FailureGain >= spec.CompletionGain {
-		t.Errorf("FailureGain should be quieter than CompletionGain: %v >= %v",
-			spec.FailureGain, spec.CompletionGain)
+	if spec.CancelledGain != 0.3 {
+		t.Errorf("CancelledGain: want 0.3, got %v", spec.CancelledGain)
+	}
+}
+
+func TestEngineRetuneUpdatesAllocator(t *testing.T) {
+	eng, _, _ := makeEngine(t)
+	root2 := mustParsePitch(t, "A3")
+	scale2 := mustLookupScale(t, "major")
+	if err := eng.Retune(root2, scale2); err != nil {
+		t.Fatalf("Retune: %v", err)
+	}
+	eng.Apply(addChange("s0"))
+	st, _ := eng.Apply(updateChange("s0", nil))
+	if len(st.Voices) == 0 {
+		t.Fatal("after Retune and Add: want 1 voice, got 0")
+	}
+	want := scale2.Degree(root2, 0)
+	if st.Voices[0].Pitch != want {
+		t.Errorf("voice pitch after Retune: want %v, got %v", want, st.Voices[0].Pitch)
 	}
 }
