@@ -212,6 +212,11 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   is no defence: it replays the older bump on top of the newer one.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
+- Any Linux job that *loads* the packages, not just builds them, needs
+  `libasound2-dev` and `pkg-config` for the same oto reason. `govulncheck ./...`
+  fails at package loading without them — `could not import C (no metadata for C)`
+  — which reads like a scanner bug and is really the missing ALSA headers. The
+  `fuzz` job does not need them because `internal/protocol` imports no audio.
 - `TestUnstampedBuildReportsAModuleVersion` fails on a checkout that is a git
   submodule, and only there. Go derives the main module's version from VCS, and
   inside a submodule it resolves the superproject instead, leaving the module
