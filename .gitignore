@@ -11,4 +11,4 @@ Thumbs.db
 *.test
 coverage.out
 junit.xml
-gremlins.json
+report.json

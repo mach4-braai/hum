@@ -1,6 +1,7 @@
 package harmony
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -88,8 +89,8 @@ func TestExpressionRecordSubsequentDecays(t *testing.T) {
 	*ts = base.Add(5 * time.Second)
 	tr.record()
 
-	if tr.score <= 1.0 || tr.score >= 2.0 {
-		t.Errorf("after half-life + new event: want score in (1,2), got %v", tr.score)
+	if math.Abs(tr.score-1.5) > 1e-12 {
+		t.Errorf("after half-life + new event: want score 1.5, got %v", tr.score)
 	}
 }
 
@@ -130,6 +131,9 @@ func TestExpressionAgentsCapAt1(t *testing.T) {
 	if agentsFromMetadata(map[string]string{"agents": "7"}) != 7 {
 		t.Error("agents=7: want 7")
 	}
+	if agentsFromMetadata(map[string]string{"agents": "2"}) != 2 {
+		t.Error("agents=2: want 2")
+	}
 }
 
 func TestExpressionIntensityCapped(t *testing.T) {
@@ -154,5 +158,39 @@ func TestAbsentTrackerYieldsNeutralExpression(t *testing.T) {
 	var absent *exprTracker
 	if got := absent.current(); got != (Expression{}) {
 		t.Errorf("current() on an absent tracker = %+v, want the neutral zero value", got)
+	}
+}
+
+func TestExpressionHalfLifeDecayExact(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	ts := stageNow(t, base)
+	tr := &exprTracker{agents: 1}
+	tr.record()
+	*ts = base.Add(exprHalfLife)
+	expr := tr.current()
+	if math.Abs(expr.Intensity-0.05) > 1e-12 {
+		t.Errorf("after one half-life: want Intensity 0.05, got %v", expr.Intensity)
+	}
+}
+
+func TestExpressionIntensityCapExact(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	stageNow(t, base)
+	tr := &exprTracker{agents: 1}
+	tr.record()
+	expr := tr.current()
+	if math.Abs(expr.Intensity-0.1) > 1e-12 {
+		t.Errorf("immediately after record: want Intensity 0.1, got %v", expr.Intensity)
+	}
+}
+
+func TestExpressionWidthCapExact(t *testing.T) {
+	tr20 := &exprTracker{agents: 20}
+	if w := tr20.current().Width; math.Abs(w-19.0/20.0) > 1e-14 {
+		t.Errorf("agents=20: want Width %v, got %v", 19.0/20.0, w)
+	}
+	tr22 := &exprTracker{agents: 22}
+	if w := tr22.current().Width; w != 1.0 {
+		t.Errorf("agents=22: want Width 1.0 (clamped), got %v", w)
 	}
 }

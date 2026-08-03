@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var requiredTasks = []string{"build", "check", "clean", "coverage", "e2e", "fmt", "fuzz", "install", "junit", "snapshot", "test", "vet", "vuln"}
+var requiredTasks = []string{"build", "check", "clean", "coverage", "e2e", "fmt", "fuzz", "install", "junit", "mutate", "snapshot", "test", "vet", "vuln"}
 
 func TestMiseDefinesRequiredTasks(t *testing.T) {
 	if _, err := exec.LookPath("mise"); err != nil {
@@ -121,6 +121,77 @@ func TestMiseCoverageTaskEmitsTheSummaryCIPublishes(t *testing.T) {
 	}
 	if !strings.Contains(string(workflow), `*"of statements, minimum"*`) {
 		t.Error("the workflow does not check the summary shape, so a malformed line would be published as the description")
+	}
+}
+
+func TestMisePinsTheOneMutationTesterThatRuns(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	if !strings.Contains(string(data), `"go:github.com/avito-tech/go-mutesting/cmd/go-mutesting"`) {
+		t.Error("mise.toml pins no mutation tester, so the mutate task depends on whatever the machine happens to have; gremlins times out on 114 of 116 mutants here and zimmski/go-mutesting panics before it mutates anything, so the fork is not interchangeable")
+	}
+}
+
+func TestMiseMutationTaskMutatesACopyOfTheSources(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	_, rest, found := strings.Cut(string(data), "[tasks.mutate]")
+	if !found {
+		t.Fatal("mise.toml defines no mutate task")
+	}
+	task, _, _ := strings.Cut(rest, "\n[tasks.")
+
+	for _, want := range []string{"mktemp -d", "git ls-files", `cd "$snapshot"`} {
+		if !strings.Contains(task, want) {
+			t.Errorf("the mutate task does not contain %q: every mutant is written over the file it came from, so a run in the checkout leaves mutated source behind the moment it is interrupted", want)
+		}
+	}
+}
+
+func TestMiseMutationTaskClassifiesEveryMutant(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "mise.toml"))
+	if err != nil {
+		t.Fatalf("read mise.toml: %v", err)
+	}
+	_, rest, found := strings.Cut(string(data), "[tasks.mutate]")
+	if !found {
+		t.Fatal("mise.toml defines no mutate task")
+	}
+	task, _, _ := strings.Cut(rest, "\n[tasks.")
+
+	if !strings.Contains(task, "scripts/mutate-exec.sh") {
+		t.Error("the mutate task uses the built-in runner, which reads any non-zero go test status as a kill: a mutant that never compiled and a mutant that hung both count towards the score")
+	}
+	for _, want := range []string{"EQUIVALENT=", "HUNG="} {
+		if !strings.Contains(task, want) {
+			t.Errorf("the mutate task records no %s count, so it can never pass", want)
+		}
+	}
+	for _, want := range []string{"lower it", "no mutation score was reported"} {
+		if !strings.Contains(task, want) {
+			t.Errorf("the mutate task does not fail on %q: a count nobody has to lower hides the next survivor, and go-mutesting exits 0 even when it mutates nothing", want)
+		}
+	}
+}
+
+func TestMutationExecSeparatesAHangFromAFailure(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "scripts", "mutate-exec.sh"))
+	if err != nil {
+		t.Fatalf("read scripts/mutate-exec.sh: %v", err)
+	}
+	script := string(data)
+
+	for _, want := range []string{"test timed out", "[build failed]", "exit 3", "exit 2"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("scripts/mutate-exec.sh does not distinguish %q, which go-mutesting would otherwise count as a mutant the tests killed", want)
+		}
+	}
+	if !strings.Contains(script, "MUTATE_TIMEOUT") {
+		t.Error("scripts/mutate-exec.sh ignores MUTATE_TIMEOUT, so a mutant that loops forever never returns")
 	}
 }
 

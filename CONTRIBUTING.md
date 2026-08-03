@@ -13,13 +13,19 @@ mise run coverage   # enforces 100% of statements by exact per-block scan
 mise run e2e        # acceptance suite; macOS and Linux only
 mise run vuln       # govulncheck ./...
 mise run fuzz       # 30-second fuzz run against the protocol decoder
+mise run mutate     # mutation testing over internal/harmony and internal/protocol
 ```
 
 `mise` pins the Go toolchain, so `go` directly and `mise run` cannot drift.
 Run tasks through `mise`.
 
 `e2e` drives `SIGTERM` and does not run on Windows. `fuzz` accepts a
-`FUZZTIME` environment variable if you want a longer run.
+`FUZZTIME` environment variable if you want a longer run. `mutate` takes about
+eight minutes and is not part of CI; run it when you change `internal/harmony`
+or `internal/protocol`, and read `AGENTS.md` before changing the counts it
+enforces. Narrowing to one file is much faster, but the binary mutates the tree
+it runs in, so do it in a throwaway copy and never in your checkout:
+`go-mutesting --exec "bash scripts/mutate-exec.sh" ./internal/harmony/pitch.go`.
 
 ## Rules
 
