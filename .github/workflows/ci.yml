@@ -180,3 +180,53 @@ jobs:
             -f context=coverage/total \
             -f description="$SUMMARY" \
             -f target_url="$RUN_URL"
+
+      - name: Run tests and record JUnit results
+        if: ${{ !cancelled() }}
+        run: mise run junit
+        continue-on-error: true
+
+      - name: Upload JUnit results to Codecov
+        uses: codecov/test-results-action@0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3
+        if: ${{ !cancelled() }}
+        with:
+          files: junit.xml
+          use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          fail_ci_if_error: false
+
+  vuln:
+    name: vuln
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+
+      - name: Cache the Go modules and the compiler output
+        uses: ./.github/actions/go-cache
+
+      - name: "Install Linux audio build dependency (drop with oto v3.5, #39)"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+
+      - run: mise run vuln
+
+  fuzz:
+    name: fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+
+      - name: Cache the Go modules and the compiler output
+        uses: ./.github/actions/go-cache
+
+      - run: mise run fuzz
+        env:
+          FUZZTIME: 30s

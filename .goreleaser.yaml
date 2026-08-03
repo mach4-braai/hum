@@ -81,6 +81,9 @@ archives:
       - src: docs/*.md
         dst: docs
 
+sboms:
+  - artifacts: archive
+
 source:
   enabled: true
   name_template: "{{ .ProjectName }}_{{ .Version }}_source"

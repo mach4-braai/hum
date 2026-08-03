@@ -212,6 +212,26 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   is no defence: it replays the older bump on top of the newer one.
 - A decoder returning `ErrMessageTooLarge` cannot resynchronise. Close the
   connection.
+- Any Linux job that *loads* the packages, not just builds them, needs
+  `libasound2-dev` and `pkg-config` for the same oto reason. `govulncheck ./...`
+  fails at package loading without them — `could not import C (no metadata for C)`
+  — which reads like a scanner bug and is really the missing ALSA headers. The
+  `fuzz` job does not need them because `internal/protocol` imports no audio.
+- `TestUnstampedBuildReportsAModuleVersion` fails on a checkout that is a git
+  submodule, and only there. Go derives the main module's version from VCS, and
+  inside a submodule it resolves the superproject instead, leaving the module
+  `(devel)` so the binary reports `dev`. A plain clone on the same toolchain stamps
+  `v0.2.1-0.20260803062112-b46308c265fc` correctly, which is what CI does. Confirm
+  with `git clone` into a temporary directory before believing the toolchain broke.
+- `Decode` does not re-marshal what it decoded, and must not start. `json.Unmarshal`
+  replaces each invalid UTF-8 byte with the three-byte U+FFFD, so a line at exactly
+  `MaxMessageLen` can re-encode larger than the limit. `FuzzDecoder` found that and
+  the tempting fix — marshal after unmarshalling and reject the overflow — is wrong
+  twice over: it costs an allocation and a full serialisation on every event the
+  daemon receives, and it rejects input the protocol accepts today, which closes the
+  connection. Nothing re-encodes a decoded `Event`; `protocol.Encoder` has no
+  production caller at all. The fuzz target therefore asserts the round trip only
+  when `Encode` succeeds, and tolerates `ErrMessageTooLarge` from it.
 - Voices are released before `renderer.Close`, never after. Closing first cuts
   the fade the release envelope exists to produce.
 - The event goroutine must outlive `transport.Serve`. Requests still in flight
@@ -341,6 +361,11 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   gate. Neither Windows archive has ever been executed: no runner in the matrix is
   Windows, `SIGTERM` is not deliverable there, and the liveness probe matches
   POSIX errnos Winsock does not use. #70 adds the leg that would find out.
+
+- `mise run junit` runs the test suite independently of `mise run coverage`. Both produce test results; the coverage job runs them in sequence. `junit.xml` is written by gotestsum even when tests fail, which is why the upload step uses `if: ${{ !cancelled() }}` — the flake data is most valuable precisely when tests are red. `continue-on-error: true` on the run step keeps the job status authoritative.
+- Every job in `ci.yml` must include `./.github/actions/go-cache`. `TestEveryCIJobRestoresTheGoCaches` counts `runs-on:` and go-cache references and fails if they differ. Adding a job without the composite makes the count mismatch fail that test.
+- Adding an action to a workflow without recording it in `pinnedActions` (in `internal/infra/ci_test.go`) fails `TestWorkflowsPinEveryActionToAReviewedCommit`. The lead records the pin; the workflow author reports it as `owner/repo version sha`.
+- `scorecard.yml` puts write permissions (`security-events: write`, `id-token: write`) at the **job** level, not the workflow level. zizmor `--pedantic` flags workflow-level write permissions as `excessive-permissions`. The workflow level carries only `contents: read`.
 
 ## Protocol
 

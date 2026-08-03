@@ -1,3 +1,10 @@
 * @mcgeerdev
 
 /docs/
+
+.github/ @mcgeerdev
+mise.toml @mcgeerdev
+.goreleaser.yaml @mcgeerdev
+Formula/hum.rb @mcgeerdev
+internal/infra/ @mcgeerdev
+internal/protocol/ @mcgeerdev

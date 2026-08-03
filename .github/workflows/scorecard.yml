@@ -1,0 +1,37 @@
+name: scorecard
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    branches: [master]
+
+concurrency:
+  group: scorecard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scorecard:
+    name: scorecard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # read repository contents to score
+      security-events: write # upload SARIF results to the Security tab
+      id-token: write # authenticate with the OSSF Scorecard publish service
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38
+        with:
+          sarif_file: results.sarif
