@@ -4,7 +4,6 @@ goreleaser = "2.17.1"
 gotestsum = "1.13.0"
 syft = "1.50.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
-"go:github.com/go-gremlins/gremlins/cmd/gremlins" = "0.5.1"
 
 [tasks.build]
 description = "Build hum and humd into bin/"
@@ -80,10 +79,6 @@ run = "govulncheck ./..."
 [tasks.fuzz]
 description = "Fuzz the protocol decoder against untrusted input"
 run = "go test -run '^$' -fuzz FuzzDecoder -fuzztime ${FUZZTIME:-30s} ./internal/protocol/"
-
-[tasks.mutate]
-description = "Mutation-test the packages the gate claims are covered"
-run = "gremlins unleash --output=gremlins.json ./..."
 
 [tasks.junit]
 description = "Run the unit tests and write a JUnit report for test analytics"

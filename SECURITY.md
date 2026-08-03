@@ -5,6 +5,11 @@
 Use [GitHub private vulnerability reporting](https://github.com/mach4-braai/hum/security/advisories/new).
 Do not open a public issue for a security matter.
 
+If that form is not available to you, open an ordinary issue saying only that you
+have a security report and asking for a private channel. Put no details in it —
+not the version, not the symptom. A maintainer will open the private advisory and
+invite you.
+
 There is no SLA. This is a personal project maintained on personal time.
 
 ## Scope

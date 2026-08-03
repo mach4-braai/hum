@@ -8,12 +8,11 @@ when something fails in an unexpected way.
 ## Loop
 
 ```sh
-mise run check      # gofmt, go vet, staticcheck, full test suite
+mise run check      # gofmt, go vet, unit tests, build-tooling assertions
 mise run coverage   # enforces 100% of statements by exact per-block scan
 mise run e2e        # acceptance suite; macOS and Linux only
 mise run vuln       # govulncheck ./...
 mise run fuzz       # 30-second fuzz run against the protocol decoder
-mise run mutate     # gremlins mutation score
 ```
 
 `mise` pins the Go toolchain, so `go` directly and `mise run` cannot drift.
@@ -47,10 +46,10 @@ the shape in use here.
 
 ## Pull requests
 
-Open against `master`. CI runs `check` on ubuntu, macos, and windows; `coverage`;
-and `e2e` on posix. A Dependabot PR for a GitHub Actions version arrives red on
-purpose — it needs a SHA recorded in `internal/infra` before it can merge; see
-the `pinnedActions` trap in `AGENTS.md`.
+Open against `master`. CI runs `check` on ubuntu, macos and windows; `coverage`;
+`e2e` on posix; `vuln`; `fuzz`; and a Windows binary smoke test. A Dependabot PR
+for a GitHub Actions version arrives red on purpose — it needs a SHA recorded in
+`internal/infra` before it can merge; see the `pinnedActions` trap in `AGENTS.md`.
 
 Windows support is best-effort. The suite runs there on every PR, but a failure
 on a platform the change does not touch is not your bug to fix.
