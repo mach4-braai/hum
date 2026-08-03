@@ -22,6 +22,8 @@ import (
 	"github.com/mach4-braai/hum/internal/transport"
 )
 
+const daemonStopGrace = 30 * time.Second
+
 type recorder struct {
 	mu      sync.Mutex
 	calls   []string
@@ -173,7 +175,7 @@ func send(t *testing.T, socket string, requests ...protocol.Request) []protocol.
 		t.Fatalf("dial %s: %v", socket, err)
 	}
 	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(daemonStopGrace)); err != nil {
 		t.Fatalf("deadline: %v", err)
 	}
 
@@ -382,8 +384,8 @@ func TestShutdownCommandStopsTheDaemon(t *testing.T) {
 		if code != exitOK {
 			t.Errorf("serve returned %d, want %d", code, exitOK)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("shutdown command did not stop the daemon")
+	case <-time.After(daemonStopGrace):
+		t.Fatalf("the shutdown command did not stop the daemon within %s, so the drain stalled rather than ran slowly", daemonStopGrace)
 	}
 
 	if rec.closeCount() != 1 {
@@ -406,8 +408,8 @@ func TestGracefulShutdownReleasesVoicesBeforeClosing(t *testing.T) {
 		if code != exitOK {
 			t.Errorf("serve returned %d, want %d", code, exitOK)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("SIGTERM did not stop the daemon")
+	case <-time.After(daemonStopGrace):
+		t.Fatalf("SIGTERM did not stop the daemon within %s, so the drain stalled rather than ran slowly", daemonStopGrace)
 	}
 
 	if rec.closeCount() != 1 {
@@ -486,7 +488,7 @@ func sendRaw(t *testing.T, socket, line string) protocol.Response {
 		t.Fatalf("dial %s: %v", socket, err)
 	}
 	defer conn.Close()
-	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(daemonStopGrace)); err != nil {
 		t.Fatalf("deadline: %v", err)
 	}
 	if _, err := conn.Write([]byte(line + "\n")); err != nil {

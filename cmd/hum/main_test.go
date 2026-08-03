@@ -23,7 +23,15 @@ func unreachableSocket(t *testing.T) string {
 	return socket
 }
 
+const stubDaemonGrace = 30 * time.Second
+
 func serveResponses(t *testing.T, responses ...string) func() []protocol.Request {
+	t.Helper()
+	await, _ := serveResponsesAnnouncingAccepts(t, responses...)
+	return await
+}
+
+func serveResponsesAnnouncingAccepts(t *testing.T, responses ...string) (func() []protocol.Request, <-chan struct{}) {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "hum")
 	if err != nil {
@@ -40,6 +48,8 @@ func serveResponses(t *testing.T, responses ...string) func() []protocol.Request
 
 	var mu sync.Mutex
 	var got []protocol.Request
+	var accepted []net.Conn
+	accepts := make(chan struct{}, 8)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -48,6 +58,15 @@ func serveResponses(t *testing.T, responses ...string) func() []protocol.Request
 			if err != nil {
 				return
 			}
+			mu.Lock()
+			accepted = append(accepted, conn)
+			mu.Unlock()
+			_ = conn.SetDeadline(time.Now().Add(stubDaemonGrace))
+			select {
+			case accepts <- struct{}{}:
+			default:
+			}
+
 			var request protocol.Request
 			_ = json.NewDecoder(conn).Decode(&request)
 			mu.Lock()
@@ -64,14 +83,23 @@ func serveResponses(t *testing.T, responses ...string) func() []protocol.Request
 	await := func() []protocol.Request {
 		once.Do(func() {
 			listener.Close()
-			<-done
+			mu.Lock()
+			for _, conn := range accepted {
+				conn.Close()
+			}
+			mu.Unlock()
+			select {
+			case <-done:
+			case <-time.After(stubDaemonGrace):
+				t.Errorf("the stub daemon did not stop within %s of its listener closing; it is blocked on a connection the client opened and never wrote to", stubDaemonGrace)
+			}
 		})
 		mu.Lock()
 		defer mu.Unlock()
 		return append([]protocol.Request(nil), got...)
 	}
 	t.Cleanup(func() { await() })
-	return await
+	return await, accepts
 }
 
 func serveOne(t *testing.T, response string) func() protocol.Request {
@@ -83,6 +111,34 @@ func serveOne(t *testing.T, response string) func() protocol.Request {
 			return protocol.Request{}
 		}
 		return requests[0]
+	}
+}
+
+func TestStubDaemonStopsWhenAClientOpensAndNeverWrites(t *testing.T) {
+	await, accepts := serveResponsesAnnouncingAccepts(t)
+
+	conn, err := net.Dial("unix", os.Getenv("HUM_SOCKET"))
+	if err != nil {
+		t.Fatalf("dial the stub daemon: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if _, err := conn.Write([]byte("{")); err != nil {
+		t.Fatalf("write a partial request: %v", err)
+	}
+
+	select {
+	case <-accepts:
+	case <-time.After(stubDaemonGrace):
+		t.Fatalf("the stub daemon never accepted the connection within %s, so this test proves nothing", stubDaemonGrace)
+	}
+
+	returned := make(chan []protocol.Request, 1)
+	go func() { returned <- await() }()
+
+	select {
+	case <-returned:
+	case <-time.After(stubDaemonGrace):
+		t.Fatalf("await did not return within %s: closing the listener alone does not free a goroutine parked in Decode, which is how a Windows run reaches the ten minute package timeout", stubDaemonGrace)
 	}
 }
 

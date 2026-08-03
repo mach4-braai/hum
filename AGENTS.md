@@ -242,6 +242,16 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `Request.MarshalJSON` refuses to encode an invalid request, so the daemon's own
   rejection paths cannot be tested through the typed client. Write raw JSON lines
   (`sendRaw` in `cmd/humd`).
+- A client that dials and writes nothing is what that refusal produces, and the
+  `serveResponses` stub in `cmd/hum` has already accepted the connection by then.
+  Closing the listener frees a goroutine in `Accept`, never one parked in
+  `Decode`, so `await` closes the accepted connections too. On POSIX the client's
+  close usually lands as EOF and hides this; on Windows it did not, and the
+  package sat there until the ten-minute test timeout.
+- `stubDaemonGrace` and `daemonStopGrace` are 30s because every wait they bound
+  returns on an event, not on the clock. The bound is only reached when the thing
+  under test has already stopped, so a larger one costs a working run nothing and
+  a smaller one buys a red build on a loaded runner. They are not slow tests.
 - The runtime coalesces rapid duplicate signals. A test that sends two `SIGTERM`s
   back to back sees one; wait for the daemon's "waiting for voices to fade" line
   in between.

@@ -561,8 +561,8 @@ func TestRunHappyPathViaShutdownCommand(t *testing.T) {
 		if code != exitOK {
 			t.Errorf("run returned %d, want %d after shutdown command", code, exitOK)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("run did not exit after shutdown command")
+	case <-time.After(daemonStopGrace):
+		t.Fatalf("run did not exit within %s of the shutdown command, so the drain stalled rather than ran slowly", daemonStopGrace)
 	}
 }
 
@@ -594,8 +594,8 @@ func TestRunDefaultSocketPathFromEnv(t *testing.T) {
 		if code != exitOK {
 			t.Errorf("run (default socket) returned %d, want %d", code, exitOK)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("run did not exit after shutdown command")
+	case <-time.After(daemonStopGrace):
+		t.Fatalf("run did not exit within %s of the shutdown command, so the drain stalled rather than ran slowly", daemonStopGrace)
 	}
 }
 
