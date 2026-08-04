@@ -23,7 +23,22 @@ type Allocator struct {
 	capped map[string]bool
 }
 
-var intervalRank = rankByConsonance(4, 3, 9, 8, 0, 7, 5, 10, 11, 2, 1, 6)
+const (
+	unison = iota
+	minorSecond
+	majorSecond
+	minorThird
+	majorThird
+	fourth
+	tritone
+	fifth
+	minorSixth
+	majorSixth
+	minorSeventh
+	majorSeventh
+)
+
+var intervalRank = rankByConsonance(majorThird, minorThird, majorSixth, minorSixth, unison, fifth, fourth, minorSeventh, majorSeventh, majorSecond, minorSecond, tritone)
 
 func rankByConsonance(classes ...int) [12]int {
 	var rank [12]int
@@ -151,5 +166,12 @@ func voicing(root Pitch, scale Scale, degree int) Pitch {
 		return root
 	}
 	steps := len(scale.Intervals)
-	return scale.Degree(root, (degree-1)%steps+1).Transpose(12)
+	sounding := scale.Degree(root, (degree-1)%steps+1)
+	switch degreeClass(scale, degree) {
+	case minorThird, majorThird:
+		return sounding
+	case minorSixth, majorSixth:
+		return sounding.Transpose(-12)
+	}
+	return sounding.Transpose(12)
 }

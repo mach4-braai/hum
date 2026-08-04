@@ -30,7 +30,7 @@ func TestAllocatorHandsOutConsonantIntervalsFirst(t *testing.T) {
 	scale := mustLookupScale(t, "minor_pentatonic")
 	a := NewAllocator(root, scale)
 
-	want := []string{"D2", "F3", "D4", "A3", "G3", "C4"}
+	want := []string{"D2", "F2", "D4", "A3", "G3", "C4"}
 	for i, name := range want {
 		v := a.Acquire(fmt.Sprintf("s%d", i))
 		if got := v.Pitch.String(); got != name {
@@ -43,7 +43,7 @@ func TestAllocationOrderPrefersThirdsAndSixthsWhenTheScaleHasThem(t *testing.T) 
 	root := mustParsePitch(t, "D2")
 	a := NewAllocator(root, mustLookupScale(t, "major_pentatonic"))
 
-	want := []string{"D2", "F#3", "B3"}
+	want := []string{"D2", "F#2", "B1"}
 	for i, name := range want {
 		if got := a.Acquire(fmt.Sprintf("s%d", i)).Pitch.String(); got != name {
 			t.Errorf("voice %d sounds %s, want %s: a scale offering a third and a sixth sounds them before its octave", i+1, got, name)
@@ -64,7 +64,11 @@ func TestConcurrentVoicesAreNeverASecondApart(t *testing.T) {
 		}
 		for i := range sounding {
 			for j := i + 1; j < len(sounding); j++ {
-				if gap := sounding[j].Midi() - sounding[i].Midi(); gap < 3 {
+				gap := sounding[j].Midi() - sounding[i].Midi()
+				if gap < 0 {
+					gap = -gap
+				}
+				if gap < 3 {
 					t.Errorf("%s: %v and %v are %d semitones apart, which is the roughness a second produces", name, sounding[i], sounding[j], gap)
 				}
 			}
@@ -86,7 +90,7 @@ func TestAllocatorReleaseReuse(t *testing.T) {
 	if v.Degree != 1 {
 		t.Errorf("want degree 1 reused, got %d", v.Degree)
 	}
-	if want := mustParsePitch(t, "F3"); v.Pitch != want {
+	if want := mustParsePitch(t, "F2"); v.Pitch != want {
 		t.Errorf("want pitch %v, got %v", want, v.Pitch)
 	}
 }
@@ -275,29 +279,35 @@ func TestVoicesOrderIsDeterministicPastTheCap(t *testing.T) {
 	}
 }
 
-func TestVoicingLiftsHarmoniesAnOctave(t *testing.T) {
+func TestVoicingKeepsThirdsCloseAndDropsSixthsBelowTheRoot(t *testing.T) {
 	root := mustParsePitch(t, "D2")
 	scale := mustLookupScale(t, "minor_pentatonic")
 
-	want := []string{"D2", "F3", "G3", "A3", "C4", "D4"}
+	want := []string{"D2", "F2", "G3", "A3", "C4", "D4"}
 	for degree, name := range want {
 		if got := voicing(root, scale, degree).String(); got != name {
-			t.Errorf("degree %d sounds %s, want %s: harmonies sit an octave above the root", degree, got, name)
+			t.Errorf("degree %d sounds %s, want %s: a third sits beside the root, every other harmony an octave above", degree, got, name)
 		}
+	}
+
+	sixth := mustLookupScale(t, "major_pentatonic")
+	if got := voicing(root, sixth, 4).String(); got != "B1" {
+		t.Errorf("the sixth sounds %s, want B1 below the root: a sixth inverts to a third", got)
 	}
 }
 
-func TestVoicingStaysWithinTwoOctavesOfTheRoot(t *testing.T) {
+func TestVoicingSpansAMajorThirdBelowToTwoOctavesAboveTheRoot(t *testing.T) {
 	root := mustParsePitch(t, "D2")
 	ceiling := root.Midi() + 24
+	floor := root.Midi() - 4
 
 	for _, name := range ScaleNames() {
 		scale := mustLookupScale(t, name)
 		reached := false
 		for degree := range MaxVoices {
 			p := voicing(root, scale, degree)
-			if p.Midi() < root.Midi() || p.Midi() > ceiling {
-				t.Errorf("%s degree %d sounds %v (midi %d), want within [%d, %d]", name, degree, p, p.Midi(), root.Midi(), ceiling)
+			if p.Midi() < floor || p.Midi() > ceiling {
+				t.Errorf("%s degree %d sounds %v (midi %d), want within [%d, %d]", name, degree, p, p.Midi(), floor, ceiling)
 			}
 			reached = reached || p.Midi() == ceiling
 		}

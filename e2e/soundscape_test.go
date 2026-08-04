@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-var defaultChord = []string{"D3", "F4", "D5", "A4"}
+var defaultChord = []string{"C4", "E4", "A3", "C6"}
 
 func TestFourConcurrentSessionsSoundTheDocumentedChord(t *testing.T) {
 	d := start(t)
@@ -22,15 +22,15 @@ func TestFourConcurrentSessionsSoundTheDocumentedChord(t *testing.T) {
 	if st.SoundingVoices != 4 {
 		t.Fatalf("sounding voices = %d, want 4", st.SoundingVoices)
 	}
-	if st.Root != "D3" {
-		t.Errorf("root = %q, want D3: the default register is music.octave 3", st.Root)
+	if st.Root != "C4" {
+		t.Errorf("root = %q, want C4: the default register is music.octave 4", st.Root)
 	}
 
 	got := pitches(st)
 	assigned := []string{got["one"], got["two"], got["three"], got["four"]}
 	for i, want := range defaultChord {
 		if assigned[i] != want {
-			t.Errorf("session %d sounds %q, want %q: voices are allocated by interval function, every harmony lifted an octave", i+1, assigned[i], want)
+			t.Errorf("session %d sounds %q, want %q: the third sits beside the root, the sixth an octave below it, everything else an octave above", i+1, assigned[i], want)
 		}
 	}
 
@@ -148,7 +148,7 @@ func TestDoctorReportsTheSoundingRegister(t *testing.T) {
 	d := start(t)
 	out := d.mustHum(t, "doctor")
 
-	if !strings.Contains(out, "root D3, scale minor_pentatonic") {
+	if !strings.Contains(out, "root C4, scale major") {
 		t.Errorf("doctor does not name the sounding pitch:\n%s", out)
 	}
 	if !strings.Contains(out, "music.octave") {

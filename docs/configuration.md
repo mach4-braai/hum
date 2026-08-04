@@ -82,9 +82,9 @@ Field paths tracked: `project.name`, `music.root`, `music.octave`,
 | Field path | Default | YAML key | `cliOverrides` key |
 |---|---|---|---|
 | `project.name` | `""` (empty) | `project.name` | `project.name` |
-| `music.root` | `"D"` | `music.root` | `music.root` |
-| `music.octave` | `3` | `music.octave` | `music.octave` |
-| `music.scale` | `"minor_pentatonic"` | `music.scale` | `music.scale` |
+| `music.root` | `"C"` | `music.root` | `music.root` |
+| `music.octave` | `4` | `music.octave` | `music.octave` |
+| `music.scale` | `"major"` | `music.scale` | `music.scale` |
 | `music.theme` | `"minimal"` | `music.theme` | `music.theme` |
 | `audio.volume` | `0.6` | `audio.volume` | `audio.volume` |
 | `audio.muted` | `false` | `audio.muted` | `audio.muted` |
@@ -97,26 +97,34 @@ interface.
 `minimal` is the default theme because PRD.md §20 permits exactly one
 built-in theme for the MVP. `orchestra` from the §13 example is Phase 2.
 
-`music.root` is a bare note class: `D` and `F#` resolve; `D2` does not. The
+`music.root` is a bare note class: `C` and `F#` resolve; `C4` does not. The
 register lives in `music.octave` instead, so the class and the register can be
 set from different layers — a project may pick the note while the global file
 decides how low the machine plays it.
 
 `music.octave` is the octave the drone root sounds in, in scientific pitch
-notation: `3` puts a root of D at D3, 146.8 Hz. Harmonies sound above it, up to
-two octaves higher, so the audible span at octave 3 is D3 to D5. Valid range is
-`[1, 6]` (`config.MinOctave`, `config.MaxOctave`): octave 1 keeps the
-fundamental above about 30 Hz, and 6 is the highest octave whose two-octave
+notation: `4` puts a root of C at C4, 261.6 Hz. Harmonies reach two octaves
+above it and, where the scale offers a sixth, four semitones below it, so the
+audible span at octave 4 runs A3 to C6 — see **Voicing** in
+[harmony.md](harmony.md). Valid range is `[1, 6]` (`config.MinOctave`,
+`config.MaxOctave`): octave 1 keeps the fundamental above about 30 Hz with its
+sixth still clear of MIDI 0, and 6 is the highest octave whose two-octave
 harmony ceiling still lands inside MIDI 127 for every note class.
 
-The default is 3 rather than 2 on register grounds, not physiology. Huron
-reports F2–G5 as the region of maximum pitch weight, the earcon literature
+The default is 4 on register grounds, not physiology. Huron reports F2–G5 as the
+region of maximum pitch weight and C4 sits inside it; the earcon literature
 recommends a floor around 125–150 Hz for tones meant to carry information, and
-small laptop drivers roll off below roughly 150–200 Hz — a 73 Hz fundamental is
-felt more than heard, and what reaches the ear is largely the second harmonic
-the drone adds at `2f`. Pitch weight varies continuously, so this is a taste
-default, not a threshold: set `octave: 2` for a deeper bed and accept the
-roughness that comes with it.
+small laptop drivers roll off below roughly 150–200 Hz, which a 261.6 Hz
+fundamental clears outright — the pitch a listener hears is the one the drone
+sounds, not the second harmonic it adds at `2f`. The cost is at the top: the
+two-octave ceiling lands on C6 at 1046.5 Hz, so a full soundscape is brighter
+than a low bed. Pitch weight varies continuously, so this is a taste default,
+not a threshold: set `octave: 3` for a darker bed and accept a fundamental the
+smallest speakers will thin out. Going lower than 3 costs more than depth. The
+voicing rule holds a third beside the root, and down at octave 1 or 2 that third
+falls inside a critical band — 0.42 ERB at D2 against 0.82 at C4 — so the first
+two voices beat instead of blending. See **Voicing** in
+[harmony.md](harmony.md) for the measurement.
 
 `music.scale` and `music.theme` are validated on resolution. Root and scale
 are checked against the harmony tables (`harmony.ParseNoteClass`,
@@ -134,9 +142,9 @@ project:
   name: my-project
 
 music:
-  root: D
-  octave: 3
-  scale: minor_pentatonic
+  root: C
+  octave: 4
+  scale: major
   theme: minimal
 
 audio:

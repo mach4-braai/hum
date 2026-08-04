@@ -7,8 +7,8 @@ import "testing"
 func TestTwoConcurrentProjectsShareTheFirstContext(t *testing.T) {
 	d := start(t)
 
-	alpha := writeProjectConfig(t, "project:\n  name: alpha\nmusic:\n  root: D\n  scale: dorian\n")
-	beta := writeProjectConfig(t, "project:\n  name: beta\nmusic:\n  root: A\n  scale: minor_pentatonic\n")
+	alpha := writeProjectConfig(t, "project:\n  name: alpha\nmusic:\n  root: D\n  octave: 3\n  scale: dorian\n")
+	beta := writeProjectConfig(t, "project:\n  name: beta\nmusic:\n  root: A\n  octave: 3\n  scale: minor_pentatonic\n")
 
 	d.mustHum(t, "start", "--id", "a1", "--title", "alpha work", "--root", alpha)
 
@@ -34,16 +34,16 @@ func TestTwoConcurrentProjectsShareTheFirstContext(t *testing.T) {
 	}
 
 	dorianSecond := pitches(st)["b1"]
-	if dorianSecond != "F4" {
-		t.Errorf("beta's session sounds %q, want F4: the second dorian voice is the third, lifted an octave", dorianSecond)
+	if dorianSecond != "F3" {
+		t.Errorf("beta's session sounds %q, want F3: the second dorian voice is the minor third, voiced beside the root", dorianSecond)
 	}
 }
 
 func TestAnEmptySoundscapeAdoptsTheNextProject(t *testing.T) {
 	d := start(t)
 
-	alpha := writeProjectConfig(t, "project:\n  name: alpha\nmusic:\n  root: D\n  scale: dorian\n")
-	beta := writeProjectConfig(t, "project:\n  name: beta\nmusic:\n  root: A\n  scale: minor_pentatonic\n")
+	alpha := writeProjectConfig(t, "project:\n  name: alpha\nmusic:\n  root: D\n  octave: 3\n  scale: dorian\n")
+	beta := writeProjectConfig(t, "project:\n  name: beta\nmusic:\n  root: A\n  octave: 3\n  scale: minor_pentatonic\n")
 
 	d.mustHum(t, "start", "--id", "a1", "--root", alpha)
 	d.mustHum(t, "start", "--id", "b1", "--root", beta)
@@ -73,8 +73,8 @@ func TestASessionWithNoProjectRootUsesGlobalConfig(t *testing.T) {
 	}
 
 	st := d.status(t)
-	if st.Root != "D3" || st.Scale != "minor_pentatonic" {
-		t.Errorf("context = %s %s, want the default D3 minor_pentatonic", st.Root, st.Scale)
+	if st.Root != "C4" || st.Scale != "major" {
+		t.Errorf("context = %s %s, want the default C4 major", st.Root, st.Scale)
 	}
 	if st.ContextOwner != "" {
 		t.Errorf("context owner = %q, want empty: no project claimed the context", st.ContextOwner)

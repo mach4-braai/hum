@@ -161,7 +161,7 @@ no audio device sends the user hunting for a hardware problem that does not exis
 
 The config rows carry provenance, so a user can see which layer set `music.root`
 rather than guessing between four of them. The `music` row renders the resolved
-pitch — `root D3, scale minor_pentatonic` — not the bare note class, because the
+pitch — `root C4, scale major` — not the bare note class, because the
 class alone cannot say which register the drone will sound in, and the register is
 the setting a user most often wants to check. `--audio-test` plays a two-second
 tone through the daemon and says plainly when nothing could be heard, since a

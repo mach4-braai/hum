@@ -98,9 +98,10 @@ For `minor_pentatonic` (5 notes) rooted at D2:
 PRD §7 shows four simultaneous work sessions allocated D2, F2, A2, C3 against root D and scale `minor_pentatonic`.
 
 The engine does **not** reproduce that example. Allocation is by interval
-function, so four concurrent sessions rooted at D2 sound D2, F3, D4, A3 — the
-root, its third, its octave and its fifth, with every harmony lifted an octave
-(see **Voicing** below). The PRD's C is the last pitch the scale has to offer and
+function, so four concurrent sessions rooted at D2 sound D2, F2, D4, A3 — the
+root, its third, its octave and its fifth. The third matches the PRD because a
+third is voiced beside the root; the octave and the fifth are lifted (see
+**Voicing** below). The PRD's C is the last pitch the scale has to offer and
 does not appear until a sixth session arrives.
 
 Issue #14 originally fixed allocation as the lowest free degree, which spelled
@@ -127,39 +128,72 @@ The allocator guards its state with a mutex. `Apply` on the engine is called fro
 
 ### Voicing
 
-Degree 0 sounds the root exactly. Every degree above it keeps its scale step but
-sounds one octave higher.
+Degree 0 sounds the root exactly. Every degree above it keeps its scale step and
+is then placed by the interval it sounds against the root: a third stays where
+the scale puts it, beside the root; a sixth drops an octave, below the root;
+everything else rises an octave.
 
-| degree | before | after |
-|--------|--------|-------|
-| 0      | D2     | D2    |
-| 1      | F2     | F3    |
-| 2      | G2     | G3    |
-| 3      | A2     | A3    |
-| 4      | C3     | C4    |
-| 5      | D3     | D4    |
-| 6 … 10 | F3 … D4 | unchanged |
-| 11     | F4     | F3    |
+| degree | class | interval | placement | C major |
+|--------|-------|----------|-----------|---------|
+| 0      | 0     | root     | exact     | C4      |
+| 1      | 2     | second   | `+12`     | D5      |
+| 2      | 4     | third    | `0`       | E4      |
+| 3      | 5     | fourth   | `+12`     | F5      |
+| 4      | 7     | fifth    | `+12`     | G5      |
+| 5      | 9     | sixth    | `−12`     | A3      |
+| 6      | 11    | seventh  | `+12`     | B5      |
+| 7      | 0     | octave   | `+12`     | C6      |
 
-`Degree` was never bounded, so the twelve voices always spanned nearly three
-octaves; what crowded was the *bottom* of that span, and the bottom is where the
-first few sessions land. One to five concurrent sessions — the common case — all
-sounded inside the root's own octave, a minor third and a fourth apart at 73 Hz
-where a critical band is around 100 Hz wide, which is the definition of
-roughness. Lifting them puts an octave of air between the bass anchor and the
-harmonies.
+The two directions are the same idea seen twice. A sixth inverts to a third, so
+dropping the sixth an octave puts it a third *below* the root: in C major the
+major sixth A4 becomes A3, a minor third under C4. Thirds above and thirds below
+are what `intervalRank` already prefers — classes 4, 3, 9, 8 ahead of the octave,
+the fifth and the fourth — so the first three voices of a default install sound
+A3, C4, E4, which is an A minor triad, the relative minor of the key. The tonic
+is still the only voice at degree 0; the chord is what the ranking produces, not
+something the allocator names.
+
+Everything else rises for the reason the lift was introduced. `Degree` was never
+bounded, so the twelve voices always spanned nearly three octaves; what crowded
+was the *bottom* of that span, and the bottom is where the first few sessions
+land. Unlifted, one to five concurrent sessions — the common case — all sounded
+inside the root's own octave, a minor third and a fourth apart at 73 Hz where a
+critical band is around 100 Hz wide, which is the definition of roughness.
+
+**Thirds and sixths are exempt, and that costs measured spacing.** Holding them
+close is a deliberate trade of critical-band separation for a recognisable
+chord: the first three voices of a default install spell the relative minor
+rather than three unrelated tones. The price, in ERB-rate units
+($21.4\log_{10}(4.37f/1000 + 1)$), taking the minimum gap among the first three
+concurrent voices:
+
+| root and scale | all-lifted | thirds close, sixths below |
+|---|---|---|
+| C4 `major` (the default) | 2.06 (C4 E5 A5) | **0.82** (A3 C4 E4) |
+| D2 `minor_pentatonic` | 2.40 (D2 F3 D4) | **0.42** (D2 F2 D4) |
+
+So the exemption is register-dependent and only defensible in the middle of the
+range. At the default C4 a major third spans 0.82 ERB, which is close voicing of
+the kind ordinary music uses freely. At `octave: 1` or `2` the same rule puts a
+minor third at 0.42 ERB — below the 0.66 that issue #75 was opened to eliminate,
+and audible as beating rather than harmony. A low `music.octave` therefore buys
+its darker bed at the cost of roughness in the first two voices, which is the
+trade `configuration.md` names when it recommends against it. The hard floor is
+still enforced: `TestConcurrentVoicesAreNeverASecondApart` holds every pair of
+the first three voices at three semitones or more, in either direction, on all
+seven built-in scales, so no configuration produces an outright second.
 
 The step folds back into `1 … len(Intervals)` once it runs past the scale, which
 makes `root + 24` semitones the exact ceiling: on `minor_pentatonic` degree 5
-sounds D4, and degree 6 shares F3 with degree 1. The top harmony of every
-built-in scale lands exactly two octaves above the root.
+sounds D4, and degree 6 shares F2 with degree 1. The top harmony of every
+built-in scale lands exactly two octaves above the root, because the octave
+degree is never a third or a sixth and so always rises. The floor is `root − 4`,
+a minor sixth dropped an octave, which keeps octave 1 clear of MIDI 0.
 
-The root's own register is `music.octave`, defaulting to 3, so the pitches a
-default install has to offer are D3, F4, G4, A4, C5, D5, listed by degree. The
-order sessions receive them in is **Allocation** above, not this one: D3, F4,
-D5, A4, G4, C5. The table is rooted at D2 because that is what the change to
-lifted voicing replaced; both the register and the lift are visible in
-`hum status`.
+The root's own register is `music.octave`, defaulting to 4, so the pitches a
+default install has to offer are C4, D5, E4, F5, G5, A3, B5, C6, listed by
+degree. The order sessions receive them in is **Allocation** above, not this
+one: C4, E4, A3, C6, G5, F5, B5, D5.
 
 The price is shared pitches beyond `len(Intervals) + 1` concurrent sessions —
 six voices on a pentatonic, eight on a seven-note scale — where the old mapping
@@ -221,7 +255,7 @@ One note: the session pitch transposed up `CompletionOctaves × 12` semitones (d
 engine from `theme.PhraseSpec()`, and the built-in `minimal` theme sets
 `completion_octaves: 1`, `completion_duration: 0.2`, `failure_duration: 1.2` and
 `failure_gain: 0.35`. So a default install completes **one** octave above the
-drone — D3 becomes D4, not D5. `DefaultPhraseSpec` is the fallback for a theme
+drone — C4 becomes C5, not C6. `DefaultPhraseSpec` is the fallback for a theme
 that names none of them, and every number in this section is the engine's
 default, not the audible one. `e2e/buffer_test.go` asserts against the theme's
 spec for that reason.

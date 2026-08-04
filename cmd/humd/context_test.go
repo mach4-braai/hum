@@ -59,8 +59,8 @@ func start(t *testing.T, socket, id, root string) protocol.Response {
 }
 
 func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
-	a := project(t, "music:\n  root: D\n  scale: dorian\n")
-	b := project(t, "music:\n  root: A\n  scale: minor_pentatonic\n")
+	a := project(t, "music:\n  root: D\n  octave: 3\n  scale: dorian\n")
+	b := project(t, "music:\n  root: A\n  octave: 3\n  scale: minor_pentatonic\n")
 
 	d, _ := testDaemon(t)
 	socket, signals, done := startDaemon(t, d)
@@ -112,7 +112,7 @@ func TestJoiningSessionInheritsTheEstablishedContext(t *testing.T) {
 }
 
 func TestProjectConfigIsHonouredFromAnUnrelatedWorkingDirectory(t *testing.T) {
-	proj := project(t, "music:\n  root: F\n  scale: lydian\n")
+	proj := project(t, "music:\n  root: F\n  octave: 3\n  scale: lydian\n")
 
 	d, _ := testDaemon(t)
 	socket, signals, done := startDaemon(t, d)
@@ -170,7 +170,7 @@ func TestSessionWithoutARootUsesGlobalConfig(t *testing.T) {
 	}
 
 	status := statusOf(t, socket)
-	if status.Root != "D3" || status.Scale != "minor_pentatonic" {
+	if status.Root != "C4" || status.Scale != "major" {
 		t.Errorf("context = root %q scale %q, want the defaults", status.Root, status.Scale)
 	}
 	if status.ContextOwner != "" {
@@ -201,7 +201,7 @@ func TestSessionWithAMissingRootIsRejected(t *testing.T) {
 }
 
 func TestSymlinkedRootResolvesToTheCanonicalContext(t *testing.T) {
-	proj := project(t, "music:\n  root: G\n  scale: aeolian\n")
+	proj := project(t, "music:\n  root: G\n  octave: 3\n  scale: aeolian\n")
 
 	link := filepath.Join(t.TempDir(), "link")
 	if err := os.Symlink(proj, link); err != nil {
