@@ -37,9 +37,9 @@ type AudioConfig struct {
 func Default() Config {
 	return Config{
 		Music: MusicConfig{
-			Root:   "D",
-			Octave: 3,
-			Scale:  "minor_pentatonic",
+			Root:   "C",
+			Octave: 4,
+			Scale:  "major",
 			Theme:  "minimal",
 		},
 		Audio: AudioConfig{

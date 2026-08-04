@@ -175,6 +175,19 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 
 - `volume` bounds read `!(v >= 0 && v <= 1)`. Every comparison against `NaN` is
   false, so `v < 0 || v > 1` accepts `"NaN"`.
+- `voicing` does not lift every harmony. A third keeps its scale octave and a
+  sixth drops one, so the default C4 `major` install sounds A3, C4, E4 — the
+  relative minor — before it sounds anything else. Restoring the unconditional
+  `.Transpose(12)` is a one-character change that silently deletes the chord and
+  moves two of the first three voices an octave. `intervalRank` already ranks
+  those four classes first; the directions in `voicing` are what make the ranking
+  audible rather than merely ordered.
+- Because a sixth sounds *below* the root, voices are no longer monotonically
+  ascending in allocation order.
+  `TestConcurrentVoicesAreNeverASecondApart` therefore compares absolute
+  distance. Restoring the signed `sounding[j] - sounding[i]` makes every
+  downward interval pass unchecked, and the test then proves nothing about the
+  one voice placed below the drone.
 - `cmd/hum` parses flags in a loop. Go's `flag` stops at the first positional,
   so a single pass reads `theme use --json minimal` as a theme named `--json`.
 - go-mutesting writes each mutant over the source file it came from, runs the
