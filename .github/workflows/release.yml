@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654
         with:
           cache: false
 
@@ -48,7 +48,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654
         with:
           cache: false
 
@@ -73,7 +73,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654
         with:
           cache: false
 
@@ -114,7 +114,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: jdx/mise-action@9e7f7633ff6f6d6048a9418a68d48f288f50eb14
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654
         with:
           cache: false
 
@@ -129,7 +129,7 @@ jobs:
         run: goreleaser release --clean
 
       - name: Attest release artifacts
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
           subject-path: |
             dist/*.tar.gz
