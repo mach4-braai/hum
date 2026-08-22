@@ -3,7 +3,7 @@ module github.com/mach4-braai/hum
 go 1.25.0
 
 require (
-	github.com/ebitengine/oto/v3 v3.4.0
+	github.com/ebitengine/oto/v3 v3.4.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
