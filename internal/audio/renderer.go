@@ -102,9 +102,11 @@ func (r *AudioRenderer) SetTheme(t theme.Theme) error {
 
 	r.th = t
 	env := droneEnvelope(t.Drone)
+	tone := ToneOf(t)
 	for _, av := range r.active {
 		av.osc.SetEnvelope(env)
 		av.osc.SetGain(t.Drone.Gain)
+		av.osc.SetTone(tone)
 		av.osc.SetExpression(av.last.Expression, t.Drone)
 	}
 	return nil
@@ -141,6 +143,7 @@ func (r *AudioRenderer) Update(s harmony.State) error {
 		} else {
 			env := droneEnvelope(r.th.Drone)
 			osc := NewOsc(r.format, vs.Voice.Pitch.Freq(), r.th.Drone.Gain, env)
+			osc.SetTone(ToneOf(r.th))
 			osc.SetExpression(vs.Expression, r.th.Drone)
 			r.seq++
 			mid := fmt.Sprintf("drone/%d", r.seq)

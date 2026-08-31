@@ -126,7 +126,7 @@ usage error, `3` the daemon is unreachable.
 | [harmony.md](docs/harmony.md) | voice allocation, scales and phrases |
 | [audio.md](docs/audio.md) | the mixer, oscillators and envelopes |
 | [renderer.md](docs/renderer.md) | the renderer interface and registry |
-| [themes.md](docs/themes.md) | the theme format and the built-in theme |
+| [themes.md](docs/themes.md) | the theme format and the built-in themes |
 | [session.md](docs/session.md) | the session object and its state machine |
 | [transport.md](docs/transport.md) | the Unix socket server and its lifecycle |
 | [releasing.md](docs/releasing.md) | tagging a release, the Homebrew tap and the credential it needs |

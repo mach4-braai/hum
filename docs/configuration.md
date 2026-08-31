@@ -86,7 +86,7 @@ Field paths tracked: `project.name`, `music.root`, `music.octave`,
 | `music.root` | `"C"` | `music.root` | `music.root` |
 | `music.octave` | `4` | `music.octave` | `music.octave` |
 | `music.scale` | `"major"` | `music.scale` | `music.scale` |
-| `music.theme` | `"minimal"` | `music.theme` | `music.theme` |
+| `music.theme` | `"orchestra"` | `music.theme` | `music.theme` |
 | `audio.volume` | `0.6` | `audio.volume` | `audio.volume` |
 | `audio.muted` | `false` | `audio.muted` | `audio.muted` |
 | `session.max_lease` | `""` (off) | `session.max_lease` | `session.max_lease` |
@@ -96,8 +96,14 @@ in `Resolve`'s `cliOverrides` map, which neither `hum` nor `humd` passes — no
 flag reaches it. It is a seam for a future flag set, not a documented user
 interface.
 
-`minimal` is the default theme because PRD.md §20 permits exactly one
-built-in theme for the MVP. `orchestra` from the §13 example is Phase 2.
+`orchestra` is the default theme, matching PRD.md §13's config example. It plays
+the warm string sound of §291; `minimal` remains available and stays the
+sine-only theme of PRD.md §20.
+
+Only fresh installs move. `hum init` writes `music.theme` into the config file,
+so an install that ran it before this change keeps `theme: minimal` and keeps the
+old sound until someone runs `hum theme use orchestra`. Configs with no
+`music.theme` key pick up the new default.
 
 `music.root` is a bare note class: `C` and `F#` resolve; `C4` does not. The
 register lives in `music.octave` instead, so the class and the register can be
@@ -155,7 +161,7 @@ music:
   root: C
   octave: 4
   scale: major
-  theme: minimal
+  theme: orchestra
 
 audio:
   volume: 0.6

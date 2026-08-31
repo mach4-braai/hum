@@ -317,17 +317,18 @@ func TestControlCommandsProxyToTheRenderer(t *testing.T) {
 
 func TestUnknownThemeIsRejectedWithoutChangingTheCurrentOne(t *testing.T) {
 	d, _ := testDaemon(t)
+	current := d.theme.Name
 	socket, signals, done := startDaemon(t, d)
 	t.Cleanup(func() {
 		signals <- syscall.SIGTERM
 		<-done
 	})
 
-	responses := send(t, socket, protocol.Request{Command: protocol.CmdThemeUse, Value: "orchestra"})
+	responses := send(t, socket, protocol.Request{Command: protocol.CmdThemeUse, Value: "gamelan"})
 	if responses[0].OK {
-		t.Fatalf("theme.use orchestra = %+v, want a failure", responses[0])
+		t.Fatalf("theme.use gamelan = %+v, want a failure", responses[0])
 	}
-	if !strings.Contains(responses[0].Error, "orchestra") {
+	if !strings.Contains(responses[0].Error, "gamelan") {
 		t.Errorf("error %q does not name the requested theme", responses[0].Error)
 	}
 
@@ -336,8 +337,8 @@ func TestUnknownThemeIsRejectedWithoutChangingTheCurrentOne(t *testing.T) {
 	if err := json.Unmarshal(responses[0].Data, &status); err != nil {
 		t.Fatalf("decode status: %v", err)
 	}
-	if status.Theme != "minimal" {
-		t.Errorf("theme = %q after a failed switch, want minimal", status.Theme)
+	if status.Theme != current {
+		t.Errorf("theme = %q after a failed switch, want %q", status.Theme, current)
 	}
 }
 

@@ -337,7 +337,7 @@ func TestValidateEmptyName(t *testing.T) {
 }
 
 func TestValidateUnsupportedWaveform(t *testing.T) {
-	th := Theme{Name: "t", Waveform: "square"}
+	th := Theme{Name: "t", Waveform: "square", Drone: DroneSpec{Attack: 1, Release: 1}}
 	err := th.Validate()
 	if err == nil || !strings.Contains(err.Error(), "waveform") {
 		t.Errorf("expected waveform error, got %v", err)
@@ -663,5 +663,134 @@ func TestPhraseSpecStaysWithinADurationAtTheBound(t *testing.T) {
 		if got != maxPhraseSeconds*time.Second {
 			t.Errorf("%s duration = %v, want %v", name, got, maxPhraseSeconds*time.Second)
 		}
+	}
+}
+
+func stringsValid() Theme {
+	th := minimalValid()
+	th.Name = "orchestra"
+	th.Waveform = WaveformStrings
+	th.Drone.Harmonic = 0
+	th.Drone.Partials = 12
+	th.Drone.CutoffHz = 1500
+	th.Drone.Brightness = 0.8
+	th.Drone.EnsembleVoices = 3
+	th.Drone.EnsembleCents = 7
+	th.Drone.EnsembleDriftHz = 0.15
+	return th
+}
+
+func TestLoadOrchestraEmbedded(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+	th, err := Load("orchestra")
+	if err != nil {
+		t.Fatalf("Load(\"orchestra\") error: %v", err)
+	}
+	if th.Name != "orchestra" {
+		t.Errorf("Name = %q, want \"orchestra\"", th.Name)
+	}
+	if th.Waveform != WaveformStrings {
+		t.Errorf("Waveform = %q, want %q", th.Waveform, WaveformStrings)
+	}
+	if th.Drone.EnsembleVoices < 2 {
+		t.Errorf("ensemble_voices = %d, want a section rather than one player", th.Drone.EnsembleVoices)
+	}
+
+	names := List()
+	found := false
+	for _, name := range names {
+		if name == "orchestra" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("List() = %v, want orchestra listed", names)
+	}
+}
+
+func TestValidateAcceptsTheStringsWaveform(t *testing.T) {
+	if err := stringsValid().Validate(); err != nil {
+		t.Fatalf("Validate() on a valid strings theme = %v, want nil", err)
+	}
+}
+
+func TestValidateRejectsStringsKeysOnASineTheme(t *testing.T) {
+	cases := map[string]func(*Theme){
+		"partials":           func(th *Theme) { th.Drone.Partials = 8 },
+		"cutoff_hz":          func(th *Theme) { th.Drone.CutoffHz = 1500 },
+		"brightness_octaves": func(th *Theme) { th.Drone.Brightness = 1 },
+		"ensemble_voices":    func(th *Theme) { th.Drone.EnsembleVoices = 3 },
+		"ensemble_cents":     func(th *Theme) { th.Drone.EnsembleCents = 7 },
+		"ensemble_drift_hz":  func(th *Theme) { th.Drone.EnsembleDriftHz = 0.2 },
+		"nan cutoff_hz":      func(th *Theme) { th.Drone.CutoffHz = math.NaN() },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			th := minimalValid()
+			mutate(&th)
+			err := th.Validate()
+			if err == nil {
+				t.Fatalf("Validate() with drone.%s set on a sine theme = nil, want a rejection", name)
+			}
+			if !strings.Contains(err.Error(), WaveformSine) {
+				t.Errorf("error %q does not name the waveform that ignores the key", err.Error())
+			}
+		})
+	}
+}
+
+func TestValidateRejectsBadStringsValues(t *testing.T) {
+	cases := map[string]struct {
+		mutate func(*Theme)
+		key    string
+	}{
+		"harmonic set":     {func(th *Theme) { th.Drone.Harmonic = 0.15 }, "drone.harmonic"},
+		"no partials":      {func(th *Theme) { th.Drone.Partials = 1 }, "drone.partials"},
+		"too many":         {func(th *Theme) { th.Drone.Partials = maxPartials + 1 }, "drone.partials"},
+		"no cutoff":        {func(th *Theme) { th.Drone.CutoffHz = 0 }, "drone.cutoff_hz"},
+		"cutoff too high":  {func(th *Theme) { th.Drone.CutoffHz = maxCutoffHz + 1 }, "drone.cutoff_hz"},
+		"nan brightness":   {func(th *Theme) { th.Drone.Brightness = math.NaN() }, "drone.brightness_octaves"},
+		"brightness range": {func(th *Theme) { th.Drone.Brightness = maxBrightness + 1 }, "drone.brightness_octaves"},
+		"no voices":        {func(th *Theme) { th.Drone.EnsembleVoices = 0 }, "drone.ensemble_voices"},
+		"too many voices":  {func(th *Theme) { th.Drone.EnsembleVoices = maxEnsembleVoices + 1 }, "drone.ensemble_voices"},
+		"nan cents":        {func(th *Theme) { th.Drone.EnsembleCents = math.NaN() }, "drone.ensemble_cents"},
+		"cents range":      {func(th *Theme) { th.Drone.EnsembleCents = maxDetuneCents + 1 }, "drone.ensemble_cents"},
+		"nan drift":        {func(th *Theme) { th.Drone.EnsembleDriftHz = math.NaN() }, "drone.ensemble_drift_hz"},
+		"drift range":      {func(th *Theme) { th.Drone.EnsembleDriftHz = maxEnsembleDriftHz + 1 }, "drone.ensemble_drift_hz"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			th := stringsValid()
+			tc.mutate(&th)
+			err := th.Validate()
+			if err == nil {
+				t.Fatalf("Validate() = nil, want a rejection naming %s", tc.key)
+			}
+			if !strings.Contains(err.Error(), tc.key) {
+				t.Errorf("error %q does not name %s", err.Error(), tc.key)
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsAStringsThemeAtItsBounds(t *testing.T) {
+	th := stringsValid()
+	th.Drone.Partials = minPartials
+	th.Drone.CutoffHz = maxCutoffHz
+	th.Drone.Brightness = 0
+	th.Drone.EnsembleVoices = 1
+	th.Drone.EnsembleCents = 0
+	th.Drone.EnsembleDriftHz = 0
+	if err := th.Validate(); err != nil {
+		t.Fatalf("Validate() at the bounds = %v, want nil", err)
+	}
+
+	th.Drone.Partials = maxPartials
+	th.Drone.EnsembleVoices = maxEnsembleVoices
+	th.Drone.EnsembleCents = maxDetuneCents
+	th.Drone.EnsembleDriftHz = maxEnsembleDriftHz
+	th.Drone.Brightness = maxBrightness
+	if err := th.Validate(); err != nil {
+		t.Fatalf("Validate() at the upper bounds = %v, want nil", err)
 	}
 }

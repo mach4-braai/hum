@@ -8,10 +8,21 @@ import (
 )
 
 const (
-	maxTremoloHz     = 20.0
-	maxDetuneCents   = 100.0
-	maxPhraseSeconds = 60.0
-	maxDroneSeconds  = 60.0
+	maxTremoloHz       = 20.0
+	maxDetuneCents     = 100.0
+	maxPhraseSeconds   = 60.0
+	maxDroneSeconds    = 60.0
+	minPartials        = 2
+	maxPartials        = 32
+	maxCutoffHz        = 20000.0
+	maxBrightness      = 6.0
+	maxEnsembleVoices  = 4
+	maxEnsembleDriftHz = 2.0
+)
+
+const (
+	WaveformSine    = "sine"
+	WaveformStrings = "strings"
 )
 
 type Theme struct {
@@ -22,12 +33,18 @@ type Theme struct {
 }
 
 type DroneSpec struct {
-	Attack      float64 `yaml:"attack"`
-	Release     float64 `yaml:"release"`
-	Gain        float64 `yaml:"gain"`
-	Harmonic    float64 `yaml:"harmonic"`
-	TremoloHz   float64 `yaml:"tremolo_hz"`
-	DetuneCents float64 `yaml:"detune_cents"`
+	Attack          float64 `yaml:"attack"`
+	Release         float64 `yaml:"release"`
+	Gain            float64 `yaml:"gain"`
+	Harmonic        float64 `yaml:"harmonic"`
+	TremoloHz       float64 `yaml:"tremolo_hz"`
+	DetuneCents     float64 `yaml:"detune_cents"`
+	Partials        int     `yaml:"partials"`
+	CutoffHz        float64 `yaml:"cutoff_hz"`
+	Brightness      float64 `yaml:"brightness_octaves"`
+	EnsembleVoices  int     `yaml:"ensemble_voices"`
+	EnsembleCents   float64 `yaml:"ensemble_cents"`
+	EnsembleDriftHz float64 `yaml:"ensemble_drift_hz"`
 }
 
 type PhrasesSpec struct {
@@ -48,9 +65,6 @@ func (t Theme) Validate() error {
 	if t.Name == "" {
 		return fmt.Errorf("theme name must not be empty")
 	}
-	if t.Waveform != "sine" {
-		return fmt.Errorf("waveform %q is not supported; only \"sine\" is valid in this release", t.Waveform)
-	}
 	if !(t.Drone.Attack > 0 && t.Drone.Attack <= maxDroneSeconds) {
 		return fmt.Errorf("drone.attack must be in (0, %v] seconds, got %v", maxDroneSeconds, t.Drone.Attack)
 	}
@@ -68,6 +82,9 @@ func (t Theme) Validate() error {
 	}
 	if !(t.Drone.DetuneCents >= 0 && t.Drone.DetuneCents <= maxDetuneCents) {
 		return fmt.Errorf("drone.detune_cents must be in [0, %v], got %v", maxDetuneCents, t.Drone.DetuneCents)
+	}
+	if err := t.validateWaveform(); err != nil {
+		return err
 	}
 	if t.Phrases.CompletionOctaves < 1 || t.Phrases.CompletionOctaves > 8 {
 		return fmt.Errorf("phrases.completion_octaves must be in [1,8], got %d", t.Phrases.CompletionOctaves)
@@ -101,6 +118,49 @@ func (t Theme) Validate() error {
 	}
 	if !(t.Phrases.Decay >= 0 && t.Phrases.Decay <= maxPhraseSeconds) {
 		return fmt.Errorf("phrases.decay must be in [0, %v] seconds, got %v", maxPhraseSeconds, t.Phrases.Decay)
+	}
+	return nil
+}
+
+func (t Theme) validateWaveform() error {
+	switch t.Waveform {
+	case WaveformSine:
+		return t.validateSine()
+	case WaveformStrings:
+		return t.validateStrings()
+	}
+	return fmt.Errorf("waveform %q is not supported; valid waveforms are %q and %q", t.Waveform, WaveformSine, WaveformStrings)
+}
+
+func (t Theme) validateSine() error {
+	if t.Drone.Partials != 0 || t.Drone.CutoffHz != 0 || t.Drone.Brightness != 0 ||
+		t.Drone.EnsembleVoices != 0 || t.Drone.EnsembleCents != 0 || t.Drone.EnsembleDriftHz != 0 {
+		return fmt.Errorf("waveform %q has no partial stack, filter or ensemble; leave drone.partials, drone.cutoff_hz, drone.brightness_octaves, drone.ensemble_voices, drone.ensemble_cents and drone.ensemble_drift_hz unset", WaveformSine)
+	}
+	return nil
+}
+
+func (t Theme) validateStrings() error {
+	if t.Drone.Harmonic != 0 {
+		return fmt.Errorf("waveform %q builds its own partial stack; leave drone.harmonic at 0, got %v", WaveformStrings, t.Drone.Harmonic)
+	}
+	if t.Drone.Partials < minPartials || t.Drone.Partials > maxPartials {
+		return fmt.Errorf("drone.partials must be in [%d, %d] for waveform %q, got %d", minPartials, maxPartials, WaveformStrings, t.Drone.Partials)
+	}
+	if !(t.Drone.CutoffHz > 0 && t.Drone.CutoffHz <= maxCutoffHz) {
+		return fmt.Errorf("drone.cutoff_hz must be in (0, %v] for waveform %q, got %v", maxCutoffHz, WaveformStrings, t.Drone.CutoffHz)
+	}
+	if !(t.Drone.Brightness >= 0 && t.Drone.Brightness <= maxBrightness) {
+		return fmt.Errorf("drone.brightness_octaves must be in [0, %v], got %v", maxBrightness, t.Drone.Brightness)
+	}
+	if t.Drone.EnsembleVoices < 1 || t.Drone.EnsembleVoices > maxEnsembleVoices {
+		return fmt.Errorf("drone.ensemble_voices must be in [1, %d] for waveform %q, got %d", maxEnsembleVoices, WaveformStrings, t.Drone.EnsembleVoices)
+	}
+	if !(t.Drone.EnsembleCents >= 0 && t.Drone.EnsembleCents <= maxDetuneCents) {
+		return fmt.Errorf("drone.ensemble_cents must be in [0, %v], got %v", maxDetuneCents, t.Drone.EnsembleCents)
+	}
+	if !(t.Drone.EnsembleDriftHz >= 0 && t.Drone.EnsembleDriftHz <= maxEnsembleDriftHz) {
+		return fmt.Errorf("drone.ensemble_drift_hz must be in [0, %v], got %v", maxEnsembleDriftHz, t.Drone.EnsembleDriftHz)
 	}
 	return nil
 }
