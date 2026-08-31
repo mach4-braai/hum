@@ -87,9 +87,9 @@ The last column is still voice-count dependent, because the drone bus keeps `1/N
 
 The failure cadence is exactly that shape: `internal/harmony` emits two notes, the second at `Offset: FailureDuration`. Both enter the mixer at trigger time, so a naive count made the divisor 2 while only the first note sounded, and the cadence came out **2.45 dB lopsided** — first note quiet, second note full. A test built from hand-written notes at offset 0 cannot see this, because then the count of 2 is correct.
 
-`Read` therefore counts a source toward its bus's divisor only when it is not `Waiting`. `phraseSource` reports `Waiting()` while its offset remains; anything not implementing the interface always counts. A separate tally of sources *present* on the phrase bus still decides whether the bus is cleared and summed, because a waiting source must keep receiving `Mix` calls — that is what advances its countdown.
+`Read` therefore counts a source toward its bus's divisor only from the frame it sounds. `Delayed.FramesUntilOnset` reports how many frames a source is still waiting; `phraseSource` returns its remaining offset. Sources already sounding are counted before the batch, and an onset landing inside the batch is collected, sorted, and applied in the sample loop at that exact frame, so the divisor never depends on where a buffer boundary happens to fall. A separate tally of sources *present* on the bus decides whether the bus is cleared and summed, because a waiting source must keep receiving `Mix` calls — that is what advances its countdown.
 
-`TestTheTwoFailureNotesSoundAtTheSameLevel` renders the real cadence and holds the two notes within 0.5 dB.
+`TestADelayedNoteSoundsTheSameAtAnyBlockSize` holds one offset note identical to 1e-9 across nine block sizes from 1 to 8 192 frames. `TestTheTwoFailureNotesSoundAtTheSameLevel` renders the real cadence at the same sizes and holds the two notes within 0.5 dB.
 
 An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal. Measured against a single-bus `Read`, `BenchmarkMixerRead/minimal` at twelve voices is unchanged inside the run-to-run spread.
 
