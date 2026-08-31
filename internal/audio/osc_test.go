@@ -106,14 +106,19 @@ func TestOscReleaseYieldsDone(t *testing.T) {
 
 	releaseSamples := int(releaseTime.Seconds() * float64(f.SampleRate))
 	buf := make([][2]float32, releaseSamples+512)
+	const peer = 0.25
+	for i := range buf {
+		buf[i] = [2]float32{peer, peer}
+	}
 
 	done := osc.Mix(buf)
 	if !done {
 		t.Error("Mix did not return done after reading past release duration")
 	}
 	for i := releaseSamples; i < len(buf); i++ {
-		if buf[i][0] != 0 || buf[i][1] != 0 {
-			t.Errorf("non-zero sample at %d after release complete: L=%v R=%v", i, buf[i][0], buf[i][1])
+		if buf[i][0] != peer || buf[i][1] != peer {
+			t.Errorf("frame %d reads L=%v R=%v, want the peer's %v untouched: Mix adds into shared scratch, so a finished source must stop adding rather than zero what others already mixed",
+				i, buf[i][0], buf[i][1], peer)
 			break
 		}
 	}
@@ -273,14 +278,18 @@ func TestOscMixAlreadyDone(t *testing.T) {
 	}
 
 	second := make([][2]float32, 64)
-	second[0][0] = 99
+	const peer = 99
+	second[0][0] = peer
 	done := osc.Mix(second)
 	if !done {
 		t.Error("Mix on already-done osc must return done=true")
 	}
-	for i, fr := range second {
+	if second[0][0] != peer {
+		t.Errorf("already-done osc overwrote a peer's sample: got %v, want %v", second[0][0], float32(peer))
+	}
+	for i, fr := range second[1:] {
 		if fr[0] != 0 || fr[1] != 0 {
-			t.Errorf("already-done osc wrote non-zero at frame %d: L=%v R=%v", i, fr[0], fr[1])
+			t.Errorf("already-done osc added at frame %d: L=%v R=%v", i+1, fr[0], fr[1])
 			break
 		}
 	}
