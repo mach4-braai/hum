@@ -135,7 +135,7 @@ release:
     macOS and Linux are the supported platforms. Windows is best-effort: the test
     suite runs on `windows-latest` and a real daemon is started and stopped on both
     `windows-latest` and `windows-11-arm` on every pull request and release tag.
-    Signals do not stop a Windows daemon (use `hum stop`), terminal width is not
+    Signals do not stop a Windows daemon (use `hum daemon stop`), terminal width is not
     detected, and the socket's parent directory is not access-restricted.
     `darwin/amd64` and `linux/arm64` are built but not executed by CI. See the
     Platforms section of README.md.

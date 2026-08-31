@@ -32,6 +32,7 @@ func TestDialErrMissingSocket(t *testing.T) {
 	socket := dir + "/hum.sock"
 	t.Setenv("HUM_SOCKET", socket)
 	t.Setenv("HUM_HOME", dir)
+	stubUnsupervised(t)
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"ping"}, &stdout, &stderr)
@@ -50,12 +51,12 @@ func TestDialErrMissingSocket(t *testing.T) {
 	}
 
 	var stdout2, stderr2 bytes.Buffer
-	code2 := run([]string{"stop"}, &stdout2, &stderr2)
+	code2 := run([]string{"daemon", "stop"}, &stdout2, &stderr2)
 	if code2 != exitOK {
-		t.Errorf("stop exit = %d, want %d; stderr=%q", code2, exitOK, stderr2.String())
+		t.Errorf("daemon stop exit = %d, want %d; stderr=%q", code2, exitOK, stderr2.String())
 	}
 	if !strings.Contains(stdout2.String(), "not running") {
-		t.Errorf("stop stdout = %q, want 'not running'", stdout2.String())
+		t.Errorf("daemon stop stdout = %q, want 'not running'", stdout2.String())
 	}
 
 	var stdout3, stderr3 bytes.Buffer
@@ -78,6 +79,7 @@ func TestDialErrStaleSocket(t *testing.T) {
 	socket := staleSocket(t, dir)
 	t.Setenv("HUM_SOCKET", socket)
 	t.Setenv("HUM_HOME", dir)
+	stubUnsupervised(t)
 
 	var stdout, stderr bytes.Buffer
 	code := run([]string{"ping"}, &stdout, &stderr)
@@ -99,13 +101,13 @@ func TestDialErrStaleSocket(t *testing.T) {
 	}
 
 	var stdout2, stderr2 bytes.Buffer
-	code2 := run([]string{"stop"}, &stdout2, &stderr2)
+	code2 := run([]string{"daemon", "stop"}, &stdout2, &stderr2)
 	os.Remove(socket)
 	if code2 != exitOK {
-		t.Errorf("stop exit = %d, want %d; stderr=%q", code2, exitOK, stderr2.String())
+		t.Errorf("daemon stop exit = %d, want %d; stderr=%q", code2, exitOK, stderr2.String())
 	}
 	if !strings.Contains(stdout2.String(), "not running") {
-		t.Errorf("stop stdout = %q, want 'not running'", stdout2.String())
+		t.Errorf("daemon stop stdout = %q, want 'not running'", stdout2.String())
 	}
 
 	socket3 := staleSocket(t, dir)
@@ -141,6 +143,7 @@ func TestDialErrDeniedSocket(t *testing.T) {
 	})
 	t.Setenv("HUM_SOCKET", socket)
 	t.Setenv("HUM_HOME", dir)
+	stubUnsupervised(t)
 
 	l, err := net.Listen("unix", socket)
 	if err != nil {
@@ -172,9 +175,9 @@ func TestDialErrDeniedSocket(t *testing.T) {
 	}
 
 	var stdout2, stderr2 bytes.Buffer
-	code2 := run([]string{"stop"}, &stdout2, &stderr2)
+	code2 := run([]string{"daemon", "stop"}, &stdout2, &stderr2)
 	if code2 != exitUnreachable {
-		t.Errorf("stop exit = %d, want %d; stderr=%q", code2, exitUnreachable, stderr2.String())
+		t.Errorf("daemon stop exit = %d, want %d; stderr=%q", code2, exitUnreachable, stderr2.String())
 	}
 
 	var stdout3, stderr3 bytes.Buffer

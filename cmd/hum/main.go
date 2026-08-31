@@ -30,7 +30,7 @@ const usage = `usage: hum [--json] [--timeout <duration>] <command> [flags]
 Commands:
   init          write a project configuration
   start         announce a new work session
-  stop          stop the daemon
+  daemon stop   stop the daemon
   complete      mark a session completed
   fail          mark a session failed — the work failed, not hum
   cancel        mark a session abandoned without running to an end

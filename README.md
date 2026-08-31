@@ -36,7 +36,7 @@ brew services stop hum
 
 Logs go to `$(brew --prefix)/var/log/hum/humd.log` and `humd.error.log`. The
 supervisor restarts `humd` when it exits abnormally, so a crash is recovered
-while a deliberate `hum stop` stays stopped.
+while a deliberate `hum daemon stop` stays stopped.
 
 ### From source
 
@@ -71,7 +71,7 @@ humd &                                      # start the daemon
 hum start --id build --title "Build"        # a drone fades in
 hum start --id tests --title "Test suite"   # a second voice joins it
 hum status                                  # see what is sounding
-hum stop                                    # fade out and exit
+hum daemon stop                             # fade out and exit
 ```
 
 `hum status` reports the pitch each session was allocated, so you can correlate
@@ -91,7 +91,7 @@ Pass `--workspace <name>` to `hum start` to group sessions under a label.
 |---|---|
 | `hum init` | write a project configuration file |
 | `hum start` | announce a new work session |
-| `hum stop` | fade out every voice and stop the daemon |
+| `hum daemon stop` | fade out every voice and stop the daemon |
 | `hum complete` | mark a session completed — its drone resolves and stops |
 | `hum fail` | mark a session failed — a descending cadence, then the drone stops |
 | `hum cancel` | mark a session abandoned — the drone stops without a cadence |
@@ -171,7 +171,7 @@ these differences remain:
   it. On macOS and Linux the directory is `0700` and the socket `0600`.
 - The acceptance suite (`mise run e2e`) runs on macOS and Linux only. It drives
   `SIGTERM`, which Windows does not deliver.
-- `SIGINT` and `SIGTERM` do not stop a Windows daemon. `hum stop` over the socket
+- `SIGINT` and `SIGTERM` do not stop a Windows daemon. `hum daemon stop` over the socket
   is the supported way, and it is the path the `windows` job exercises.
 - Terminal width is not detected, so `hum status` never truncates long titles —
   the same behaviour as a piped stdout.

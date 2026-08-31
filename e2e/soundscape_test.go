@@ -128,7 +128,7 @@ func TestShutdownFadesEveryVoiceBeforeClosingTheDevice(t *testing.T) {
 		t.Fatal("four voices must be sounding for the shutdown to mean anything")
 	}
 
-	out, code := d.hum(t, "stop")
+	out, code := d.hum(t, "daemon", "stop")
 	if code != 0 {
 		t.Fatalf("hum stop exited %d: %s", code, out)
 	}

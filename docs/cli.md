@@ -10,7 +10,7 @@ decision about sound belongs to `humd`.
 |---|---|
 | `hum init` | write a project configuration |
 | `hum start` | announce a new work session |
-| `hum stop` | stop the daemon |
+| `hum daemon stop` | stop the daemon |
 | `hum complete` / `hum fail` / `hum cancel` | end a session |
 | `hum update` | report progress without ending a session |
 | `hum status` | report daemon and session state |
@@ -52,10 +52,19 @@ nothing happened, while 1 means the daemon was asked and refused. Usage errors
 are detected before dialling for exactly that reason — `hum volume 1.5` must not
 leave a daemon half-configured.
 
-`hum stop` deliberately exits **0** when no daemon is running, matching
-`systemctl` and `brew services`, so it is safe in unconditional teardown.
-The one exception is `EACCES`: when the socket exists but the current user cannot
-access it, `hum stop` exits 3 rather than silently reporting "not running".
+`hum daemon stop` deliberately exits **0** when no daemon is running, matching
+`systemctl` and `brew services`, so it is safe in unconditional teardown. That
+holds on a supervised machine too: the supervisor guard probes liveness before
+it refuses, because a service that is not running cannot be stranded. It is a
+bare dial that is closed without sending anything, so the guard still never
+sends a `shutdown`.
+
+With a daemon actually running under launchd or systemd, `hum daemon stop`
+exits 2 and names the supervisor's restart command; `--force` shuts it down
+anyway. The one exception is `EACCES`: when the socket exists but the current
+user cannot access it, `hum daemon stop` exits 3 rather than reporting
+"not running", because a permission fault is not evidence that nothing is
+running.
 
 ## Dispatch
 
@@ -87,7 +96,7 @@ repeatable flag such as `--meta` accumulates into one map.
 
 `--json` prints the command's payload verbatim when the command has one
 (`status`, `theme list`, `volume` with no operand, `doctor`), and the raw
-response envelope when it does not (`ping`, `mute`, `volume N`, `stop`,
+response envelope when it does not (`ping`, `mute`, `volume N`, `daemon stop`,
 `theme use`). Payload-first output is what a script wants: `hum status --json |
 jq '.sessions[].pitch'` rather than reaching through `.data` every time. The
 schemas are in `docs/protocol.md`; `doctor` is the exception, being a client-side
@@ -140,12 +149,27 @@ log or a `jq` pipeline must not silently lose characters.
 An empty registry prints `no active sessions` and exits 0. Absence of work is not
 an error.
 
-## `hum stop`
+## `hum daemon stop`
 
-`stop` sends `shutdown` and then polls until the socket file disappears, within
-`--timeout` (10s by default, rather than the 2s used for a request). Returning
-before the daemon has gone would make `hum stop && humd` race a still-bound
-socket. Timeout expiry is exit 1 with the socket path in the message.
+`daemon stop` sends `shutdown` and then polls until the socket file disappears,
+within `--timeout` (10s by default, rather than the 2s used for a request).
+Returning before the daemon has gone would make `hum daemon stop && humd` race
+a still-bound socket. Timeout expiry is exit 1 with the socket path in the
+message.
+
+When a process supervisor (launchd or systemd) manages the daemon, `daemon stop`
+exits 2 and prints the supervisor's restart command rather than sending the
+shutdown, because the supervisor would not restart the daemon after a clean exit.
+Pass `--force` to shut the daemon down anyway; the restart command is then
+printed on success so the user knows the service will not return on its own.
+
+That refusal is conditional on a daemon actually answering. A launchd or systemd
+**job** stays loaded after its process exits, which is what made #100 confusing
+in the first place, so the guard first dials the socket and closes it without
+writing. Nothing listening means nothing to strand: the command prints
+`not running` and exits 0, keeping the teardown contract above true everywhere.
+A permission fault on that dial is exit 3, since it says nothing about whether
+a daemon is running.
 
 ## `hum doctor`
 
