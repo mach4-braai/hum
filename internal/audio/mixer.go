@@ -12,6 +12,9 @@ const (
 
 	rampTimeConstant = 0.040
 	rampSettle       = 1e-9
+
+	limiterCeiling = 0.99
+	limiterRelease = 0.100
 )
 
 type Bus int
@@ -70,12 +73,40 @@ func (r *normRamp) step() float64 {
 	return r.current
 }
 
+type limiter struct {
+	gain    float64
+	release float64
+}
+
+func newLimiter(sampleRate int) limiter {
+	return limiter{gain: 1, release: math.Exp(-1.0 / (float64(sampleRate) * limiterRelease))}
+}
+
+func (lm *limiter) apply(l, r float64) (float64, float64) {
+	peak := math.Abs(l)
+	if a := math.Abs(r); a > peak {
+		peak = a
+	}
+
+	permitted := 1.0
+	if peak > limiterCeiling {
+		permitted = limiterCeiling / peak
+	}
+	if permitted < lm.gain {
+		lm.gain = permitted
+	} else {
+		lm.gain = lm.release*lm.gain + (1-lm.release)*permitted
+	}
+	return l * lm.gain, r * lm.gain
+}
+
 type Mixer struct {
 	mu      sync.Mutex
 	sources map[string]sourceEntry
 	gen     uint64
 	gain    float64
 	ramps   [busCount]normRamp
+	lm      limiter
 
 	scratch [busCount][][2]float32
 	active  []sourceEntry
@@ -89,6 +120,7 @@ func NewMixer(f Format) *Mixer {
 		gain:    1.0,
 		active:  make([]sourceEntry, 0, maxSources),
 		done:    make([]doneSource, 0, maxSources),
+		lm:      newLimiter(f.SampleRate),
 	}
 	for bus := range m.scratch {
 		m.ramps[bus] = newNormRamp(f.SampleRate)
@@ -140,13 +172,6 @@ func (m *Mixer) Gain() float64 {
 	return g
 }
 
-func normTarget(voices int, gain float64) float64 {
-	if voices <= 1 {
-		return gain
-	}
-	return gain / float64(voices)
-}
-
 func incoherentNorm(voices int, gain float64) float64 {
 	if voices <= 1 {
 		return gain
@@ -155,8 +180,9 @@ func incoherentNorm(voices int, gain float64) float64 {
 }
 
 func (m *Mixer) retarget(gain float64) {
-	m.ramps[DroneBus].set(normTarget(m.alive[DroneBus], gain))
-	m.ramps[PhraseBus].set(incoherentNorm(m.alive[PhraseBus], gain))
+	for bus := range m.ramps {
+		m.ramps[bus].set(incoherentNorm(m.alive[bus], gain))
+	}
 }
 
 func putFrame(p []byte, base int, l, r float64) {
@@ -235,7 +261,8 @@ func (m *Mixer) Read(p []byte) (int, error) {
 				l += float64(phrase[i][0]) * pn
 				r += float64(phrase[i][1]) * pn
 			}
-			putFrame(p, written+i*frameSize, math.Tanh(l), math.Tanh(r))
+			ol, or := m.lm.apply(l, r)
+			putFrame(p, written+i*frameSize, ol, or)
 		}
 		written += batch * frameSize
 		remaining -= batch

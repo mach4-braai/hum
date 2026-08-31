@@ -2,6 +2,7 @@ package audio
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -651,7 +652,7 @@ func renderSummed(t *testing.T, voices []harmony.VoiceState, notes []harmony.Not
 	m.Read(buf)
 	summed := make([]float64, frames)
 	for i, fr := range decodeFrames(buf) {
-		summed[i] = math.Atanh(fr[0])
+		summed[i] = fr[0]
 	}
 	return summed
 }
@@ -719,6 +720,122 @@ func TestChimeLevelIsIndependentOfHowManyDronesSound(t *testing.T) {
 			t.Fatalf("frame %d: the chime contributes %.6f against twelve drones, but %.6f on its own: the theme's phrase gain does not mean one level",
 				i, got, alone[i])
 		}
+	}
+}
+
+func droneCrowd(n int) []harmony.VoiceState {
+	var voices []harmony.VoiceState
+	for i := range n {
+		vs := voiceState(string(rune('a'+i)), (i*7)%12, 3+i/6)
+		vs.Expression = harmony.Expression{Intensity: 1, Tremolo: 1, Width: 1}
+		voices = append(voices, vs)
+	}
+	return voices
+}
+
+func sustainedRMS(t *testing.T, voices []harmony.VoiceState) float64 {
+	t.Helper()
+	f := DefaultFormat()
+	r, m := NewCaptureRenderer(f, testOpts())
+	if err := r.Update(harmony.State{Voices: voices}); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 4096*frameSize)
+	for range 24 {
+		m.Read(buf)
+	}
+
+	const windows = 48
+	var sq float64
+	for range windows {
+		m.Read(buf)
+		for _, fr := range decodeFrames(buf) {
+			sq += fr[0] * fr[0]
+		}
+	}
+	return math.Sqrt(sq / float64(windows*4096))
+}
+
+func TestTheMixHoldsItsLevelAcrossVoiceCounts(t *testing.T) {
+	solo := sustainedRMS(t, droneCrowd(1))
+
+	for _, n := range []int{2, 4, harmony.MaxVoices} {
+		spread := 20 * math.Log10(sustainedRMS(t, droneCrowd(n))/solo)
+		if math.Abs(spread) > 3 {
+			t.Errorf("%d voices sit %.2f dB from one voice, outside 3 dB: the soundscape changes level as sessions come and go", n, spread)
+		}
+	}
+}
+
+func soloDroneRMS(t *testing.T, silentPeers int) float64 {
+	t.Helper()
+	f := DefaultFormat()
+	r, m := NewCaptureRenderer(f, testOpts())
+	if err := r.Update(harmony.State{Voices: droneCrowd(1)}); err != nil {
+		t.Fatal(err)
+	}
+	for i := range silentPeers {
+		m.Add(fmt.Sprintf("silent/%d", i), DroneBus, &constSource{})
+	}
+
+	buf := make([]byte, 4096*frameSize)
+	for range 24 {
+		m.Read(buf)
+	}
+
+	const windows = 48
+	var sq float64
+	for range windows {
+		m.Read(buf)
+		for _, fr := range decodeFrames(buf) {
+			sq += fr[0] * fr[0]
+		}
+	}
+	return math.Sqrt(sq / float64(windows*4096))
+}
+
+func TestEachDroneStaysAudibleInACrowd(t *testing.T) {
+	alone := soloDroneRMS(t, 0)
+	inCrowd := soloDroneRMS(t, harmony.MaxVoices-1)
+
+	perVoice := 20 * math.Log10(inCrowd/alone)
+	if perVoice < -12 {
+		t.Errorf("one drone measures %.2f dB against the same drone sounding alone once %d peers share its bus: below about -12 dB a session stops being identifiable, which is the point of the tool",
+			perVoice, harmony.MaxVoices-1)
+	}
+}
+
+func TestTheCoherentWorstCaseStaysInsideFullScale(t *testing.T) {
+	f := DefaultFormat()
+	opts := testOpts()
+	opts.Volume = 1.0
+
+	var unison []harmony.VoiceState
+	for i := range harmony.MaxVoices {
+		vs := voiceState(string(rune('a'+i)), 0, 4)
+		vs.Expression = harmony.Expression{Intensity: 1, Tremolo: 1, Width: 1}
+		unison = append(unison, vs)
+	}
+
+	r, m := NewCaptureRenderer(f, opts)
+	if err := r.Update(harmony.State{Voices: unison}); err != nil {
+		t.Fatal(err)
+	}
+
+	buf := make([]byte, 4096*frameSize)
+	var peak float64
+	for range 72 {
+		m.Read(buf)
+		for _, fr := range decodeFrames(buf) {
+			if a := math.Abs(fr[0]); a > peak {
+				peak = a
+			}
+		}
+	}
+
+	if peak > 1.0 {
+		t.Errorf("twelve drones in unison peak at %.4f: the coherent worst case must not leave full scale", peak)
 	}
 }
 
