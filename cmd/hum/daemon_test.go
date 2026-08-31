@@ -47,14 +47,14 @@ func stubUnsupervised(t *testing.T) {
 	stubProbe(t, func(_ string) error { return errors.New("not active") })
 }
 
-func countShutdowns(reqs []protocol.Request) int {
-	var n int
+func countPayloadRequests(reqs []protocol.Request) []protocol.Request {
+	var out []protocol.Request
 	for _, r := range reqs {
-		if r.Command == protocol.CmdShutdown {
-			n++
+		if r.Command != "" || r.Event != nil {
+			out = append(out, r)
 		}
 	}
-	return n
+	return out
 }
 
 func TestDaemonSubcommandRequired(t *testing.T) {
@@ -249,8 +249,8 @@ func TestDaemonStopLaunchdWithoutForceExitsTwoSendsNothing(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit %d, want %d; stderr=%q", code, exitUsage, stderr.String())
 	}
-	if n := countShutdowns(reqs); n != 0 {
-		t.Errorf("got %d shutdown commands, want 0 — the supervised guard probes liveness but must never send a shutdown", n)
+	if sent := countPayloadRequests(reqs); len(sent) != 0 {
+		t.Errorf("guard sent %v, want no requests", sent)
 	}
 	if !strings.Contains(stderr.String(), "brew services restart hum") {
 		t.Errorf("stderr=%q, want launchd restart command", stderr.String())
@@ -274,8 +274,8 @@ func TestDaemonStopSystemdWithoutForceExitsTwoSendsNothing(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit %d, want %d; stderr=%q", code, exitUsage, stderr.String())
 	}
-	if n := countShutdowns(reqs); n != 0 {
-		t.Errorf("got %d shutdown commands, want 0 — the supervised guard probes liveness but must never send a shutdown", n)
+	if sent := countPayloadRequests(reqs); len(sent) != 0 {
+		t.Errorf("guard sent %v, want no requests", sent)
 	}
 	if !strings.Contains(stderr.String(), "systemctl --user restart humd") {
 		t.Errorf("stderr=%q, want systemd restart command", stderr.String())
