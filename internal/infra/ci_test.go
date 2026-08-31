@@ -308,13 +308,13 @@ var pinnedActions = map[string]struct {
 	minMajor int
 	commit   string
 }{
-	"actions/attest-build-provenance":   {"v4.1.1", 3, "0f67c3f4856b2e3261c31976d6725780e5e4c373"},
+	"actions/attest-build-provenance":   {"v4.2.2", 3, "4d101475d8b20a2381f78447822ac1eab6504dd8"},
 	"actions/cache":                     {"v6.1.0", 5, "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"},
 	"actions/checkout":                  {"v7.0.1", 5, "3d3c42e5aac5ba805825da76410c181273ba90b1"},
 	"actions/create-github-app-token":   {"v3.2.0", 3, "bcd2ba49218906704ab6c1aa796996da409d3eb1"},
 	"codecov/codecov-action":            {"v7.0.0", 5, "fb8b3582c8e4def4969c97caa2f19720cb33a72f"},
 	"codecov/test-results-action":       {"v1.2.1", 1, "0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3"},
-	"github/codeql-action/upload-sarif": {"v4.37.4", 4, "f205ea1c3313d32999d8d6a48b4f6530d4437b38"},
+	"github/codeql-action/upload-sarif": {"v4.37.6", 4, "5595ccaf912efad79be6eef63a5619ff05969be3"},
 	"jdx/mise-action":                   {"v4.2.4", 4, "7e36c90d9ab29c415a2384db3006f3ec8a8cc654"},
 	"ossf/scorecard-action":             {"v2.4.4", 2, "2d1146689b8cda280b9bc96326124645441f03bc"},
 }
