@@ -37,6 +37,9 @@ type Session struct {
 	StartedAt time.Time
 	EndedAt   time.Time
 	Updates   int
+	UpdatedAt time.Time
+	OwnerPID  int
+	OwnerHost string
 }
 
 func (s State) Terminal() bool {

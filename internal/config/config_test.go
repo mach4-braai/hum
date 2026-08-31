@@ -132,3 +132,44 @@ func TestValidateVolumeEdges(t *testing.T) {
 		t.Errorf("volume 1.0 should pass: %v", err)
 	}
 }
+
+func TestValidateSessionMaxLease(t *testing.T) {
+	t.Run("empty is off and valid", func(t *testing.T) {
+		c := Default()
+		if err := c.Validate(); err != nil {
+			t.Errorf("default config with empty max_lease should pass: %v", err)
+		}
+	})
+
+	t.Run("valid duration", func(t *testing.T) {
+		c := Default()
+		c.Session.MaxLease = "24h"
+		if err := c.Validate(); err != nil {
+			t.Errorf("valid duration should pass: %v", err)
+		}
+	})
+
+	t.Run("invalid string is rejected", func(t *testing.T) {
+		c := Default()
+		c.Session.MaxLease = "forever"
+		err := c.Validate()
+		if err == nil {
+			t.Fatal("expected error for invalid duration")
+		}
+		if !strings.Contains(err.Error(), "session.max_lease") {
+			t.Errorf("error %q does not mention session.max_lease", err.Error())
+		}
+	})
+
+	t.Run("negative duration is rejected", func(t *testing.T) {
+		c := Default()
+		c.Session.MaxLease = "-1h"
+		err := c.Validate()
+		if err == nil {
+			t.Fatal("expected error for negative duration")
+		}
+		if !strings.Contains(err.Error(), "session.max_lease") {
+			t.Errorf("error %q does not mention session.max_lease", err.Error())
+		}
+	})
+}

@@ -24,6 +24,8 @@ type Event struct {
 	Root      string            `json:"root,omitempty"`
 	Priority  int               `json:"priority,omitempty"`
 	Metadata  map[string]string `json:"metadata,omitempty"`
+	OwnerPID  int               `json:"owner_pid,omitempty"`
+	OwnerHost string            `json:"owner_host,omitempty"`
 }
 
 const MaxIDLen = 128
@@ -50,6 +52,9 @@ func (e Event) Validate() error {
 	}
 	if len(e.ID) > MaxIDLen {
 		return fmt.Errorf("event id is %d bytes, limit is %d", len(e.ID), MaxIDLen)
+	}
+	if e.OwnerPID < 0 {
+		return fmt.Errorf("owner_pid %d is not a valid pid", e.OwnerPID)
 	}
 	if e.Root != "" && !filepath.IsAbs(e.Root) {
 		return fmt.Errorf("%w: %q", ErrRelativeRoot, e.Root)

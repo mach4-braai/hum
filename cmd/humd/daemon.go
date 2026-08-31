@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"strconv"
 	"time"
 
@@ -42,12 +43,14 @@ type daemon struct {
 	releaseWait  time.Duration
 	reapEvery    time.Duration
 	reapAfter    time.Duration
+	maxLease     time.Duration
 	summaryEvery time.Duration
 	throttle     *throttle
 	events       int
 	reaped       int
 
 	contextOwner string
+	daemonHost   string
 	volume       float64
 	muted        bool
 
@@ -78,6 +81,11 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		return nil, err
 	}
 
+	host, _ := os.Hostname()
+	var maxLease time.Duration
+	if cfg.Session.MaxLease != "" {
+		maxLease, _ = time.ParseDuration(cfg.Session.MaxLease)
+	}
 	return &daemon{
 		log:          log,
 		registry:     session.New(),
@@ -89,8 +97,10 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		releaseWait:  releaseWaitFor(th),
 		reapEvery:    defaultReapEvery,
 		reapAfter:    defaultReapAfter,
+		maxLease:     maxLease,
 		summaryEvery: defaultSummaryEvery,
 		throttle:     newThrottle(defaultLogWindow),
+		daemonHost:   host,
 		volume:       cfg.Audio.Volume,
 		muted:        cfg.Audio.Muted,
 		calls:        make(chan call),
@@ -98,7 +108,6 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		shutdown:     make(chan struct{}),
 	}, nil
 }
-
 func (d *daemon) serveEvents(ctx context.Context) {
 	defer close(d.stopped)
 
@@ -116,11 +125,20 @@ func (d *daemon) serveEvents(ctx context.Context) {
 				d.reaped += dropped
 				d.log.Debug("reaped terminal sessions", "count", dropped)
 			}
+			d.reapActive()
 		case <-summary.C:
 			d.logSummary()
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+func (d *daemon) reapActive() {
+	for _, c := range d.registry.ActiveToCancel(d.maxLease, d.daemonHost) {
+		d.log.Warn("reaping active session", "id", c.ID, "reason", c.Reason)
+		d.applyEvent(protocol.Event{Event: protocol.SessionCancelled, ID: c.ID})
+		d.reaped++
 	}
 }
 

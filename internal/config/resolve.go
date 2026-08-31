@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -42,10 +43,15 @@ type layerAudio struct {
 	Muted  *bool    `yaml:"muted"`
 }
 
+type layerSession struct {
+	MaxLease *string `yaml:"max_lease"`
+}
+
 type layerData struct {
 	Project layerProject `yaml:"project"`
 	Music   layerMusic   `yaml:"music"`
 	Audio   layerAudio   `yaml:"audio"`
+	Session layerSession `yaml:"session"`
 }
 
 func loadLayer(path string) (*layerData, error) {
@@ -100,6 +106,10 @@ func applyLayer(out *Config, prov Provenance, d *layerData, layer Layer) {
 		out.Audio.Muted = *d.Audio.Muted
 		prov["audio.muted"] = layer
 	}
+	if d.Session.MaxLease != nil {
+		out.Session.MaxLease = *d.Session.MaxLease
+		prov["session.max_lease"] = layer
+	}
 }
 
 var ErrProjectRoot = errors.New("invalid project root")
@@ -146,13 +156,14 @@ func Resolve(cliOverrides map[string]string, startDir string) (*Config, Provenan
 
 func ResolveSources(s Sources) (*Config, Provenance, error) {
 	prov := Provenance{
-		"project.name": LayerDefault,
-		"music.root":   LayerDefault,
-		"music.octave": LayerDefault,
-		"music.scale":  LayerDefault,
-		"music.theme":  LayerDefault,
-		"audio.volume": LayerDefault,
-		"audio.muted":  LayerDefault,
+		"project.name":      LayerDefault,
+		"music.root":        LayerDefault,
+		"music.octave":      LayerDefault,
+		"music.scale":       LayerDefault,
+		"music.theme":       LayerDefault,
+		"audio.volume":      LayerDefault,
+		"audio.muted":       LayerDefault,
+		"session.max_lease": LayerDefault,
 	}
 
 	out := Default()
@@ -222,6 +233,18 @@ func ResolveSources(s Sources) (*Config, Provenance, error) {
 			}
 			out.Audio.Muted = b
 			prov["audio.muted"] = LayerCLI
+		case "session.max_lease":
+			if v != "" {
+				d, parseErr := time.ParseDuration(v)
+				if parseErr != nil {
+					return nil, nil, fmt.Errorf("session.max_lease: %q is not a valid duration", v)
+				}
+				if d < 0 {
+					return nil, nil, fmt.Errorf("session.max_lease: %v must not be negative", d)
+				}
+			}
+			out.Session.MaxLease = v
+			prov["session.max_lease"] = LayerCLI
 		default:
 			return nil, nil, fmt.Errorf("unknown config key: %q", k)
 		}

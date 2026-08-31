@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -539,3 +540,182 @@ func (f *failingRenderer) Update(harmony.State) error { return errRendererBroken
 func (f *failingRenderer) Trigger(harmony.Phrase) error { return errRendererBroken }
 
 var errRendererBroken = errors.New("renderer is broken")
+
+type logCapture struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (l *logCapture) Enabled(_ context.Context, _ slog.Level) bool { return true }
+
+func (l *logCapture) Handle(_ context.Context, r slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.records = append(l.records, r)
+	return nil
+}
+
+func (l *logCapture) WithAttrs(_ []slog.Attr) slog.Handler { return l }
+
+func (l *logCapture) WithGroup(_ string) slog.Handler { return l }
+
+func (l *logCapture) warnMessages() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []string
+	for _, r := range l.records {
+		if r.Level == slog.LevelWarn {
+			out = append(out, r.Message)
+		}
+	}
+	return out
+}
+
+func TestActiveReapWithDeadOwnerReachesRenderer(t *testing.T) {
+	d, rec := testDaemon(t)
+
+	const impossiblePID = 1<<31 - 1
+
+	resp := d.applyEvent(protocol.Event{
+		Event:     protocol.SessionStarted,
+		ID:        "reap-test",
+		OwnerPID:  impossiblePID,
+		OwnerHost: d.daemonHost,
+	})
+	if !resp.OK {
+		t.Fatalf("start session: %v", resp.Error)
+	}
+
+	updates := rec.recordedUpdates()
+	if len(updates) < 1 || len(updates[len(updates)-1].Voices) != 1 {
+		t.Fatal("expected one voice after session started")
+	}
+
+	d.reapActive()
+
+	updates = rec.recordedUpdates()
+	last := updates[len(updates)-1]
+	if len(last.Voices) != 0 {
+		t.Errorf("after reapActive, renderer has %d voices, want 0", len(last.Voices))
+	}
+}
+
+func TestActiveReapWithAliveOwnerLeavesRenderer(t *testing.T) {
+	d, rec := testDaemon(t)
+
+	resp := d.applyEvent(protocol.Event{
+		Event:     protocol.SessionStarted,
+		ID:        "alive-test",
+		OwnerPID:  os.Getpid(),
+		OwnerHost: d.daemonHost,
+	})
+	if !resp.OK {
+		t.Fatalf("start session: %v", resp.Error)
+	}
+
+	before := len(rec.recordedUpdates())
+	d.reapActive()
+
+	if after := len(rec.recordedUpdates()); after != before {
+		t.Errorf("reapActive with alive owner triggered %d extra renderer calls, want 0", after-before)
+	}
+}
+
+func TestActiveReapIsLoggedAtWarn(t *testing.T) {
+	d, _ := testDaemon(t)
+	cap := &logCapture{}
+	d.log = slog.New(cap)
+
+	const impossiblePID = 1<<31 - 1
+
+	resp := d.applyEvent(protocol.Event{
+		Event:     protocol.SessionStarted,
+		ID:        "log-test",
+		OwnerPID:  impossiblePID,
+		OwnerHost: d.daemonHost,
+	})
+	if !resp.OK {
+		t.Fatalf("start session: %v", resp.Error)
+	}
+
+	d.reapActive()
+
+	warns := cap.warnMessages()
+	if len(warns) != 1 {
+		t.Fatalf("reapActive logged %d warn messages, want 1", len(warns))
+	}
+	if !strings.Contains(warns[0], "reaping active session") {
+		t.Errorf("warn message %q does not mention reaping", warns[0])
+	}
+}
+
+func TestActiveReapWithNoOwnerNotReaped(t *testing.T) {
+	d, rec := testDaemon(t)
+
+	resp := d.applyEvent(protocol.Event{
+		Event: protocol.SessionStarted,
+		ID:    "no-owner-test",
+	})
+	if !resp.OK {
+		t.Fatalf("start session: %v", resp.Error)
+	}
+
+	before := len(rec.recordedUpdates())
+	d.reapActive()
+
+	if after := len(rec.recordedUpdates()); after != before {
+		t.Errorf("reapActive without lease triggered %d extra renderer calls for ownerless session, want 0", after-before)
+	}
+}
+
+func TestActiveReapWithExpiredLeaseReachesRenderer(t *testing.T) {
+	d, rec := testDaemon(t)
+	d.maxLease = time.Nanosecond
+
+	resp := d.applyEvent(protocol.Event{
+		Event: protocol.SessionStarted,
+		ID:    "lease-test",
+	})
+	if !resp.OK {
+		t.Fatalf("start session: %v", resp.Error)
+	}
+
+	before := len(rec.recordedUpdates())
+	time.Sleep(time.Microsecond)
+
+	cap := &logCapture{}
+	d.log = slog.New(cap)
+	d.reapActive()
+
+	if after := len(rec.recordedUpdates()); after == before {
+		t.Fatal("reapActive with expired lease did not reach renderer")
+	}
+	last := rec.recordedUpdates()
+	if len(last[len(last)-1].Voices) != 0 {
+		t.Error("renderer still has voices after lease-based reap")
+	}
+}
+
+func TestNewDaemonReadsMaxLeaseFromConfig(t *testing.T) {
+	t.Setenv("HUM_HOME", t.TempDir())
+
+	cfg, _, err := config.ResolveForSession("", "")
+	if err != nil {
+		t.Fatalf("resolve config: %v", err)
+	}
+	cfg.Session.MaxLease = "30m"
+
+	th, err := theme.Load(cfg.Music.Theme)
+	if err != nil {
+		t.Fatalf("load theme: %v", err)
+	}
+
+	rec := &recorder{}
+	d, err := newDaemon(quietLogger(), cfg, th, rec, "recorder", "")
+	if err != nil {
+		t.Fatalf("newDaemon: %v", err)
+	}
+	if d.maxLease != 30*time.Minute {
+		t.Errorf("maxLease = %v, want 30m", d.maxLease)
+	}
+}

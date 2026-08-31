@@ -68,6 +68,9 @@ func (r *Registry) Apply(ev protocol.Event) (Change, error) {
 			State:     next,
 			Metadata:  copyMetadata(ev.Metadata),
 			StartedAt: now(),
+			UpdatedAt: now(),
+			OwnerPID:  ev.OwnerPID,
+			OwnerHost: ev.OwnerHost,
 		}
 		r.sessions[ev.ID] = started
 		return Change{Kind: ChangeAdded, Session: copySession(started), Prev: prev}, nil
@@ -87,6 +90,7 @@ func (r *Registry) Apply(ev protocol.Event) (Change, error) {
 			existing.Metadata[k] = v
 		}
 		existing.Updates++
+		existing.UpdatedAt = now()
 		r.sessions[ev.ID] = existing
 		return Change{Kind: ChangeUpdated, Session: copySession(existing), Prev: prev}, nil
 
@@ -128,6 +132,36 @@ func (r *Registry) Reap(olderThan time.Duration) int {
 		}
 	}
 	return count
+}
+
+type ReapCandidate struct {
+	ID     string
+	Reason string
+}
+
+func (r *Registry) ActiveToCancel(maxLease time.Duration, daemonHost string) []ReapCandidate {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current := now()
+	var out []ReapCandidate
+	for _, s := range r.sessions {
+		if s.State.Terminal() {
+			continue
+		}
+		if s.OwnerPID > 0 && s.OwnerHost != "" && s.OwnerHost == daemonHost {
+			if !pidAlive(s.OwnerPID) {
+				out = append(out, ReapCandidate{ID: s.ID, Reason: "owner process exited"})
+			}
+			continue
+		}
+		if maxLease > 0 && s.OwnerPID == 0 {
+			if !s.UpdatedAt.IsZero() && s.UpdatedAt.Add(maxLease).Before(current) {
+				out = append(out, ReapCandidate{ID: s.ID, Reason: "session lease expired"})
+			}
+		}
+	}
+	return out
 }
 
 func copySession(s Session) Session {

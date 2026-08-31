@@ -112,7 +112,7 @@ _hum_terminal() {
 # hum start exits 3 when the daemon is unreachable.  In that case _hum_id
 # stays empty and every subsequent send is a no-op, so the wrapped command
 # still runs without interference.
-_hum_id=$(hum start --title "$_hum_title" 2>/dev/null) || _hum_id=""
+_hum_id=$(hum start --title "$_hum_title" --owner-pid $$ 2>/dev/null) || _hum_id=""
 
 # Establish traps immediately after start so no interrupt goes unguarded.
 #
@@ -142,6 +142,37 @@ the `EXIT` trap fires with the child's partial exit code and sends
 `session.cancelled` is the semantically correct event. More importantly, on
 some shells a bare Ctrl-C skips the `EXIT` trap entirely if the child caught
 and re-raised it; covering both signals closes that gap.
+
+
+### Owner pid and `SIGKILL` recovery
+
+The traps above handle `INT`, `TERM` and normal exit. They cannot handle
+`SIGKILL`, a CI runner tearing down the container, or a machine that loses
+power. In those cases the wrapper shell exits without sending a terminal
+event, and the drone keeps sounding indefinitely.
+
+`--owner-pid $$` declares the wrapper shell as the session owner. `$$` is
+the shell's own pid. The daemon probes that pid on each reap tick; when
+the shell is gone, the daemon cancels the session and releases the drone.
+This covers every exit path the trap cannot reach.
+
+Pass `--owner-pid $$` only from a shell wrapper where `$$` is the process
+running the work. The `hum` binary itself is short-lived and exits within
+milliseconds; passing its pid would cancel every healthy session on the
+next tick.
+
+If you send events with raw `nc` or `socat`, include `owner_pid` and
+`owner_host` in the JSON:
+
+```sh
+printf '{"event":"session.started","id":"a1","title":"build","owner_pid":%d,"owner_host":"%s"}\n' \
+    "$$" "$(hostname)" \
+    | nc -U "${HUM_SOCKET:-${HUM_HOME:-$HOME/.hum}/humd.sock}"
+```
+
+The daemon checks `owner_host` against its own hostname before probing the
+pid. If the two differ (forwarded socket, container), the pid is ignored
+and the session falls back to normal trap-based termination.
 
 ### Session id generation
 
@@ -189,7 +220,7 @@ _hum_terminal() {
         | nc -U "$_hum_sock" >/dev/null 2>&1 || true
 }
 
-_hum_id=$(hum start --title "pre-push" 2>/dev/null) || _hum_id=""
+_hum_id=$(hum start --title "pre-push" --owner-pid $$ 2>/dev/null) || _hum_id=""
 
 trap '_hum_terminal session.cancelled; exit 130' INT TERM
 trap '_ec=$?

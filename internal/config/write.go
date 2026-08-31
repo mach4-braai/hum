@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,6 +99,17 @@ func scalarFor(key, value string) (*yaml.Node, error) {
 			return nil, fmt.Errorf("audio.muted: %q is not a valid boolean", value)
 		}
 		return scalar("!!bool", strconv.FormatBool(b)), nil
+	case "session.max_lease":
+		if value != "" {
+			d, err := time.ParseDuration(value)
+			if err != nil {
+				return nil, fmt.Errorf("session.max_lease: %q is not a valid duration", value)
+			}
+			if d < 0 {
+				return nil, fmt.Errorf("session.max_lease: %v must not be negative", d)
+			}
+		}
+		return scalar("!!str", value), nil
 	}
 	return nil, fmt.Errorf("%w: %q", ErrUnknownKey, key)
 }

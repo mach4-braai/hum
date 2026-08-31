@@ -41,7 +41,7 @@ func TestResolveDefaultsOnlyProvenance(t *testing.T) {
 		t.Errorf("Volume = %v, want %v", c.Audio.Volume, def.Audio.Volume)
 	}
 
-	for _, key := range []string{"project.name", "music.root", "music.scale", "music.theme", "audio.volume", "audio.muted"} {
+	for _, key := range []string{"project.name", "music.root", "music.scale", "music.theme", "audio.volume", "audio.muted", "session.max_lease"} {
 		if prov[key] != LayerDefault {
 			t.Errorf("prov[%s] = %q, want %q", key, prov[key], LayerDefault)
 		}
@@ -173,13 +173,14 @@ func TestResolveCLIAllFields(t *testing.T) {
 	}
 
 	overrides := map[string]string{
-		"project.name": "myproject",
-		"music.root":   "A",
-		"music.octave": "2",
-		"music.scale":  "major",
-		"music.theme":  "minimal",
-		"audio.volume": "0.3",
-		"audio.muted":  "true",
+		"project.name":      "myproject",
+		"music.root":        "A",
+		"music.octave":      "2",
+		"music.scale":       "major",
+		"music.theme":       "minimal",
+		"audio.volume":      "0.3",
+		"audio.muted":       "true",
+		"session.max_lease": "1h",
 	}
 	c, prov, err := Resolve(overrides, dir)
 	if err != nil {
@@ -200,7 +201,10 @@ func TestResolveCLIAllFields(t *testing.T) {
 	if !c.Audio.Muted {
 		t.Error("Muted = false, want true")
 	}
-	for _, key := range []string{"project.name", "music.root", "music.octave", "music.scale", "music.theme", "audio.volume", "audio.muted"} {
+	if c.Session.MaxLease != "1h" {
+		t.Errorf("MaxLease = %q, want 1h", c.Session.MaxLease)
+	}
+	for _, key := range []string{"project.name", "music.root", "music.octave", "music.scale", "music.theme", "audio.volume", "audio.muted", "session.max_lease"} {
 		if prov[key] != LayerCLI {
 			t.Errorf("prov[%s] = %q, want cli", key, prov[key])
 		}
@@ -221,6 +225,40 @@ func TestResolveCLIInvalidOctave(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "music.octave") {
 		t.Errorf("error %q does not identify music.octave", err)
+	}
+}
+
+func TestResolveCLIInvalidMaxLease(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := Resolve(map[string]string{"session.max_lease": "forever"}, dir)
+	if err == nil {
+		t.Fatal("expected error for invalid duration")
+	}
+	if !strings.Contains(err.Error(), "session.max_lease") {
+		t.Errorf("error %q does not identify session.max_lease", err)
+	}
+}
+
+func TestResolveCLINegativeMaxLease(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := Resolve(map[string]string{"session.max_lease": "-1h"}, dir)
+	if err == nil {
+		t.Fatal("expected error for negative max_lease")
+	}
+	if !strings.Contains(err.Error(), "session.max_lease") {
+		t.Errorf("error %q does not identify session.max_lease", err)
 	}
 }
 
@@ -478,5 +516,108 @@ func TestCanonicalRootFailsWhenEvalSymlinksFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "lstat: no such file") {
 		t.Errorf("err = %v, want the underlying resolver failure kept", err)
+	}
+}
+
+func TestResolveSessionMaxLeaseFromGlobal(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	writeYAML(t, tmp, "session:\n  max_lease: \"2h\"\n")
+
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	c, prov, err := Resolve(nil, dir)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if c.Session.MaxLease != "2h" {
+		t.Errorf("MaxLease = %q, want 2h", c.Session.MaxLease)
+	}
+	if prov["session.max_lease"] != LayerGlobal {
+		t.Errorf("prov[session.max_lease] = %q, want global", prov["session.max_lease"])
+	}
+}
+
+func TestResolveSessionMaxLeaseProjectOverridesGlobal(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	writeYAML(t, tmp, "session:\n  max_lease: \"24h\"\n")
+
+	project := filepath.Join(tmp, "project", ".hum")
+	writeYAML(t, project, "session:\n  max_lease: \"1h\"\n")
+
+	c, prov, err := Resolve(nil, filepath.Join(tmp, "project"))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if c.Session.MaxLease != "1h" {
+		t.Errorf("MaxLease = %q, want 1h", c.Session.MaxLease)
+	}
+	if prov["session.max_lease"] != LayerProject {
+		t.Errorf("prov[session.max_lease] = %q, want project", prov["session.max_lease"])
+	}
+}
+
+func TestResolveSessionMaxLeaseProjectClearsGlobal(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	writeYAML(t, tmp, "session:\n  max_lease: \"24h\"\n")
+
+	project := filepath.Join(tmp, "project", ".hum")
+	writeYAML(t, project, "session:\n  max_lease: \"\"\n")
+
+	c, _, err := Resolve(nil, filepath.Join(tmp, "project"))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if c.Session.MaxLease != "" {
+		t.Errorf("MaxLease = %q, want empty (project disabled the lease)", c.Session.MaxLease)
+	}
+}
+
+func TestResolveSessionMaxLeaseInvalidRejected(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	writeYAML(t, tmp, "session:\n  max_lease: \"notaduration\"\n")
+
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := Resolve(nil, dir)
+	if err == nil {
+		t.Fatal("expected error for invalid max_lease, got nil")
+	}
+	if !strings.Contains(err.Error(), "session.max_lease") {
+		t.Errorf("error %q does not mention session.max_lease", err.Error())
+	}
+}
+
+func TestResolveSessionMaxLeaseDefaultIsOff(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HUM_HOME", tmp)
+
+	dir := filepath.Join(tmp, "empty")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	c, prov, err := Resolve(nil, dir)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if c.Session.MaxLease != "" {
+		t.Errorf("MaxLease = %q, want empty (off by default)", c.Session.MaxLease)
+	}
+	if prov["session.max_lease"] != LayerDefault {
+		t.Errorf("prov[session.max_lease] = %q, want default", prov["session.max_lease"])
 	}
 }

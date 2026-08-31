@@ -56,6 +56,8 @@ message and answer each differently. Growing the set is a protocol change.
 | `root` | string | no |
 | `priority` | number | no |
 | `metadata` | object of strings | no |
+| `owner_pid` | number | no |
+| `owner_host` | string | no |
 
 Every optional field is omitted when empty, so a message carries only what the
 sender actually knows.
@@ -65,6 +67,25 @@ retained memory. An empty `id` is rejected — it would create an unaddressable
 session whose drone never stops.
 
 Unknown JSON fields are ignored. That is what makes adding a field additive.
+
+`owner_pid` names the process whose lifetime bounds this session. When that
+process exits, the daemon cancels the session on the next reap tick and
+releases its voice. The field holds a pid in the daemon's own process
+namespace. A pid from another namespace (a container or forwarded socket)
+means nothing to the daemon. Senders that declare an `owner_pid` must also
+declare `owner_host` (the sender's hostname). The daemon only acts on the
+pid when `owner_host` matches its own hostname, so a pid from a different
+machine is ignored rather than matched against an unrelated local process.
+
+`owner_pid` is only meaningful on `session.started`; the field is ignored
+on other event types. Zero and absent are equivalent: both mean the session
+has no declared owner. A negative value is rejected by `Validate`.
+
+A session without an `owner_pid` is never reaped by pid. If the daemon is
+configured with a maximum lease duration, ownerless sessions are cancelled
+once `session.updated` (or `session.started`, if never updated) is older
+than the lease. The default lease is off; reaping a legitimately long build
+mid-run is worse than the leak.
 
 `root` is the client's canonical absolute path to the project root, sent on
 `session.started` so the daemon can resolve that project's

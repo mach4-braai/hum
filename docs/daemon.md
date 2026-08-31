@@ -188,9 +188,29 @@ itself writes.
 
 ## Reaping
 
-A terminal session is dropped once it is older than the reap window, on a ticker
-inside the event goroutine. An always-on daemon would otherwise accumulate every
-session the machine ever ran. Active sessions are never reaped, however old.
+A terminal session is dropped once it is older than the reap window, on a
+ticker inside the event goroutine. An always-on daemon would otherwise
+accumulate every session the machine ever ran.
+
+An active session is cancelled when its declared `owner_pid` is gone. The
+probe runs `Kill(pid, 0)` on POSIX; on Windows it uses `OpenProcess` and
+`GetExitCodeProcess`. Both treat `EPERM` (live process owned by another
+user) as alive. The cancellation follows the normal event path, so
+`AudioRenderer.Update` releases the drone exactly as it does for an
+explicit `session.cancelled` event. Every cancellation is logged at `warn`
+with the session id and the reason.
+
+The daemon only probes a pid when `owner_host` in the session matches the
+daemon's own hostname. A session started over an SSH-forwarded socket
+carries the remote machine's hostname and is never probed, because its pid
+means nothing in the daemon's process namespace. A session with no
+`owner_pid` is never probed.
+
+If a maximum lease duration is configured, ownerless sessions are cancelled
+once `session.updated` (or `session.started`, if never updated) is older
+than the lease. The default is off. Terminal sessions already reap
+themselves through the reap window; the lease only applies to sessions
+that remain active.
 
 ## Logging
 

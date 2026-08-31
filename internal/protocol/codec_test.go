@@ -247,6 +247,8 @@ func TestEveryEventFieldIsMarshalable(t *testing.T) {
 		"Root":      "string",
 		"Priority":  "int",
 		"Metadata":  "map[string]string",
+		"OwnerPID":  "int",
+		"OwnerHost": "string",
 	}
 	if !reflect.DeepEqual(fields, want) {
 		t.Fatalf("Event carries %v, want %v: Encoder.Encode discards the json.Marshal error because no field here can produce one, and a field that can would put a truncated frame on the wire", fields, want)
@@ -260,6 +262,8 @@ func TestEveryEventFieldIsMarshalable(t *testing.T) {
 		Root:      "/tmp/project",
 		Priority:  3,
 		Metadata:  map[string]string{"k": "v"},
+		OwnerPID:  12345,
+		OwnerHost: "buildhost",
 	}
 	var buf bytes.Buffer
 	if err := NewEncoder(&buf).Encode(populated); err != nil {
