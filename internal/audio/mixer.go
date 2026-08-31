@@ -26,11 +26,37 @@ type doneSource struct {
 	gen uint64
 }
 
+type normRamp struct {
+	current     float64
+	target      float64
+	coeff       float64
+	initialized bool
+}
+
+func newNormRamp(sampleRate int) normRamp {
+	const tc = 0.040
+	return normRamp{coeff: math.Exp(-1.0 / (float64(sampleRate) * tc))}
+}
+
+func (r *normRamp) set(target float64) {
+	if !r.initialized {
+		r.current = target
+		r.initialized = true
+	}
+	r.target = target
+}
+
+func (r *normRamp) step() float64 {
+	r.current = r.coeff*r.current + (1-r.coeff)*r.target
+	return r.current
+}
+
 type Mixer struct {
 	mu      sync.Mutex
 	sources map[string]sourceEntry
 	gen     uint64
 	gain    float64
+	ramp    normRamp
 
 	scratch [][2]float32
 	active  []sourceEntry
@@ -38,10 +64,10 @@ type Mixer struct {
 }
 
 func NewMixer(f Format) *Mixer {
-	_ = f
 	return &Mixer{
 		sources: make(map[string]sourceEntry),
 		gain:    1.0,
+		ramp:    newNormRamp(f.SampleRate),
 		scratch: make([][2]float32, maxScratchFrames),
 		active:  make([]sourceEntry, 0, maxSources),
 		done:    make([]doneSource, 0, maxSources),
@@ -91,6 +117,13 @@ func (m *Mixer) Gain() float64 {
 	return g
 }
 
+func normTarget(voices int, gain float64) float64 {
+	if voices <= 1 {
+		return gain
+	}
+	return gain / float64(voices)
+}
+
 func (m *Mixer) Read(p []byte) (int, error) {
 	frames := len(p) / frameSize
 
@@ -99,16 +132,13 @@ func (m *Mixer) Read(p []byte) (int, error) {
 	for _, entry := range m.sources {
 		m.active = append(m.active, entry)
 	}
-	voiceCount := len(m.active)
 	gain := m.gain
 	m.mu.Unlock()
 
 	m.done = m.done[:0]
 
-	norm := gain
-	if voiceCount > 1 {
-		norm /= float64(voiceCount)
-	}
+	alive := len(m.active)
+	m.ramp.set(normTarget(alive, gain))
 
 	written := 0
 	remaining := frames
@@ -128,11 +158,14 @@ func (m *Mixer) Read(p []byte) (int, error) {
 			if m.active[idx].src.Mix(sc) {
 				m.done = append(m.done, doneSource{id: m.active[idx].id, gen: m.active[idx].gen})
 				m.active[idx].src = nil
+				alive--
+				m.ramp.set(normTarget(alive, gain))
 			}
 		}
 		for i, fr := range sc {
-			l := math.Tanh(float64(fr[0]) * norm)
-			r := math.Tanh(float64(fr[1]) * norm)
+			n := m.ramp.step()
+			l := math.Tanh(float64(fr[0]) * n)
+			r := math.Tanh(float64(fr[1]) * n)
 			base := written + i*frameSize
 			bl := math.Float32bits(float32(l))
 			br := math.Float32bits(float32(r))

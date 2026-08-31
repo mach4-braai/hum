@@ -327,3 +327,146 @@ func TestReadKeepsASourceAddedUnderAFinishingID(t *testing.T) {
 		t.Error("the replacement produced silence, so it never reached the mix")
 	}
 }
+
+func maxBufferDelta(frames [][2]float64, prevLast float64) float64 {
+	var maxD float64
+	if len(frames) == 0 {
+		return 0
+	}
+	if d := math.Abs(frames[0][0] - prevLast); d > maxD {
+		maxD = d
+	}
+	for i := 1; i < len(frames); i++ {
+		if d := math.Abs(frames[i][0] - frames[i-1][0]); d > maxD {
+			maxD = d
+		}
+	}
+	return maxD
+}
+
+func TestNormRampNoStepOnVoiceAdd(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
+	m.Add("v1", osc)
+
+	buf := make([]byte, 4096*frameSize)
+
+	m.Read(buf)
+	m.Read(buf)
+	m.Read(buf)
+	ss := decodeFrames(buf)
+	var maxSS float64
+	for i := 1; i < len(ss); i++ {
+		if d := math.Abs(ss[i][0] - ss[i-1][0]); d > maxSS {
+			maxSS = d
+		}
+	}
+	lastSS := ss[len(ss)-1][0]
+
+	m.Add("v2", &countSource{val: 0, limit: 999})
+
+	m.Read(buf)
+	tr := decodeFrames(buf)
+	maxTr := maxBufferDelta(tr, lastSS)
+
+	if maxTr > maxSS*2 {
+		t.Errorf("voice add caused a step: %.6f > 2× steady-state %.6f; norm ramp did not smooth the transition",
+			maxTr, maxSS)
+	}
+}
+
+func TestNormRampNoStepOnVoiceRelease(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+
+	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
+	m.Add("v1", osc)
+
+	buf := make([]byte, 4096*frameSize)
+
+	m.Read(buf)
+	m.Read(buf)
+	m.Read(buf)
+	ss := decodeFrames(buf)
+	var maxSS float64
+	for i := 1; i < len(ss); i++ {
+		if d := math.Abs(ss[i][0] - ss[i-1][0]); d > maxSS {
+			maxSS = d
+		}
+	}
+
+	ghost := &countSource{val: 0, limit: 10}
+	m.Add("ghost", ghost)
+
+	for range 8 {
+		m.Read(buf)
+	}
+
+	m.Read(buf)
+	pre := decodeFrames(buf)
+	lastPre := pre[len(pre)-1][0]
+
+	m.Read(buf)
+	dying := decodeFrames(buf)
+	maxTr := maxBufferDelta(dying, lastPre)
+	lastDying := dying[len(dying)-1][0]
+
+	m.Read(buf)
+	after := decodeFrames(buf)
+	if d := maxBufferDelta(after, lastDying); d > maxTr {
+		maxTr = d
+	}
+
+	if maxTr > maxSS*2 {
+		t.Errorf("voice release caused a step: %.6f > 2× steady-state %.6f; norm ramp did not smooth the transition",
+			maxTr, maxSS)
+	}
+}
+
+func TestNormRampNoStepMidBufferDone(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+
+	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("ghost", &countSource{val: 0, limit: 1})
+
+	buf := make([]byte, 2*maxScratchFrames*frameSize)
+	m.Read(buf)
+	frames := decodeFrames(buf)
+	last := frames[len(frames)-1][0]
+
+	want := math.Tanh(0.5 * 0.9)
+	if last < want {
+		t.Errorf("mid-buffer done did not update ramp target: last-frame level %.6f < %.6f; "+
+			"alive and ramp target must update the sample the source reports done",
+			last, want)
+	}
+}
+
+func TestNormRampSteadyStateMatchesUnrampedCurve(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", &constSource{l: 0.4, r: 0.4})
+
+	large := make([]byte, 16384*frameSize)
+	m.Read(large)
+
+	m.Add("b", &constSource{l: 0.4, r: 0.4})
+
+	m.Read(large)
+
+	buf := make([]byte, 256*frameSize)
+	m.Read(buf)
+	frames := decodeFrames(buf)
+
+	want := math.Tanh(0.8 * 0.5)
+	for i, fr := range frames {
+		if math.Abs(fr[0]-want) > 1e-3 {
+			t.Errorf("frame %d: L=%.6f, want %.6f; steady-state differs from unramped 1/N curve after ramp settled",
+				i, fr[0], want)
+			break
+		}
+	}
+}

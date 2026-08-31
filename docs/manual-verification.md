@@ -43,6 +43,10 @@ it.
 - **Mute.** `hum mute` then `hum unmute` while a chord is sounding must ramp,
   not step.
 - **Volume.** `hum volume 0.2` must not change the timbre, only the level.
+- **Norm ramp on voice count change.** When a second session starts while one is
+  already sounding, the existing drone must not dip before recovering. When a
+  session ends, the remaining drone must not jump. Both are smooth if the ramp
+  is working; only listening on a real device confirms it. Covered by issue #101.
 - **Register.** `music.octave: 2` must sound deeper without becoming muddy, and
   `music.octave: 5` must not become shrill. Both are taste calls the range
   check in `config.Validate` cannot make.
