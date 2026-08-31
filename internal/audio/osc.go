@@ -155,9 +155,6 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 	defer o.mu.Unlock()
 
 	if o.state == envDone {
-		for i := range buf {
-			buf[i] = [2]float32{}
-		}
 		return true
 	}
 
@@ -185,9 +182,6 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 			if o.envPos >= o.releaseSamples || o.curGain <= 0 {
 				o.curGain = 0
 				o.state = envDone
-				for j := i; j < len(buf); j++ {
-					buf[j] = [2]float32{}
-				}
 				return true
 			}
 		}
