@@ -107,7 +107,7 @@ Read the columns as combined-mix RMS lift, which is not the chime's level agains
 
 The shipped column is flat, which is the property worth having: a completion is equally prominent whether one session is running or twelve. Under the drone bus's interim `1/N` the same gain gave +2.79, +4.62 and +11.02 dB, so flatness comes from the drone curve rather than from the phrase gain.
 
-3 dB is a chosen number, not a derived one. There is no curve that reproduces the old balance, because the old balance varied with voice count and this one does not.
+That +3.00 dB lift is a chosen number, not a derived one. There is no curve that reproduces the old balance, because the old balance varied with voice count and this one does not.
 
 #### The divisor counts sounding sources, not scheduled ones
 
