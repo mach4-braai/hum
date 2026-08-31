@@ -9,6 +9,9 @@ const (
 	maxScratchFrames = 4096
 	maxSources       = 32
 	frameSize        = 8
+
+	rampTimeConstant = 0.040
+	rampSettle       = 1e-9
 )
 
 type Source interface {
@@ -34,8 +37,7 @@ type normRamp struct {
 }
 
 func newNormRamp(sampleRate int) normRamp {
-	const tc = 0.040
-	return normRamp{coeff: math.Exp(-1.0 / (float64(sampleRate) * tc))}
+	return normRamp{coeff: math.Exp(-1.0 / (float64(sampleRate) * rampTimeConstant))}
 }
 
 func (r *normRamp) set(target float64) {
@@ -47,6 +49,10 @@ func (r *normRamp) set(target float64) {
 }
 
 func (r *normRamp) step() float64 {
+	if math.Abs(r.target-r.current) < rampSettle {
+		r.current = r.target
+		return r.current
+	}
 	r.current = r.coeff*r.current + (1-r.coeff)*r.target
 	return r.current
 }

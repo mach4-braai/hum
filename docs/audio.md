@@ -52,6 +52,20 @@ norm = masterGain / max(1, voiceCount)
 
 Each frame of the summed scratch buffer is multiplied by `norm` before soft-clipping. Result: twelve drones at sustain gain 0.5 produce the same average output level as one drone at sustain gain 0.5.
 
+### The output gain ramp
+
+`norm` is a product of two things that both change abruptly: the master gain, which a user moves with `hum volume` or `hum mute`, and the voice count, which moves when a session starts or ends. Applying either change between one sample and the next steps the waveform, and a step is a click.
+
+`normRamp` therefore sits between `norm` and the multiply. `SetGain` and the voice count set a *target*; `Read` calls `normRamp.step` once per frame, and each step moves `current` toward `target` by a one-pole with a `rampTimeConstant` of 40 ms. Every gain change in the package goes through it, so there is exactly one ramp shape and one place to change it.
+
+Two consequences are load-bearing.
+
+**Nothing outside the mixer ramps.** `AudioRenderer.SetMuted` is `SetGain(0)` and unmute is `SetGain(volume)`, so mute and unmute are mirror images: at sample *n* they sum to the configured volume. An earlier version faded mute in a goroutine that slept between twenty `SetGain` calls, which produced twenty 2.5 ms plateaus rather than a ramp, left unmute stepping, and made the trajectory depend on the Go scheduler rather than the sample clock. `TestMuteAndUnmuteAreMirrorImages` and `TestGainRampHasNoPlateausInEitherDirection` hold both properties.
+
+**A one-pole never arrives, so `step` snaps.** When `|target - current|` falls below `rampSettle` (1e-9) the ramp assigns the target outright. Without it, muting leaves a gain of order 1e-16 multiplying a live signal forever: not audible, but not silence either, and a denormal tail in the hot loop. `TestGainRampSettlesExactlyOnZero` asserts the tail is bit-exact zero.
+
+`Mixer.Gain` returns the target, not `current`. It answers "what is the volume set to", which is what status and the config file mean by volume; the instantaneous value is an artefact of the fade and is observable from the output samples, which is how the tests read it.
+
 ### Soft-clipping
 
 After normalisation, each sample is passed through `math.Tanh`. This is a smooth, differentiable limiter: at input 1.0 it outputs ≈ 0.76; at input 3.0 it outputs ≈ 0.995. It can never produce a value outside (−1, 1), preventing hard clipping regardless of transient overdrive from simultaneous phrase triggers. `tanh` was chosen over a hard limiter because it introduces no discontinuity and over a lookahead limiter because it requires no look-ahead buffer (which would add latency and an allocation).
@@ -234,13 +248,13 @@ Calling `mixer.Remove` on a sounding voice would truncate its output mid-sample,
 
 ### Mutex contract
 
-`AudioRenderer` holds `mu` to protect the `active` map, the `volume`, `muted`, and `rampGen` fields. The constraint from `docs/renderer.md` is maintained: `mu` is never held while calling `mixer.Read` (the audio callback path). `mixer.Add`, `mixer.Remove`, and `mixer.SetGain` acquire only the mixer's own internal lock and do not call back into the renderer, so holding `mu` across them is safe.
+`AudioRenderer` holds `mu` to protect the `active` map and the `volume` and `muted` fields. The constraint from `docs/renderer.md` is maintained: `mu` is never held while calling `mixer.Read` (the audio callback path). `mixer.Add`, `mixer.Remove`, and `mixer.SetGain` acquire only the mixer's own internal lock and do not call back into the renderer, so holding `mu` across them is safe.
 
-### Mute ramp
+### Mute and volume
 
-`SetMuted(true)` ramps the mixer's master gain from its current value to zero over 50 ms via a background goroutine (`doRamp`). A hard cut to zero would produce a click identical to deleting a sounding voice mid-sample. `SetMuted(false)` restores the master gain to the stored `volume` immediately — no ramp needed on unmute because the gain starts at zero and any attack transient is masked by silence.
+`SetMuted` and `SetVolume` both write the field they own under `mu` and then call `applyGain`, which is `SetGain(0)` when muted and `SetGain(volume)` otherwise. Neither knows how a gain change is faded; the mixer's ramp is the only mechanism, described under § The output gain ramp.
 
-Ramp cancellation uses a generation counter (`rampGen`): each `SetMuted` call increments the counter and passes the current value to `doRamp`. Before each gain step, the goroutine reacquires `mu` and compares its captured generation against `r.rampGen`; a mismatch means a newer `SetMuted` call superseded this ramp, and the goroutine exits without applying the step. This prevents a stale ramp goroutine from overwriting a freshly restored volume.
+Storing `volume` separately from the mixer gain is what lets `hum volume 0.4` take effect while muted: the mixer stays at zero and the new value is what unmute restores. `renderer.Options.Volume` is never defaulted, so a configured `volume: 0` starts silent rather than being replaced with a theme gain.
 
 ### `ErrNoDevice` unwrapping
 
