@@ -146,7 +146,7 @@ func (r *AudioRenderer) Update(s harmony.State) error {
 			osc.SetExpression(vs.Expression, r.th.Drone)
 			r.seq++
 			mid := fmt.Sprintf("drone/%d", r.seq)
-			r.mixer.Add(mid, osc)
+			r.mixer.Add(mid, DroneBus, osc)
 			r.active[sid] = &activeVoice{mixerID: mid, osc: osc, last: vs}
 		}
 	}
@@ -200,7 +200,7 @@ func (r *AudioRenderer) schedulePhraseSource(id string, src *phraseSource) {
 		r.dropped++
 	}
 
-	r.mixer.Add(id, src)
+	r.mixer.Add(id, PhraseBus, src)
 	r.phraseIDs = append(r.phraseIDs, id)
 }
 

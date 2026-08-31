@@ -30,9 +30,9 @@ It implements the bottom of the PRD §19 chain: Harmony Engine → Renderer → 
 
 `Read` **must not allocate** on every call — an allocation in the audio callback path shows up as a glitch or pop. Three decisions enforce this:
 
-1. `scratch [][2]float32` is preallocated to `maxScratchFrames` (4 096 frames) in `NewMixer`. If `Read` is called with more frames than `maxScratchFrames`, it processes them in batches without growing any slice.
+1. `scratch` holds one `[][2]float32` per bus, each preallocated to `maxScratchFrames` (4 096 frames) in `NewMixer`. If `Read` is called with more frames than `maxScratchFrames`, it processes them in batches without growing any slice.
 2. `active []sourceEntry` is preallocated with `cap = maxSources` (32). Under a short lock, `Read` resets it to length zero (`active[:0]`) and copies live sources from the map. Because 32 ≥ `harmony.MaxVoices` (12) plus all simultaneous phrase notes, the append never triggers a reallocation.
-3. `doneIDs []string` is similarly preallocated. Strings copied from map keys are two-word header copies — no heap allocation.
+3. `done []doneSource` is similarly preallocated. The ids it carries are copied from map keys, which are two-word header copies — no heap allocation.
 
 The zero-alloc invariant is asserted by `TestMixerReadZeroAlloc` using `testing.AllocsPerRun(100, …)`.
 
@@ -40,17 +40,48 @@ The zero-alloc invariant is asserted by `TestMixerReadZeroAlloc` using `testing.
 
 `sources` and `gain` are protected by `m.mu`. `Read` holds the lock only long enough to snapshot `active` and read `gain`, then releases it before the inner loop. This ensures that a daemon goroutine calling `Add`/`Remove`/`SetGain` can never deadlock the audio thread.
 
-`active` and `doneIDs` are used exclusively inside `Read` and are not mutex-protected. `Read` is single-consumer (driven by one oto audio thread).
+`active` and `done` are used exclusively inside `Read` and are not mutex-protected. `Read` is single-consumer (driven by one oto audio thread).
 
-### Voice-count normalisation
+### Two buses
 
-Normalisation by active voice count lives in **the Mixer**, not in the oscillator. The oscillator does not know how many peers are active. After snapshotting active sources, `Read` sets:
+A source joins either `DroneBus` or `PhraseBus`, named at `Add`. The buses are normalised separately and summed immediately before the clipper.
+
+They exist because the two kinds of sound answer different questions. A drone is *sustaining*, and what matters is that adding a thirteenth session does not shrink the other twelve. A phrase note is a *transient*, and what matters is that it arrives at the level the theme asked for. One shared divisor cannot serve both: with every source in one count, a `hum complete` took the divisor from N to N+1 and every sustaining drone dropped by `20·log10(N/(N+1))` dB for the length of the chime — 6 dB with one drone. The chime the user was meant to hear arrived on top of an audible dip in everything else.
+
+`Mixer` does not parse id prefixes to work out which is which. `AudioRenderer` already knows, and says so at the call.
+
+`TestCompletionChimeDoesNotDuckOneDrone` and `TestFailureCadenceDoesNotDuckTwoDrones` render the drone alone, the chime alone, and both, then check the drone's contribution to the mix is the same either way. `math.Atanh` recovers the pre-clipper sum, so the two contributions can be separated exactly. `TestChimeLevelIsIndependentOfHowManyDronesSound` is the same measurement from the other side.
+
+### Normalisation
+
+Normalisation lives in **the Mixer**, not in the oscillator. The oscillator does not know how many peers are active. After snapshotting active sources, `Read` counts them per bus and sets one target per bus:
 
 ```
-norm = masterGain / max(1, voiceCount)
+droneNorm  = masterGain / max(1, droneCount)
+phraseNorm = masterGain / sqrt(max(1, phraseCount))
 ```
 
-Each frame of the summed scratch buffer is multiplied by `norm` before soft-clipping. Result: twelve drones at sustain gain 0.5 produce the same average output level as one drone at sustain gain 0.5.
+The drone curve holds the *summed* level of twelve coherent drones equal to one, which is what `1/N` corrects for.
+
+The phrase curve already assumes incoherence, because the measurement forced it. Sixteen notes is `maxPhraseVoices`, the cap a burst of completions hits, and at a fixed per-note gain those sixteen drove the clipper to a pre-`tanh` peak of 3.14 at `volume: 0.6` and 10 dB of gain reduction: not a chime, a crunch. Dividing by `√16` brings that to 1.46 and 4.2 dB. `TestPhraseVoicesSumIncoherentlyRatherThanLinearly` holds the curve.
+
+#### The chime got louder, so the theme gains were halved
+
+A single chime divides by one, so the phrase bus scales it by the master gain alone. The shared divisor scaled it by `masterGain / (N+1)`. Against one drone that is a factor of two: **the chime term is +6.02 dB**, and +22.3 dB against twelve.
+
+That is not a neutral refactor, so `completion_gain` and `failure_gain` moved from 0.7 and 0.35 to 0.5 and 0.25. Measured as the audible lift of the whole mix — RMS over the chime's 250 ms against the same window of undisturbed drones, `volume: 0.6`:
+
+| drones | shared divisor, gain 0.7 | separate buses, gain 0.7 | separate buses, gain 0.5 |
+|---|---|---|---|
+| 1 | -0.03 dB | +4.37 dB | +2.79 dB |
+| 2 | +0.12 dB | +6.67 dB | +4.62 dB |
+| 12 | +0.08 dB | +13.68 dB | +11.02 dB |
+
+The first column is the bug in one number: a chime raised the total by nothing, because the duck removed as much energy as the chime added. It was not a quiet chime, it was an inaudible one.
+
+The last column is still voice-count dependent, because the drone bus keeps `1/N` at this point. Flattening it is the drone curve's job, not the phrase gain's, and the gains were chosen against the flat figure the next change produces.
+
+An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal. Measured against a single-bus `Read`, `BenchmarkMixerRead/minimal` at twelve voices is unchanged inside the run-to-run spread.
 
 ### The output gain ramp
 
@@ -222,7 +253,7 @@ tremolo and otherwise interpolates six table entries, three copies per channel.
 
 ### Voice-count normalisation placement
 
-Normalisation by active voice count lives in the **Mixer** (see § Mixer above). The `Osc` knows only its own gain; the Mixer applies the per-call count divisor after summing all sources.
+Normalisation by active source count lives in the **Mixer** (see § Normalisation above). The `Osc` knows only its own gain; the Mixer counts sources per bus and applies each bus's divisor after summing that bus.
 
 ---
 
@@ -264,7 +295,7 @@ The `init`-registered constructor calls `NewEngine`. When `NewEngine` returns `E
 
 ## Phrases
 
-Phrase playback is implemented by `phraseSource`, a `Source` wrapping an `Osc` with a sample-countdown-based offset and duration gate. Each `Note` in a `harmony.Phrase` becomes one `phraseSource` in the mixer.
+Phrase playback is implemented by `phraseSource`, a `Source` wrapping an `Osc` with a sample-countdown-based offset and duration gate. Each `Note` in a `harmony.Phrase` becomes one `phraseSource` on the mixer's `PhraseBus`.
 
 ### Why sample-accurate scheduling instead of wall-clock timers
 

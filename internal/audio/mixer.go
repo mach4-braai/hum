@@ -14,6 +14,14 @@ const (
 	rampSettle       = 1e-9
 )
 
+type Bus int
+
+const (
+	DroneBus Bus = iota
+	PhraseBus
+	busCount
+)
+
 type Source interface {
 	Mix(buf [][2]float32) (done bool)
 }
@@ -21,6 +29,7 @@ type Source interface {
 type sourceEntry struct {
 	id  string
 	gen uint64
+	bus Bus
 	src Source
 }
 
@@ -48,6 +57,10 @@ func (r *normRamp) set(target float64) {
 	r.target = target
 }
 
+func (r *normRamp) snap() {
+	r.current = r.target
+}
+
 func (r *normRamp) step() float64 {
 	if math.Abs(r.target-r.current) < rampSettle {
 		r.current = r.target
@@ -62,28 +75,32 @@ type Mixer struct {
 	sources map[string]sourceEntry
 	gen     uint64
 	gain    float64
-	ramp    normRamp
+	ramps   [busCount]normRamp
 
-	scratch [][2]float32
+	scratch [busCount][][2]float32
 	active  []sourceEntry
 	done    []doneSource
+	alive   [busCount]int
 }
 
 func NewMixer(f Format) *Mixer {
-	return &Mixer{
+	m := &Mixer{
 		sources: make(map[string]sourceEntry),
 		gain:    1.0,
-		ramp:    newNormRamp(f.SampleRate),
-		scratch: make([][2]float32, maxScratchFrames),
 		active:  make([]sourceEntry, 0, maxSources),
 		done:    make([]doneSource, 0, maxSources),
 	}
+	for bus := range m.scratch {
+		m.ramps[bus] = newNormRamp(f.SampleRate)
+		m.scratch[bus] = make([][2]float32, maxScratchFrames)
+	}
+	return m
 }
 
-func (m *Mixer) Add(id string, s Source) {
+func (m *Mixer) Add(id string, bus Bus, s Source) {
 	m.mu.Lock()
 	m.gen++
-	m.sources[id] = sourceEntry{id: id, gen: m.gen, src: s}
+	m.sources[id] = sourceEntry{id: id, gen: m.gen, bus: bus, src: s}
 	m.mu.Unlock()
 }
 
@@ -130,6 +147,31 @@ func normTarget(voices int, gain float64) float64 {
 	return gain / float64(voices)
 }
 
+func incoherentNorm(voices int, gain float64) float64 {
+	if voices <= 1 {
+		return gain
+	}
+	return gain / math.Sqrt(float64(voices))
+}
+
+func (m *Mixer) retarget(gain float64) {
+	m.ramps[DroneBus].set(normTarget(m.alive[DroneBus], gain))
+	m.ramps[PhraseBus].set(incoherentNorm(m.alive[PhraseBus], gain))
+}
+
+func putFrame(p []byte, base int, l, r float64) {
+	bl := math.Float32bits(float32(l))
+	br := math.Float32bits(float32(r))
+	p[base+0] = byte(bl)
+	p[base+1] = byte(bl >> 8)
+	p[base+2] = byte(bl >> 16)
+	p[base+3] = byte(bl >> 24)
+	p[base+4] = byte(br)
+	p[base+5] = byte(br >> 8)
+	p[base+6] = byte(br >> 16)
+	p[base+7] = byte(br >> 24)
+}
+
 func (m *Mixer) Read(p []byte) (int, error) {
 	frames := len(p) / frameSize
 
@@ -143,8 +185,11 @@ func (m *Mixer) Read(p []byte) (int, error) {
 
 	m.done = m.done[:0]
 
-	alive := len(m.active)
-	m.ramp.set(normTarget(alive, gain))
+	m.alive = [busCount]int{}
+	for idx := range m.active {
+		m.alive[m.active[idx].bus]++
+	}
+	m.retarget(gain)
 
 	written := 0
 	remaining := frames
@@ -153,36 +198,44 @@ func (m *Mixer) Read(p []byte) (int, error) {
 		if batch > maxScratchFrames {
 			batch = maxScratchFrames
 		}
-		sc := m.scratch[:batch]
-		for i := range sc {
-			sc[i] = [2]float32{}
+
+		sounding := m.alive[PhraseBus] > 0
+		drone := m.scratch[DroneBus][:batch]
+		phrase := m.scratch[PhraseBus][:batch]
+		for i := range drone {
+			drone[i] = [2]float32{}
 		}
+		if sounding {
+			for i := range phrase {
+				phrase[i] = [2]float32{}
+			}
+		} else {
+			m.ramps[PhraseBus].snap()
+		}
+
 		for idx := range m.active {
 			if m.active[idx].src == nil {
 				continue
 			}
-			if m.active[idx].src.Mix(sc) {
+			bus := m.active[idx].bus
+			if m.active[idx].src.Mix(m.scratch[bus][:batch]) {
 				m.done = append(m.done, doneSource{id: m.active[idx].id, gen: m.active[idx].gen})
 				m.active[idx].src = nil
-				alive--
-				m.ramp.set(normTarget(alive, gain))
+				m.alive[bus]--
+				m.retarget(gain)
 			}
 		}
-		for i, fr := range sc {
-			n := m.ramp.step()
-			l := math.Tanh(float64(fr[0]) * n)
-			r := math.Tanh(float64(fr[1]) * n)
-			base := written + i*frameSize
-			bl := math.Float32bits(float32(l))
-			br := math.Float32bits(float32(r))
-			p[base+0] = byte(bl)
-			p[base+1] = byte(bl >> 8)
-			p[base+2] = byte(bl >> 16)
-			p[base+3] = byte(bl >> 24)
-			p[base+4] = byte(br)
-			p[base+5] = byte(br >> 8)
-			p[base+6] = byte(br >> 16)
-			p[base+7] = byte(br >> 24)
+
+		for i := range batch {
+			dn := m.ramps[DroneBus].step()
+			l := float64(drone[i][0]) * dn
+			r := float64(drone[i][1]) * dn
+			if sounding {
+				pn := m.ramps[PhraseBus].step()
+				l += float64(phrase[i][0]) * pn
+				r += float64(phrase[i][1]) * pn
+			}
+			putFrame(p, written+i*frameSize, math.Tanh(l), math.Tanh(r))
 		}
 		written += batch * frameSize
 		remaining -= batch

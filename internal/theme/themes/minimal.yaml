@@ -10,10 +10,10 @@ drone:
 phrases:
   completion_octaves: 1
   completion_duration: 0.2
-  completion_gain: 0.7
+  completion_gain: 0.5
   failure_interval: -3
   failure_duration: 1.2
-  failure_gain: 0.35
+  failure_gain: 0.25
   cancelled_sounds: false
   cancelled_duration: 0.4
   cancelled_gain: 0.3

@@ -45,7 +45,7 @@ func BenchmarkMixerRead(b *testing.B) {
 			f := DefaultFormat()
 			m := NewMixer(f)
 			for voice := range benchVoices {
-				m.Add(fmt.Sprintf("drone/%d", voice), benchOsc(b, name, 110*float64(1+voice)))
+				m.Add(fmt.Sprintf("drone/%d", voice), DroneBus, benchOsc(b, name, 110*float64(1+voice)))
 			}
 			p := make([]byte, 1024*frameSize)
 			b.SetBytes(int64(len(p)))

@@ -39,7 +39,7 @@ func TestOscFrequency(t *testing.T) {
 	osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
 
 	m := NewMixer(f)
-	m.Add("v", osc)
+	m.Add("v", DroneBus, osc)
 
 	frames := f.SampleRate / 10
 	samples := readMixerLeft(m, frames)
@@ -63,7 +63,7 @@ func TestOscPhaseContinuity(t *testing.T) {
 	osc := NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second})
 
 	m := NewMixer(f)
-	m.Add("v", osc)
+	m.Add("v", DroneBus, osc)
 
 	const bufFrames = 1024
 	s1 := readMixerLeft(m, bufFrames)
