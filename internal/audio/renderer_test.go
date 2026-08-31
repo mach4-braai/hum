@@ -780,6 +780,41 @@ func TestADelayedNoteSoundsTheSameAtAnyBlockSize(t *testing.T) {
 	}
 }
 
+func TestAnOnsetInsideABufferTakesTheDivisorAtThatFrame(t *testing.T) {
+	f := DefaultFormat()
+	const dur = 300 * time.Millisecond
+	onset := int(dur.Seconds() * float64(f.SampleRate))
+
+	const framesFromOnsetWhereALateDivisorShows = 1500
+
+	levelAt := func(block int) float64 {
+		r, m := NewCaptureRenderer(f, testOpts())
+		if err := r.Trigger(harmony.Phrase{Notes: failureCadence(0.25, dur)}); err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, block*frameSize)
+		var sq float64
+		for read := 0; read < onset+framesFromOnsetWhereALateDivisorShows; read += block {
+			m.Read(buf)
+			for i, fr := range decodeFrames(buf) {
+				if at := read + i; at >= onset && at < onset+framesFromOnsetWhereALateDivisorShows {
+					sq += fr[0] * fr[0]
+				}
+			}
+		}
+		return math.Sqrt(sq / float64(framesFromOnsetWhereALateDivisorShows))
+	}
+
+	reference := levelAt(1)
+	for _, block := range []int{997, 1024, 4095, 4096, 4097, 5000, 8192} {
+		got := levelAt(block)
+		if d := 20 * math.Log10(got/reference); math.Abs(d) > 0.25 {
+			t.Errorf("the %d frames after the second note's onset measure %+.2f dB against a one-frame Read at %d frames per Read: the note's onset lands %d frames inside a buffer there, and the divisor must change at that frame rather than at the batch that contains it",
+				framesFromOnsetWhereALateDivisorShows, d, block, onset%block)
+		}
+	}
+}
+
 func TestChimeLevelIsIndependentOfHowManyDronesSound(t *testing.T) {
 	const frames = 4096
 	notes := []harmony.Note{chimeNote(7, 5, 0.7)}
