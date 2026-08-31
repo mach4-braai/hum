@@ -182,3 +182,49 @@ func TestMaxIDLenIs128(t *testing.T) {
 		t.Errorf("MaxIDLen = %d, want 128: the maximum id length is specified as 128 bytes in the wire protocol", MaxIDLen)
 	}
 }
+
+func TestOwnerPIDValidation(t *testing.T) {
+	t.Run("accepts a positive owner_pid", func(t *testing.T) {
+		ev := Event{Event: SessionStarted, ID: "1", OwnerPID: 12345, OwnerHost: "mymachine"}
+		if err := ev.Validate(); err != nil {
+			t.Errorf("Validate() = %v, want nil for a positive owner_pid", err)
+		}
+	})
+
+	t.Run("accepts zero owner_pid as unset", func(t *testing.T) {
+		ev := Event{Event: SessionStarted, ID: "1"}
+		if err := ev.Validate(); err != nil {
+			t.Errorf("Validate() = %v, want nil for zero owner_pid", err)
+		}
+	})
+
+	t.Run("rejects a negative owner_pid", func(t *testing.T) {
+		ev := Event{Event: SessionStarted, ID: "1", OwnerPID: -1}
+		if err := ev.Validate(); err == nil {
+			t.Error("Validate() = nil for negative owner_pid, want an error")
+		}
+	})
+}
+
+func TestOwnerFieldsRoundTrip(t *testing.T) {
+	ev := Event{
+		Event:     SessionStarted,
+		ID:        "abc",
+		OwnerPID:  9999,
+		OwnerHost: "buildhost",
+	}
+	data, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Event
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.OwnerPID != ev.OwnerPID {
+		t.Errorf("OwnerPID = %d, want %d", got.OwnerPID, ev.OwnerPID)
+	}
+	if got.OwnerHost != ev.OwnerHost {
+		t.Errorf("OwnerHost = %q, want %q", got.OwnerHost, ev.OwnerHost)
+	}
+}

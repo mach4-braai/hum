@@ -285,3 +285,43 @@ func TestEncodeFailsWhenTheEncoderCannotClose(t *testing.T) {
 		t.Errorf("encode = %v, want it to wrap the close error: a document that cannot be flushed is not a document", err)
 	}
 }
+
+func TestPatchSessionMaxLease(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, path, "music:\n  root: C\n  scale: major\n  theme: minimal\n")
+
+	if err := Patch(path, map[string]string{"session.max_lease": "24h"}); err != nil {
+		t.Fatalf("Patch session.max_lease: %v", err)
+	}
+
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.Session.MaxLease != "24h" {
+		t.Errorf("session.max_lease = %q, want 24h", got.Session.MaxLease)
+	}
+
+	if err := Patch(path, map[string]string{"session.max_lease": ""}); err != nil {
+		t.Fatalf("Patch session.max_lease to empty: %v", err)
+	}
+	got, err = Load(path)
+	if err != nil {
+		t.Fatalf("Load after clearing: %v", err)
+	}
+	if got.Session.MaxLease != "" {
+		t.Errorf("session.max_lease = %q, want empty after clear", got.Session.MaxLease)
+	}
+}
+
+func TestPatchSessionMaxLeaseRejectsBadValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	writeFile(t, path, "music:\n  root: C\n  scale: major\n  theme: minimal\n")
+
+	for _, bad := range []string{"forever", "-1h"} {
+		err := Patch(path, map[string]string{"session.max_lease": bad})
+		if err == nil {
+			t.Errorf("Patch session.max_lease=%q = nil, want error", bad)
+		}
+	}
+}

@@ -446,10 +446,16 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `scorecard.yml` puts write permissions (`security-events: write`, `id-token: write`) at the **job** level, not the workflow level. zizmor `--pedantic` flags workflow-level write permissions as `excessive-permissions`. The workflow level carries only `contents: read`.
 - `errSocketMissing` and `errSocketStale` in `cmd/hum/client.go` are declared as
   `fmt.Errorf("%w", errNoDaemon)`, not `errors.New(...)`. The wrap is load-bearing:
-  `daemonStop` checks `errors.Is(err, errNoDaemon)` and exits 0 for both. Converting
-  them to `errors.New` makes `hum daemon stop` exit 3 against a missing or stale socket,
-  breaking the unconditional-teardown contract. `errSocketDenied` deliberately does
-  not wrap `errNoDaemon` so that `hum daemon stop` exits 3 for `EACCES` instead.
+  `daemonStop` checks `errors.Is(err, errNoDaemon)` and exits 0 for both.
+  Converting them to `errors.New` makes `hum daemon stop` exit 3 against a missing
+  or stale socket, breaking the unconditional-teardown contract. `errSocketDenied`
+  deliberately does not wrap `errNoDaemon` so that `hum daemon stop` exits 3 for
+  `EACCES` instead.
+- A session with `owner_pid > 0` but an empty `owner_host` is never probed:
+  `ActiveToCancel` requires both fields and a hostname match. `hum start
+  --owner-pid N` populates both automatically. Raw senders using `nc` or `socat`
+  must include `"owner_host":"$(hostname)"` alongside `owner_pid`, or the pid is
+  silently ignored and the session relies on traps for termination.
 
 ## Protocol
 

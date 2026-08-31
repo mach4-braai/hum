@@ -293,3 +293,29 @@ func TestStartEndToEnd(t *testing.T) {
 		t.Errorf("daemon logs missing voices=1; logs:\n%s", logs)
 	}
 }
+
+func TestStartOwnerPIDSetsFields(t *testing.T) {
+	await := serveOne(t, `{"ok":true}`+"\n")
+	code := run([]string{"start", "--id", "t1", "--owner-pid", "12345"}, &bytes.Buffer{}, &bytes.Buffer{})
+	if code != exitOK {
+		t.Fatalf("exit %d, want %d", code, exitOK)
+	}
+	got := await()
+	if got.Event == nil {
+		t.Fatal("no event received")
+	}
+	if got.Event.OwnerPID != 12345 {
+		t.Errorf("OwnerPID = %d, want 12345", got.Event.OwnerPID)
+	}
+	if got.Event.OwnerHost == "" {
+		t.Error("OwnerHost is empty, want the machine's hostname")
+	}
+}
+
+func TestStartOwnerPIDNegativeIsUsageError(t *testing.T) {
+	var stderr bytes.Buffer
+	code := run([]string{"start", "--owner-pid=-1"}, &bytes.Buffer{}, &stderr)
+	if code == exitOK {
+		t.Error("exit 0 for negative --owner-pid, want non-zero")
+	}
+}

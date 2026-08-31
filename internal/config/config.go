@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mach4-braai/hum/internal/harmony"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	Project ProjectConfig `yaml:"project"`
 	Music   MusicConfig   `yaml:"music"`
 	Audio   AudioConfig   `yaml:"audio"`
+	Session SessionConfig `yaml:"session"`
 }
 
 type ProjectConfig struct {
@@ -32,6 +34,10 @@ type MusicConfig struct {
 type AudioConfig struct {
 	Volume float64 `yaml:"volume"`
 	Muted  bool    `yaml:"muted"`
+}
+
+type SessionConfig struct {
+	MaxLease string `yaml:"max_lease"`
 }
 
 func Default() Config {
@@ -70,6 +76,15 @@ func (c Config) Validate() error {
 	v := c.Audio.Volume
 	if !(v >= 0 && v <= 1) {
 		return fmt.Errorf("audio.volume: %v out of range [0, 1]", v)
+	}
+	if c.Session.MaxLease != "" {
+		d, err := time.ParseDuration(c.Session.MaxLease)
+		if err != nil {
+			return fmt.Errorf("session.max_lease: %q is not a valid duration", c.Session.MaxLease)
+		}
+		if d < 0 {
+			return fmt.Errorf("session.max_lease: %v must not be negative", d)
+		}
 	}
 	return nil
 }

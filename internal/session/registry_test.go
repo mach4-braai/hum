@@ -329,7 +329,7 @@ func TestReap(t *testing.T) {
 	}
 }
 
-func TestReapActiveNotReaped(t *testing.T) {
+func TestReapDoesNotTouchActiveSessions(t *testing.T) {
 	old := now
 	t.Cleanup(func() { now = old })
 	now = func() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
@@ -342,7 +342,164 @@ func TestReapActiveNotReaped(t *testing.T) {
 	now = func() time.Time { return time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC) }
 	dropped := r.Reap(1 * time.Second)
 	if dropped != 0 {
-		t.Errorf("Reap dropped %d active sessions, want 0", dropped)
+		t.Errorf("Reap dropped %d active sessions, want 0 — active sessions must travel the cancellation path, not be deleted directly", dropped)
+	}
+}
+
+func startEventWithOwner(id, host string, pid int) protocol.Event {
+	return protocol.Event{Event: protocol.SessionStarted, ID: id, OwnerPID: pid, OwnerHost: host}
+}
+
+func TestActiveCancelDeadOwner(t *testing.T) {
+	old := pidAlive
+	t.Cleanup(func() { pidAlive = old })
+	pidAlive = func(int) bool { return false }
+
+	r := New()
+	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := r.ActiveToCancel(0, "myhost")
+	if len(candidates) != 1 {
+		t.Fatalf("ActiveToCancel returned %d candidates, want 1", len(candidates))
+	}
+	if candidates[0].ID != "s1" {
+		t.Errorf("candidate id = %q, want s1", candidates[0].ID)
+	}
+	if candidates[0].Reason == "" {
+		t.Error("candidate reason is empty")
+	}
+}
+
+func TestActiveCancelAliveOwner(t *testing.T) {
+	old := pidAlive
+	t.Cleanup(func() { pidAlive = old })
+	pidAlive = func(int) bool { return true }
+
+	r := New()
+	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := r.ActiveToCancel(0, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates for alive owner, want 0", len(candidates))
+	}
+}
+
+func TestActiveCancelHostMismatch(t *testing.T) {
+	old := pidAlive
+	t.Cleanup(func() { pidAlive = old })
+	pidAlive = func(int) bool { return false }
+
+	r := New()
+	if _, err := r.Apply(startEventWithOwner("s1", "otherhost", 12345)); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := r.ActiveToCancel(0, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates for host mismatch, want 0", len(candidates))
+	}
+}
+
+func TestActiveCancelNoOwnerNoPid(t *testing.T) {
+	r := New()
+	if _, err := r.Apply(startEvent("s1", "", "", 0, nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := r.ActiveToCancel(0, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates for ownerless session with disabled lease, want 0", len(candidates))
+	}
+}
+
+func TestActiveCancelLeaseExpired(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	current := base
+	old := now
+	t.Cleanup(func() { now = old })
+	now = func() time.Time { return current }
+
+	r := New()
+	if _, err := r.Apply(startEvent("s1", "", "", 0, nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	const lease = time.Hour
+	current = base.Add(2 * time.Hour)
+	candidates := r.ActiveToCancel(lease, "myhost")
+	if len(candidates) != 1 {
+		t.Fatalf("ActiveToCancel returned %d candidates, want 1 for expired lease", len(candidates))
+	}
+	if candidates[0].ID != "s1" {
+		t.Errorf("candidate id = %q, want s1", candidates[0].ID)
+	}
+}
+
+func TestActiveCancelLeaseNotExpired(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	current := base
+	old := now
+	t.Cleanup(func() { now = old })
+	now = func() time.Time { return current }
+
+	r := New()
+	if _, err := r.Apply(startEvent("s1", "", "", 0, nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	const lease = time.Hour
+	current = base.Add(30 * time.Minute)
+	candidates := r.ActiveToCancel(lease, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates, want 0 for unexpired lease", len(candidates))
+	}
+}
+
+func TestActiveCancelLeaseRefreshedByUpdate(t *testing.T) {
+	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	current := base
+	old := now
+	t.Cleanup(func() { now = old })
+	now = func() time.Time { return current }
+
+	r := New()
+	if _, err := r.Apply(startEvent("s1", "", "", 0, nil)); err != nil {
+		t.Fatal(err)
+	}
+
+	const lease = time.Hour
+	current = base.Add(90 * time.Minute)
+	if _, err := r.Apply(protocol.Event{Event: protocol.SessionUpdated, ID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	current = base.Add(2 * time.Hour)
+	candidates := r.ActiveToCancel(lease, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates after lease refresh, want 0", len(candidates))
+	}
+}
+
+func TestActiveCancelTerminalSessionSkipped(t *testing.T) {
+	old := pidAlive
+	t.Cleanup(func() { pidAlive = old })
+	pidAlive = func(int) bool { return false }
+
+	r := New()
+	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Apply(protocol.Event{Event: protocol.SessionCompleted, ID: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := r.ActiveToCancel(0, "myhost")
+	if len(candidates) != 0 {
+		t.Errorf("ActiveToCancel returned %d candidates for terminal session, want 0", len(candidates))
 	}
 }
 

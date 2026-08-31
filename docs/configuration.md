@@ -75,7 +75,8 @@ maps to the layer that supplied it. Fields untouched by any layer report
 given field.
 
 Field paths tracked: `project.name`, `music.root`, `music.octave`,
-`music.scale`, `music.theme`, `audio.volume`, `audio.muted`.
+`music.scale`, `music.theme`, `audio.volume`, `audio.muted`,
+`session.max_lease`.
 
 ## Keys and defaults
 
@@ -88,6 +89,7 @@ Field paths tracked: `project.name`, `music.root`, `music.octave`,
 | `music.theme` | `"minimal"` | `music.theme` | `music.theme` |
 | `audio.volume` | `0.6` | `audio.volume` | `audio.volume` |
 | `audio.muted` | `false` | `audio.muted` | `audio.muted` |
+| `session.max_lease` | `""` (off) | `session.max_lease` | `session.max_lease` |
 
 Every key is settable in YAML only. The last column names the `cli` layer's key
 in `Resolve`'s `cliOverrides` map, which neither `hum` nor `humd` passes — no
@@ -133,6 +135,14 @@ user-extensible files under `$HUM_HOME/themes/`, so the full set of valid
 names is not known to this package; `internal/theme` reports an unknown
 theme when it fails to load one.
 
+`session.max_lease` sets the maximum duration an ownerless active session
+may go without a `session.updated` event before the daemon cancels it and
+releases its drone. The value is a Go duration string (`"24h"`, `"30m"`).
+The default is `""`, which disables the lease entirely. A negative value
+is rejected. Use this when integrations that cannot declare an `owner_pid`
+are known to be bounded in duration and the risk of a leaked drone
+outweighs the risk of an early cancellation.
+
 ## Worked example
 
 A complete `config.yaml` showing every key at once:
@@ -150,6 +160,9 @@ music:
 audio:
   volume: 0.6
   muted: false
+
+session:
+  max_lease: ""
 ```
 
 All keys are optional. An empty file is valid; defaults fill every omitted
