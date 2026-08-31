@@ -115,7 +115,13 @@ The failure cadence is exactly that shape: `internal/harmony` emits two notes, t
 
 `Read` therefore counts a source toward its bus's divisor only from the frame it sounds. `Delayed.FramesUntilOnset` reports how many frames a source is still waiting; `phraseSource` returns its remaining offset. Sources already sounding are counted before the batch, and an onset landing inside the batch is collected, sorted, and applied in the sample loop at that exact frame, so the divisor never depends on where a buffer boundary happens to fall. A separate tally of sources *present* on the bus decides whether the bus is cleared and summed, because a waiting source must keep receiving `Mix` calls — that is what advances its countdown.
 
-`TestADelayedNoteSoundsTheSameAtAnyBlockSize` holds one offset note identical to 1e-9 across nine block sizes from 1 to 8 192 frames. `TestTheTwoFailureNotesSoundAtTheSameLevel` renders the real cadence at the same sizes and holds the two notes within 0.5 dB.
+Three tests divide that claim up, and the split matters because two of them cannot see the onset logic at all.
+
+`TestADelayedNoteSoundsTheSameAtAnyBlockSize` renders one offset note and requires the level identical to 1e-9 across nine block sizes from 1 to 8 192 frames. It proves the note's *duration* lands on the right sample, and nothing about the divisor: a lone source divides by one whether or not it is counted while waiting.
+
+`TestTheTwoFailureNotesSoundAtTheSameLevel` renders the real cadence at the same sizes within 0.5 dB. Measured over a note's whole 300 ms a late divisor averages away to under half a dB, so this one does not catch it either.
+
+`TestAnOnsetInsideABufferTakesTheDivisorAtThatFrame` is the one that does. The cadence's second note begins at frame 14 400, so the sweep lands its onset 442, 64, 2 115, 2 112, 2 109, 4 400 and 6 208 frames into a buffer, the last two inside the *second* scratch batch since `maxScratchFrames` is 4 096. Measuring only the 1 500 frames from the onset, where the error lives rather than where it dilutes, a count taken before `Mix` reads 0.52 to 0.74 dB hot at every one of those sizes.
 
 An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal.
 
