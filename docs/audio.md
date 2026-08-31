@@ -89,7 +89,7 @@ That per-voice figure is measured, not derived. Dividing the twelve-voice mix RM
 
 Sixteen notes is `maxPhraseVoices`, the cap a burst of completions hits, and a fixed per-note gain drove the output stage to a pre-limiter peak of 3.14 at `volume: 0.6`: not a chime, a crunch. `√16` brings that to 1.46. `TestPhraseVoicesSumIncoherentlyRatherThanLinearly` holds the curve.
 
-#### The chime got louder, so the theme gains were halved
+#### The chime got louder, so the theme gains came down 2.92 dB
 
 A single chime divides by one, so the phrase bus scales it by the master gain alone. The shared divisor that preceded the split scaled it by `masterGain / (N+1)`. Against one drone that is a factor of two: **the chime term is +6.02 dB**, and +22.3 dB against twelve.
 
@@ -101,7 +101,9 @@ That is not a neutral refactor, so `completion_gain` and `failure_gain` moved fr
 | 2 | +0.12 dB | +4.70 dB | **+3.00 dB** |
 | 12 | +0.08 dB | +4.70 dB | **+3.00 dB** |
 
-The first column is the old behaviour in one number: a chime raised the total by nothing, because the duck removed as much energy as the chime added. It was not a quiet chime, it was an inaudible one, and it was inaudible by the same amount however many sessions were running.
+The first column is the bug in one number: a chime raised the total mix level by nothing, because the duck removed as much energy as the chime added. That is an energy measurement and not an audibility one — `completion_octaves: 1` puts the chime an octave above the drone it belongs to, so it stays spectrally distinct and a listener separates it regardless. What the column shows is that the chime bought no headroom in the mix, not that nobody could hear it.
+
+Read the columns as combined-mix RMS lift, which is not the chime's level against the drone bed. Measured directly, bus against bus, the chime sits **-0.02 dB against the bed** at the shipped gain and +2.9 dB at the old one. Two equal uncorrelated sources give a +3.01 dB lift, which is exactly why a +3.00 dB figure reads as "3 dB above the drones" and means the opposite. The gains themselves moved by a factor of 5/7, or -2.92 dB, not by half; what is halved is failure against completion, in both the old pair and the new one.
 
 The shipped column is flat, which is the property worth having: a completion is equally prominent whether one session is running or twelve. Under the drone bus's interim `1/N` the same gain gave +2.79, +4.62 and +11.02 dB, so flatness comes from the drone curve rather than from the phrase gain.
 
