@@ -2,6 +2,7 @@ package audio
 
 import (
 	"math"
+	"slices"
 	"sync"
 )
 
@@ -24,6 +25,18 @@ const (
 
 type Source interface {
 	Mix(buf [][2]float32) (done bool)
+}
+
+type Delayed interface {
+	FramesUntilOnset() int
+}
+
+func framesUntilOnset(s Source) int {
+	d, ok := s.(Delayed)
+	if !ok {
+		return 0
+	}
+	return d.FramesUntilOnset()
 }
 
 type sourceEntry struct {
@@ -81,6 +94,7 @@ type Mixer struct {
 	active  []sourceEntry
 	done    []doneSource
 	alive   [busCount]int
+	onsets  []int
 }
 
 func NewMixer(f Format) *Mixer {
@@ -89,6 +103,7 @@ func NewMixer(f Format) *Mixer {
 		gain:    1.0,
 		active:  make([]sourceEntry, 0, maxSources),
 		done:    make([]doneSource, 0, maxSources),
+		onsets:  make([]int, 0, maxSources),
 	}
 	for bus := range m.scratch {
 		m.ramps[bus] = newNormRamp(f.SampleRate)
@@ -185,12 +200,6 @@ func (m *Mixer) Read(p []byte) (int, error) {
 
 	m.done = m.done[:0]
 
-	m.alive = [busCount]int{}
-	for idx := range m.active {
-		m.alive[m.active[idx].bus]++
-	}
-	m.retarget(gain)
-
 	written := 0
 	remaining := frames
 	for remaining > 0 {
@@ -199,7 +208,28 @@ func (m *Mixer) Read(p []byte) (int, error) {
 			batch = maxScratchFrames
 		}
 
-		sounding := m.alive[PhraseBus] > 0
+		m.alive = [busCount]int{}
+		queued := 0
+		m.onsets = m.onsets[:0]
+		for idx := range m.active {
+			if m.active[idx].src == nil {
+				continue
+			}
+			bus := m.active[idx].bus
+			if bus == PhraseBus {
+				queued++
+			}
+			switch onset := framesUntilOnset(m.active[idx].src); {
+			case onset == 0:
+				m.alive[bus]++
+			case onset < batch:
+				m.onsets = append(m.onsets, onset)
+			}
+		}
+		slices.Sort(m.onsets)
+		m.retarget(gain)
+
+		sounding := queued > 0
 		drone := m.scratch[DroneBus][:batch]
 		phrase := m.scratch[PhraseBus][:batch]
 		for i := range drone {
@@ -226,7 +256,13 @@ func (m *Mixer) Read(p []byte) (int, error) {
 			}
 		}
 
+		next := 0
 		for i := range batch {
+			for next < len(m.onsets) && m.onsets[next] == i {
+				m.alive[PhraseBus]++
+				m.retarget(gain)
+				next++
+			}
 			dn := m.ramps[DroneBus].step()
 			l := float64(drone[i][0]) * dn
 			r := float64(drone[i][1]) * dn

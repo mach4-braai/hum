@@ -81,6 +81,16 @@ The first column is the bug in one number: a chime raised the total by nothing, 
 
 The last column is still voice-count dependent, because the drone bus keeps `1/N` at this point. Flattening it is the drone curve's job, not the phrase gain's, and the gains were chosen against the flat figure the next change produces.
 
+#### The divisor counts sounding sources, not scheduled ones
+
+`Trigger` adds every note of a phrase to the mixer at once, and a note with a non-zero `Offset` then sits there emitting silence until its sample countdown elapses. Counting it while it waits would divide the notes that *are* sounding by a source contributing nothing.
+
+The failure cadence is exactly that shape: `internal/harmony` emits two notes, the second at `Offset: FailureDuration`. Both enter the mixer at trigger time, so a naive count made the divisor 2 while only the first note sounded, and the cadence came out **2.45 dB lopsided** — first note quiet, second note full. A test built from hand-written notes at offset 0 cannot see this, because then the count of 2 is correct.
+
+`Read` therefore counts a source toward its bus's divisor only when it is not `Waiting`. `phraseSource` reports `Waiting()` while its offset remains; anything not implementing the interface always counts. A separate tally of sources *present* on the phrase bus still decides whether the bus is cleared and summed, because a waiting source must keep receiving `Mix` calls — that is what advances its countdown.
+
+`TestTheTwoFailureNotesSoundAtTheSameLevel` renders the real cadence and holds the two notes within 0.5 dB.
+
 An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal. Measured against a single-bus `Read`, `BenchmarkMixerRead/minimal` at twelve voices is unchanged inside the run-to-run spread.
 
 ### The output gain ramp
@@ -126,7 +136,9 @@ The envelope has three active phases: attack, sustain, and release.
 
 Default values come from `minimal.yaml`: **attack 2.5 s**, **release 3.0 s** (`drone.attack` / `drone.release`). The `Envelope` struct is populated by the renderer from `theme.DroneSpec`.
 
-`Mix` returns `done = true` only after the release phase has fully elapsed (all release samples consumed or `curGain` reaches zero). The remaining frames in the buffer are zeroed before returning. This ensures the `Mixer` removes the source cleanly — it can never truncate a fade mid-sample.
+`Mix` returns `done = true` only after the release phase has fully elapsed (all release samples consumed or `curGain` reaches zero).
+
+**`Mix` adds; it never assigns.** Every source on a bus mixes into the same scratch buffer, and the `Mixer` clears that buffer once at the top of each batch. A source that finishes therefore stops adding and returns — it must not zero the remainder. An earlier version did zero it, on the reasoning that the mixer could then remove the source cleanly, and that was wrong twice: the clearing is already the mixer's job, and assigning over shared scratch erased whatever peers had mixed in first. Because `Read` snapshots sources by ranging a map, "first" is randomised per process, so the bug showed up as output that changed between runs of the same input — measured at up to 1.2 dB on a two-note phrase. `TestOscReleaseYieldsDone` and `TestOscMixAlreadyDone` prefill the buffer with a peer's samples and require them to survive.
 
 ### Click avoidance
 
@@ -302,6 +314,8 @@ Phrase playback is implemented by `phraseSource`, a `Source` wrapping an `Osc` w
 A `time.Sleep` goroutine per note would schedule notes relative to the wall clock. The audio device runs on its own clock, driven by buffer-drain callbacks. Under load, the wall clock and the audio clock diverge: a note sleeping for 250 ms wakes anywhere from 245 ms to 260 ms later, depending on OS scheduling, while the audio clock has advanced exactly 250 ms × 48 000 Hz = 12 000 samples. The result is jitter audible as timing inconsistency between consecutive phrases.
 
 `phraseSource.Mix` instead maintains an `offsetSamples` counter. Each call to `Mix` decrements the counter by the number of frames in the buffer before passing any remainder to the inner `Osc`. Because `Mix` is driven by the same audio clock that consumes samples, the offset is exact to the sample — zero jitter regardless of wall-clock load.
+
+The note's **end** is exact for the same reason, and used not to be. `Mix` once subtracted the whole buffer length from `durationSamples` and released when the result went non-positive, which rounded a note's length up to the next buffer boundary: a 300 ms note released as much as 85 ms early at a 4 096-frame buffer, so its level depended on the audio device's block size. `Mix` now splits the buffer at `durationSamples`, mixes the sustained part, calls `Release`, and mixes the tail. `TestADelayedNoteSoundsTheSameAtAnyBlockSize` renders one offset note at nine block sizes from 1 to 8 192 frames, including sizes that straddle `maxScratchFrames`, and requires the measured level to be identical to 1e-9.
 
 ### Percussive envelope
 
