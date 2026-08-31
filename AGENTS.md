@@ -444,6 +444,12 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - Every job in `ci.yml` must include `./.github/actions/go-cache`. `TestEveryCIJobRestoresTheGoCaches` counts `runs-on:` and go-cache references and fails if they differ. Adding a job without the composite makes the count mismatch fail that test.
 - Adding an action to a workflow without recording it in `pinnedActions` (in `internal/infra/ci_test.go`) fails `TestWorkflowsPinEveryActionToAReviewedCommit`. The lead records the pin; the workflow author reports it as `owner/repo version sha`.
 - `scorecard.yml` puts write permissions (`security-events: write`, `id-token: write`) at the **job** level, not the workflow level. zizmor `--pedantic` flags workflow-level write permissions as `excessive-permissions`. The workflow level carries only `contents: read`.
+- `errSocketMissing` and `errSocketStale` in `cmd/hum/client.go` are declared as
+  `fmt.Errorf("%w", errNoDaemon)`, not `errors.New(...)`. The wrap is load-bearing:
+  `runStop` checks `errors.Is(err, errNoDaemon)` and exits 0 for both. Converting
+  them to `errors.New` makes `hum stop` exit 3 against a missing or stale socket,
+  breaking the unconditional-teardown contract. `errSocketDenied` deliberately does
+  not wrap `errNoDaemon` so that `hum stop` exits 3 for `EACCES` instead.
 
 ## Protocol
 

@@ -124,9 +124,6 @@ func doctorCollect(e *env, audioTest bool) []doctorCheck {
 func doctorPingDaemon(e *env) (bool, string) {
 	got, err := query(protocol.Request{Command: protocol.CmdPing}, e.opts.timeout)
 	if err != nil {
-		if errors.Is(err, errNoDaemon) {
-			return false, "no daemon listening"
-		}
 		return false, err.Error()
 	}
 	if !got.response.OK {

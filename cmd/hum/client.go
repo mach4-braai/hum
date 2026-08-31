@@ -19,6 +19,9 @@ func setConnDeadline(c net.Conn, t time.Time) error {
 var connSetDeadline = setConnDeadline
 
 var errNoDaemon = errors.New("no daemon listening")
+var errSocketMissing = fmt.Errorf("%w", errNoDaemon)
+var errSocketStale = fmt.Errorf("%w", errNoDaemon)
+var errSocketDenied = errors.New("socket access denied")
 
 type answer struct {
 	raw      json.RawMessage
@@ -29,7 +32,7 @@ func query(request protocol.Request, timeout time.Duration) (answer, error) {
 	socket := paths.SocketPath()
 	conn, err := net.DialTimeout("unix", socket, timeout)
 	if err != nil {
-		return answer{}, fmt.Errorf("%w at %s", errNoDaemon, socket)
+		return answer{}, classifyDialError(err, socket)
 	}
 	defer conn.Close()
 
@@ -53,7 +56,9 @@ func query(request protocol.Request, timeout time.Duration) (answer, error) {
 }
 
 func unreachable(e *env, err error) int {
-	if errors.Is(err, errNoDaemon) {
+	if errors.Is(err, errSocketDenied) {
+		fmt.Fprintf(e.stderr, "hum: %v\nrun `hum doctor` to diagnose ownership and permissions\n", err)
+	} else if errors.Is(err, errNoDaemon) {
 		fmt.Fprintf(e.stderr, "hum: %v\nstart it with `humd`, or `brew services start hum`\n", err)
 	} else {
 		fmt.Fprintf(e.stderr, "hum: %v\n", err)
