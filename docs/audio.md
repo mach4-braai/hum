@@ -60,7 +60,14 @@ After normalisation, each sample is passed through `math.Tanh`. This is a smooth
 
 ## Oscillator
 
-`Osc` is a stereo sine-wave oscillator with an ADSR envelope that implements `Source`.
+`Osc` is a stereo oscillator with an ADSR envelope that implements `Source`. It
+carries two waveform paths, selected by `SetTone`: a single sine plus an optional
+second harmonic, and a band-limited partial stack played by a detuned ensemble
+through a low-pass filter. `ToneOf` maps a theme onto the choice — `waveform:
+sine` yields the zero `Tone` and keeps the sine path, `waveform: strings` fills
+it in. Phrase notes always take the sine path: `newPhraseSource` never calls
+`SetTone`, so a completion chime stays a pure tone that reads as a separate
+gesture against a string pad.
 
 ### Envelope
 
@@ -80,13 +87,91 @@ Default values come from `minimal.yaml`: **attack 2.5 s**, **release 3.0 s** (`d
 
 Frequency is interpolated per-sample toward `tgtFreqL` / `tgtFreqR` using a 1st-order IIR with `freqSmoothAlpha = 0.01` (~100-sample / 2 ms time constant at 48 kHz). A `SetFreq` or `SetExpression` call changes the target; the running phase accumulator is never reset, so the sine wave is always continuous. The same smoothing applies across `Read` buffer boundaries.
 
-The documented phase-continuity threshold is **0.10** (absolute amplitude). For a
-440 Hz sine at gain 0.8 the largest per-sample step through the full pipeline
-measures **0.0326**: the phase increment is 2π × 440 / 48000 ≈ 0.0576, and the
-amplitude reaching the buffer is `curGain × invSqrt2` ≈ 0.566, so the derivative
-of the sine is ≈ 0.566 × 0.0576. That leaves roughly 3× headroom for the second
-harmonic and tremolo. `TestOscPhaseContinuity` and
-`TestOscPhaseContinuityMidBufferFreqChange` assert the threshold.
+Two phase-continuity thresholds are asserted, because the two waveforms have
+different legitimate slew.
+
+**Sine: 0.10** (absolute amplitude). For a 440 Hz sine at gain 0.8 the largest
+per-sample step through the full pipeline measures **0.0326**: the phase
+increment is 2π × 440 / 48000 ≈ 0.0576, and the amplitude reaching the buffer is
+`curGain × invSqrt2` ≈ 0.566, so the derivative of the sine is ≈ 0.566 × 0.0576.
+That leaves roughly 3× headroom for the second harmonic and tremolo.
+`TestOscPhaseContinuity` and `TestOscPhaseContinuityMidBufferFreqChange` assert
+it.
+
+**Strings: 0.35.** A partial stack has a flyback, and the low-pass is what bounds
+how fast it travels: after two cascaded one-poles at cutoff `fc`, the full
+peak-to-peak excursion takes about half a cycle of `fc`, so the largest step is
+≈ `4 × peak × fc / sampleRate`. For the `orchestra` values at gain 0.8 the peak
+reaching the buffer is `curGain × invSqrt2 × √voices × 1.31` ≈ 1.285. The 1.31 is
+the crest factor of an RMS-normalised 12-partial stack, and the `√voices` comes
+from the ensemble normalisation below. `fc` at `Intensity = 1` is
+1500 × 2^0.8 ≈ 2610 Hz. That gives 4 × 1.285 × 2610 / 48000 = **0.279**, which
+is what `TestStringsPhaseContinuityAcrossBuffers` measures over eight seconds at
+every drone pitch. Full-depth tremolo scales it by 1.1 to 0.307, and 0.35 leaves
+the rest as headroom. A real click is a step of order the peak itself, 1.285, so
+the threshold still catches one with 3.7× to spare.
+
+### Partial stack and wavetable
+
+`waveform: strings` plays `Σ sin(nθ)/n` for `n = 1 … drone.partials`: odd and
+even partials at 1/n, the spectrum of a sawtooth, which is the raw material a
+low-pass turns into a string or pad. Computing that sum per sample would cost
+`partials × channels × ensemble_voices` sine calls per frame, 72 at the
+`orchestra` values, so `internal/audio/wavetable.go` precomputes it.
+
+- One table per octave band: `tableBands = 11` bands of `tableSize = 2048`
+  samples, starting at `tableBaseHz = 16` Hz, so the set spans 16 Hz to 32 kHz.
+- Band *k* keeps only the partials that stay below `tableBandLimit = 0.45` of the
+  sample rate at the **top** of the band, so nothing in it can alias. A stack
+  therefore thins as pitch rises, which is also what a real instrument does.
+- The band is chosen from `math.Frexp` rather than `math.Log2`, because the
+  exponent of a float64 already is the octave. Selection uses
+  `max(curFreq, tgtFreq)` so a glide in either direction lands on the safer,
+  thinner table.
+- Every band is scaled by one factor, computed so band 0 carries the RMS of a
+  unit sine (`invSqrt2`). That is what keeps `drone.gain` meaning the same thing
+  across both waveforms; see § Level parity.
+- Tables are built once per `(sampleRate, partials)` pair and cached at package
+  level under a mutex. `NewOsc` never builds one; `SetTone` does, off the audio
+  callback. `Mix` only interpolates, so the zero-allocation contract holds, and
+  `TestStringsMixDoesNotAllocate` asserts it separately from the sine case.
+- Each table holds `tableSize + 1` samples, the last a copy of the first. Linear
+  interpolation can then read `samples[i+1]` with no wrap branch.
+
+### Ensemble
+
+`drone.ensemble_voices` copies of the stack sound per channel, spread across
+`±ensemble_cents / 2` and each drifting by up to `driftDepth = 0.5` of that
+window under its own LFO. The LFO rates differ by `driftSpread = 0.37` per copy,
+so no two copies ever return to the same relationship. One player and one
+detuned pair sound like one instrument; three copies moving independently are
+what makes a section.
+
+Two costs are avoided deliberately:
+
+- The drift LFOs and the per-copy target frequencies are recomputed every
+  `toneControlRate = 64` samples, not every sample. The per-sample frequency IIR
+  (`freqSmoothAlpha`) smooths the 1.3 ms staircase away, so nothing is audible.
+- Copies start phase-**coherent**. Spreading their initial phases evenly is the
+  obvious-looking choice and it is wrong. Three copies of a stack at 0°, 120° and
+  240° cancel every partial whose index is not a multiple of three, which
+  measured 6 dB down and thin. The detune pulls them apart on its own within a
+  beat period.
+
+### Level parity
+
+Detuned copies are summed and divided by `√voices`, not by `voices`. The
+division by `voices` is right only while the copies are coherent; a detuned
+ensemble spends most of its time incoherent, where it costs a further factor of
+`√voices`, 4.8 dB at three copies. `√voices` normalises for the incoherent case
+and lets the coherent moments swell above it, which is the chorusing the
+ensemble exists to produce.
+
+Measured at `drone.gain = 0.5`, `Intensity = 1`, over eight seconds, `orchestra`
+lands +0.7 dB against `minimal` at C3, −0.7 dB at C4 and −1.2 dB at A4.
+`TestStringsHoldsTheLevelOfTheSineItReplaces` holds the drone register to 3 dB.
+Above the register the low-pass takes more of the stack away: A5 measures
+−2.9 dB, and that is the intended trade rather than a defect.
 
 ### Expression mapping
 
@@ -94,9 +179,32 @@ harmonic and tremolo. `TestOscPhaseContinuity` and
 
 | Expression field | Mapping |
 |-----------------|---------|
-| `Intensity` | Blends in a quiet second harmonic: `harmonic = Intensity × DroneSpec.Harmonic`. The harmonic is `sin(2θ)` where `θ` is the running fundamental phase — no separate phase accumulator needed. |
+| `Intensity` | On the sine path, blends in a quiet second harmonic: `harmonic = Intensity × DroneSpec.Harmonic`, where the harmonic is `sin(2θ)` on the running fundamental phase, so no separate accumulator is needed. On the strings path it opens the low-pass instead: `fc = DroneSpec.CutoffHz × 2^(Intensity × DroneSpec.Brightness)`, clamped to `filterCeiling = 0.45` of the sample rate. `orchestra` moves 1500 Hz to 2610 Hz across the axis. Both mappings are the same gesture: a busier session gets a brighter voice. |
 | `Tremolo` | Scales amplitude modulation depth: `tremoloScale = 1 + Tremolo × 0.10 × sin(2π × TremoloHz × t)`. At `Expression.Tremolo = 1.0` and `DroneSpec.TremoloHz = 5.0 Hz` (minimal theme default), the amplitude oscillates ±10%. |
-| `Width` | Expands stereo spread via inter-channel detune: `freqL = baseFreq × 2^(Width × DetuneCents / 2400)`, `freqR = baseFreq × 2^(−Width × DetuneCents / 2400)`. Both channels carry equal amplitude (`curGain × invSqrt2`) so L² + R² is constant regardless of `Width` — constant-power stereo. |
+| `Width` | Expands stereo spread via inter-channel detune: `freqL = baseFreq × 2^(Width × DetuneCents / 2400)`, `freqR = baseFreq × 2^(−Width × DetuneCents / 2400)`. On the strings path the same offset is added to every ensemble copy's cents. Both channels carry equal amplitude (`curGain × invSqrt2`) so L² + R² is constant regardless of `Width` — constant-power stereo. |
+
+### Cost
+
+`BenchmarkOscMix` and `BenchmarkMixerRead`, 1024-frame buffers, `Intensity`,
+`Tremolo` and `Width` all at 1, zero allocations in every case. Medians of five
+`-benchtime 2s` runs on an idle Apple M4. **Before** is the commit that added
+neither waveform path, measured from a clean clone with the same benchmark file;
+a single run varies by up to 10% on this machine, which is why the table is
+medians and why the ratio is the finding rather than the absolute numbers.
+
+| Benchmark | before, ns/op | after, ns/op | per second of audio | one core |
+|-----------|---------------|--------------|---------------------|----------|
+| `OscMix/minimal` | 43 836 | 43 478 | 2.04 ms | 0.20% |
+| `OscMix/orchestra` | n/a | 32 170 | 1.51 ms | 0.15% |
+| `MixerRead/minimal`, 12 voices | 602 617 | 611 321 | 28.7 ms | 2.87% |
+| `MixerRead/orchestra`, 12 voices | n/a | 386 309 | 18.1 ms | 1.81% |
+
+Two findings. The sine path did not move: the `o.table != nil` branch added to
+`Mix` costs less than the run-to-run spread, so `minimal` is as cheap as it was.
+And the stack is **cheaper** than the sine it replaces, by 36% at twelve voices,
+because the sine path calls `math.Sin` four times per frame (two channels,
+fundamental and second harmonic) while the strings path calls it once for the
+tremolo and otherwise interpolates six table entries, three copies per channel.
 
 ### Voice-count normalisation placement
 

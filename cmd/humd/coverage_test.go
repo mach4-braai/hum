@@ -430,7 +430,7 @@ func TestApplyCommandThemeListPayloadShape(t *testing.T) {
 	if !found {
 		t.Errorf("theme.list = %v, want 'minimal' listed", data.Themes)
 	}
-	if data.Active != "minimal" {
+	if data.Active != d.theme.Name {
 		t.Errorf("theme.list active = %q, want the daemon's current theme so a client can mark it", data.Active)
 	}
 }

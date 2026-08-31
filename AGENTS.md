@@ -175,6 +175,31 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 
 - `volume` bounds read `!(v >= 0 && v <= 1)`. Every comparison against `NaN` is
   false, so `v < 0 || v > 1` accepts `"NaN"`.
+- The ensemble copies in `SetTone` start at phase 0 on purpose. Spreading them
+  evenly across the cycle looks tidier and cancels the fundamental: three copies
+  at 0°, 120° and 240° of a 1/n partial stack measure 6 dB down and thin, because
+  every partial whose index is not a multiple of three sums to zero. Only
+  `driftPhase` is spread.
+- `ensembleSample` divides by `√voices`, not by `voices`. Dividing by `voices` is
+  correct only while the copies are coherent, which a detuned ensemble is not,
+  and it measured 4 to 9 dB under `minimal` at the same `drone.gain`.
+  `TestStringsHoldsTheLevelOfTheSineItReplaces` is the check.
+- `minimal` must stay sample-identical. `Osc.Mix` keeps the sine arithmetic in
+  its original order behind `o.table != nil`, and `ToneOf` returns the zero
+  `Tone` for any waveform other than `strings`. Merging the two paths into one
+  wavetable lookup would change every existing `minimal` sample and no test
+  compares against a recording.
+- The strings phase-continuity threshold is 0.35 against the sine path's 0.10,
+  and both derivations are in `docs/audio.md` § Click avoidance. A partial stack
+  has a flyback whose slew is bounded by the low-pass, `4 × peak × fc / sr`, so
+  the number moves whenever `orchestra`'s `cutoff_hz` or `brightness_octaves`
+  moves. Raising it without redoing that arithmetic deletes the test's meaning.
+- Phrase notes never call `SetTone`, so they stay sine under every theme. That is
+  what keeps a completion chime distinct from a string pad, and it is why
+  `newPhraseSource` takes `PhrasesSpec` alone.
+- `internal/theme` cannot see the sample rate, so `drone.cutoff_hz` is bounded by
+  a constant there and clamped to `filterCeiling = 0.45` of the rate in
+  `updateFilter`. A theme may legally ask for 20 kHz at 8 kHz output.
 - `voicing` does not lift every harmony. A third keeps its scale octave and a
   sixth drops one, so the default C4 `major` install sounds A3, C4, E4 — the
   relative minor — before it sounds anything else. Restoring the unconditional

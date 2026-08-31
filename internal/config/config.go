@@ -46,7 +46,7 @@ func Default() Config {
 			Root:   "C",
 			Octave: 4,
 			Scale:  "major",
-			Theme:  "minimal",
+			Theme:  "orchestra",
 		},
 		Audio: AudioConfig{
 			Volume: 0.6,

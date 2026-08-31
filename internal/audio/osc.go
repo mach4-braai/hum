@@ -54,6 +54,16 @@ type Osc struct {
 	detuneCents  float64
 	width        float64
 
+	tone      Tone
+	table     *wavetable
+	voices    int
+	intensity float64
+	control   int
+	spread    float64
+	ens       [ensembleMax]ensembleVoice
+	lp        [2][2]float64
+	lpA       float64
+
 	state          envState
 	attackSamples  float64
 	releaseSamples float64
@@ -88,6 +98,7 @@ func (o *Osc) SetFreq(freq float64) {
 	factor := o.width * o.detuneCents / 2400.0
 	o.tgtFreqL = freq * math.Pow(2, factor)
 	o.tgtFreqR = freq * math.Pow(2, -factor)
+	o.updateEnsemble()
 	o.mu.Unlock()
 }
 
@@ -121,6 +132,9 @@ func (o *Osc) SetExpression(e harmony.Expression, t theme.DroneSpec) {
 	factor := e.Width * t.DetuneCents / 2400.0
 	o.tgtFreqL = o.baseFreq * math.Pow(2, factor)
 	o.tgtFreqR = o.baseFreq * math.Pow(2, -factor)
+	o.intensity = e.Intensity
+	o.updateEnsemble()
+	o.updateFilter()
 	o.mu.Unlock()
 }
 
@@ -178,9 +192,6 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 			}
 		}
 
-		o.curFreqL += (o.tgtFreqL - o.curFreqL) * freqSmoothAlpha
-		o.curFreqR += (o.tgtFreqR - o.curFreqR) * freqSmoothAlpha
-
 		tremoloScale := 1.0
 		if o.tremoloHz > 0 && o.tremoloDepth > 0 {
 			o.tremoloPhase += twoPi * o.tremoloHz / o.sr
@@ -190,25 +201,22 @@ func (o *Osc) Mix(buf [][2]float32) bool {
 			tremoloScale = 1.0 + o.tremoloDepth*tremoloDepthMax*math.Sin(o.tremoloPhase)
 		}
 
-		phiL := twoPi * o.curFreqL / o.sr
-		phiR := twoPi * o.curFreqR / o.sr
-
-		sL := math.Sin(o.phaseL) + o.harmonic*math.Sin(2*o.phaseL)
-		sR := math.Sin(o.phaseR) + o.harmonic*math.Sin(2*o.phaseR)
+		var sL, sR float64
+		if o.table != nil {
+			sL, sR = o.ensembleSample()
+		} else {
+			o.curFreqL += (o.tgtFreqL - o.curFreqL) * freqSmoothAlpha
+			o.curFreqR += (o.tgtFreqR - o.curFreqR) * freqSmoothAlpha
+			sL = math.Sin(o.phaseL) + o.harmonic*math.Sin(2*o.phaseL)
+			sR = math.Sin(o.phaseR) + o.harmonic*math.Sin(2*o.phaseR)
+			o.phaseL = advancePhase(o.phaseL, twoPi*o.curFreqL/o.sr)
+			o.phaseR = advancePhase(o.phaseR, twoPi*o.curFreqR/o.sr)
+		}
 
 		amp := o.curGain * tremoloScale * invSqrt2
 
 		buf[i][0] += float32(sL * amp)
 		buf[i][1] += float32(sR * amp)
-
-		o.phaseL += phiL
-		if o.phaseL >= twoPi {
-			o.phaseL -= twoPi
-		}
-		o.phaseR += phiR
-		if o.phaseR >= twoPi {
-			o.phaseR -= twoPi
-		}
 	}
 
 	return false

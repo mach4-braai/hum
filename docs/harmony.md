@@ -252,7 +252,7 @@ One note: the session pitch transposed up `CompletionOctaves × 12` semitones (d
 **PRD §8 discrepancy.** The §8 prose reads "one or two octaves higher"; the §8 example shows a D2 session with a D5 completion note — three octaves, not two. The engine implements two octaves, following the prose. This discrepancy is recorded here rather than silently resolved.
 
 **`DefaultPhraseSpec` is not what a default install hears.** The daemon builds its
-engine from `theme.PhraseSpec()`, and the built-in `minimal` theme sets
+engine from `theme.PhraseSpec()`, and both built-in themes set
 `completion_octaves: 1`, `completion_duration: 0.2`, `failure_duration: 1.2` and
 `failure_gain: 0.35`. So a default install completes **one** octave above the
 drone — C4 becomes C5, not C6. `DefaultPhraseSpec` is the fallback for a theme

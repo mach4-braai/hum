@@ -203,7 +203,7 @@ alone, and opposite diagnoses. `sample_rate` is 0 for a renderer that cannot
 report one, and `version` lets `hum doctor` compare the client and daemon builds
 over the connection it already uses.
 
-`theme.list` returns `{"themes":["minimal"],"active":"minimal"}` — the available
+`theme.list` returns `{"themes":["minimal","orchestra"],"active":"orchestra"}` — the available
 themes plus the one in force, so a client can mark it without a second request.
 `theme.use` returns `{"theme":"minimal"}`, the theme it switched to, so a client
 can confirm the switch rather than assume it.
