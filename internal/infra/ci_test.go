@@ -315,7 +315,7 @@ var pinnedActions = map[string]struct {
 	"codecov/codecov-action":            {"v7.0.0", 5, "fb8b3582c8e4def4969c97caa2f19720cb33a72f"},
 	"codecov/test-results-action":       {"v1.2.1", 1, "0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3"},
 	"github/codeql-action/upload-sarif": {"v4.37.4", 4, "f205ea1c3313d32999d8d6a48b4f6530d4437b38"},
-	"jdx/mise-action":                   {"v4.2.3", 4, "9e7f7633ff6f6d6048a9418a68d48f288f50eb14"},
+	"jdx/mise-action":                   {"v4.2.4", 4, "7e36c90d9ab29c415a2384db3006f3ec8a8cc654"},
 	"ossf/scorecard-action":             {"v2.4.4", 2, "2d1146689b8cda280b9bc96326124645441f03bc"},
 }
 
