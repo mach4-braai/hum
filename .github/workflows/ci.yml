@@ -83,7 +83,7 @@ jobs:
           ./bin/hum.exe status
           ./bin/hum.exe start --id ci --title "windows leg"
           ./bin/hum.exe status --json
-          ./bin/hum.exe stop
+          ./bin/hum.exe daemon stop
           test ! -e "$HUM_SOCKET" || { echo "the socket outlived the daemon" >&2; exit 1; }
 
   e2e:

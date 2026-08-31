@@ -38,7 +38,7 @@ it.
 
 - **Attack and release shapes.** `TestTheSoundscapeDecaysToSilence` proves the
   buffer reaches zero. It cannot say the fade sounded smooth.
-- **Shutdown.** `hum stop` with four voices sounding must fade out, not cut.
+- **Shutdown.** `hum daemon stop` with four voices sounding must fade out, not cut.
   The e2e suite asserts the ordering in the log; only listening confirms it.
 - **Mute.** `hum mute` then `hum unmute` while a chord is sounding must ramp,
   not step.

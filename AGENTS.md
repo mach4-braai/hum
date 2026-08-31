@@ -446,10 +446,10 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 - `scorecard.yml` puts write permissions (`security-events: write`, `id-token: write`) at the **job** level, not the workflow level. zizmor `--pedantic` flags workflow-level write permissions as `excessive-permissions`. The workflow level carries only `contents: read`.
 - `errSocketMissing` and `errSocketStale` in `cmd/hum/client.go` are declared as
   `fmt.Errorf("%w", errNoDaemon)`, not `errors.New(...)`. The wrap is load-bearing:
-  `runStop` checks `errors.Is(err, errNoDaemon)` and exits 0 for both. Converting
-  them to `errors.New` makes `hum stop` exit 3 against a missing or stale socket,
+  `daemonStop` checks `errors.Is(err, errNoDaemon)` and exits 0 for both. Converting
+  them to `errors.New` makes `hum daemon stop` exit 3 against a missing or stale socket,
   breaking the unconditional-teardown contract. `errSocketDenied` deliberately does
-  not wrap `errNoDaemon` so that `hum stop` exits 3 for `EACCES` instead.
+  not wrap `errNoDaemon` so that `hum daemon stop` exits 3 for `EACCES` instead.
 
 ## Protocol
 

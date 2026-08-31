@@ -123,7 +123,7 @@ run the daemon and still answer `hum status`.
 ## Shutdown
 
 `SIGINT`, `SIGTERM` and the `shutdown` command all take the same path, so
-`hum stop` and a signal are indistinguishable in effect:
+`hum daemon stop` and a signal are indistinguishable in effect:
 
 1. Stop accepting connections; in-flight requests drain against the still-running
    event goroutine.
@@ -144,7 +144,7 @@ exists to prevent.
 ## Supervision
 
 `humd` is meant to run under a supervisor, and the only supervisor policy that
-works is "restart on abnormal exit". A clean `hum stop` must stay stopped, or the
+works is "restart on abnormal exit". A clean `hum daemon stop` must stay stopped, or the
 stop command is a no-op from the user's point of view.
 
 Homebrew's `keep_alive` expresses this differently on each platform, so
@@ -175,7 +175,7 @@ the pid `launchctl print` reports:
 So `Crashed` restarts `humd` for no failure at all.
 
 `successful_exit: false` is right there — launchd restarts on any non-zero exit,
-which is what a Go crash is, and `hum stop` exits 0 and is left alone. But
+which is what a Go crash is, and `hum daemon stop` exits 0 and is left alone. But
 Homebrew's systemd translation tests `@keep_alive[:successful_exit].present?`, and
 `false.present?` is false in ActiveSupport, so that branch emits **no** `Restart=`
 line at all. On Linux `crashed: true` is the value that produces

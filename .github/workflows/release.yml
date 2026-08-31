@@ -96,7 +96,7 @@ jobs:
           ./bin/humd.exe --no-audio --log-level debug &
           for _ in $(seq 100); do [ -e "$HUM_SOCKET" ] && break; sleep 0.2; done
           ./bin/hum.exe status
-          ./bin/hum.exe stop
+          ./bin/hum.exe daemon stop
           test ! -e "$HUM_SOCKET" || { echo "the socket outlived the daemon" >&2; exit 1; }
 
   release:

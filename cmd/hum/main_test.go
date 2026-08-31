@@ -168,7 +168,7 @@ func TestHelpListsEveryDocumentedCommandAndExitCode(t *testing.T) {
 
 		help := stderr.String()
 		for _, command := range []string{
-			"init", "start", "stop", "complete", "fail",
+			"init", "start", "daemon stop", "complete", "fail",
 			"status", "mute", "unmute", "volume", "doctor", "theme list", "theme use",
 		} {
 			if !strings.Contains(help, command) {
@@ -186,7 +186,7 @@ func TestHelpListsEveryDocumentedCommandAndExitCode(t *testing.T) {
 func TestEveryHelpedCommandIsRegistered(t *testing.T) {
 	for _, name := range []string{
 		"init", "start", "stop", "status", "mute", "unmute",
-		"volume", "doctor", "theme", "ping",
+		"volume", "doctor", "theme", "ping", "daemon",
 	} {
 		if _, ok := commands[name]; !ok {
 			t.Errorf("command %q appears in the usage text but is not registered", name)
