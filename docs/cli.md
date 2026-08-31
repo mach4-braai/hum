@@ -54,6 +54,8 @@ leave a daemon half-configured.
 
 `hum stop` deliberately exits **0** when no daemon is running, matching
 `systemctl` and `brew services`, so it is safe in unconditional teardown.
+The one exception is `EACCES`: when the socket exists but the current user cannot
+access it, `hum stop` exits 3 rather than silently reporting "not running".
 
 ## Dispatch
 
