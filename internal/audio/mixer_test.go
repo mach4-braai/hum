@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"fmt"
 	"math"
 	"runtime"
 	"sync"
@@ -50,8 +51,8 @@ func (s *countSource) Mix(buf [][2]float32) bool {
 func TestMixerKnownSum(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.4, r: 0.4})
-	m.Add("b", &constSource{l: 0.4, r: 0.4})
+	m.Add("a", DroneBus, &constSource{l: 0.4, r: 0.4})
+	m.Add("b", DroneBus, &constSource{l: 0.4, r: 0.4})
 
 	p := make([]byte, 256*frameSize)
 	m.Read(p)
@@ -69,7 +70,7 @@ func TestMixerKnownSum(t *testing.T) {
 func TestMixerGainApplied(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
 	m.SetGain(0.5)
 
 	p := make([]byte, 64*frameSize)
@@ -90,7 +91,7 @@ func TestMixerSoftClip(t *testing.T) {
 	m := NewMixer(f)
 	for i := 0; i < 12; i++ {
 		id := string([]byte{byte('a' + i)})
-		m.Add(id, &constSource{l: 1.0, r: 1.0})
+		m.Add(id, DroneBus, &constSource{l: 1.0, r: 1.0})
 	}
 
 	p := make([]byte, 256*frameSize)
@@ -108,7 +109,7 @@ func TestMixerSoftClip(t *testing.T) {
 func TestMixerDoneSourceRemoved(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("v", &countSource{val: 0.3, limit: 1})
+	m.Add("v", DroneBus, &countSource{val: 0.3, limit: 1})
 
 	p := make([]byte, 128*frameSize)
 	m.Read(p)
@@ -131,7 +132,7 @@ func TestMixerNaNGainRejected(t *testing.T) {
 func TestMixerPartialFrame(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.3, r: 0.3})
+	m.Add("a", DroneBus, &constSource{l: 0.3, r: 0.3})
 
 	p := make([]byte, 17)
 	n, err := m.Read(p)
@@ -163,7 +164,7 @@ func TestMixerRace(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 200; i++ {
 			osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
-			m.Add("v", osc)
+			m.Add("v", DroneBus, osc)
 			runtime.Gosched()
 			m.Remove("v")
 		}
@@ -186,7 +187,7 @@ func TestMixerReadZeroAlloc(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
 	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
-	m.Add("v", osc)
+	m.Add("v", DroneBus, osc)
 	p := make([]byte, 1024*frameSize)
 
 	allocs := testing.AllocsPerRun(100, func() {
@@ -219,7 +220,7 @@ func TestMixerEmptyRead(t *testing.T) {
 func TestMixerSoftClipNeverExact(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 2.0, r: 2.0})
+	m.Add("a", DroneBus, &constSource{l: 2.0, r: 2.0})
 
 	p := make([]byte, 256*frameSize)
 	m.Read(p)
@@ -240,7 +241,7 @@ func TestMixerSoftClipNeverExact(t *testing.T) {
 func TestMixerZeroLengthRead(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
 
 	p := make([]byte, 0)
 	n, err := m.Read(p)
@@ -258,8 +259,8 @@ func TestMixerZeroLengthRead(t *testing.T) {
 func TestMixerDoneMidBufferLenDrops(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &countSource{val: 0.3, limit: 1})
-	m.Add("b", &constSource{l: 0.2, r: 0.2})
+	m.Add("a", DroneBus, &countSource{val: 0.3, limit: 1})
+	m.Add("b", DroneBus, &constSource{l: 0.2, r: 0.2})
 
 	if m.Len() != 2 {
 		t.Fatalf("want 2 sources, got %d", m.Len())
@@ -289,7 +290,7 @@ type replacingSource struct {
 func (r *replacingSource) Mix(buf [][2]float32) bool {
 	if !r.swapped {
 		r.swapped = true
-		r.m.Add(r.id, r.replaced)
+		r.m.Add(r.id, DroneBus, r.replaced)
 	}
 	return true
 }
@@ -299,7 +300,7 @@ func TestReadKeepsASourceAddedUnderAFinishingID(t *testing.T) {
 
 	replacement := &constSource{l: 0.25, r: 0.25}
 	finishing := &replacingSource{m: m, id: "voice", replaced: replacement}
-	m.Add("voice", finishing)
+	m.Add("voice", DroneBus, finishing)
 
 	p := make([]byte, 64*frameSize)
 	if _, err := m.Read(p); err != nil {
@@ -349,7 +350,7 @@ func TestNormRampNoStepOnVoiceAdd(t *testing.T) {
 	m := NewMixer(f)
 
 	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
-	m.Add("v1", osc)
+	m.Add("v1", DroneBus, osc)
 
 	buf := make([]byte, 4096*frameSize)
 
@@ -365,7 +366,7 @@ func TestNormRampNoStepOnVoiceAdd(t *testing.T) {
 	}
 	lastSS := ss[len(ss)-1][0]
 
-	m.Add("v2", &countSource{val: 0, limit: 999})
+	m.Add("v2", DroneBus, &countSource{val: 0, limit: 999})
 
 	m.Read(buf)
 	tr := decodeFrames(buf)
@@ -382,7 +383,7 @@ func TestNormRampNoStepOnVoiceRelease(t *testing.T) {
 	m := NewMixer(f)
 
 	osc := NewOsc(f, 440, 0.5, Envelope{Attack: 0, Release: 10 * time.Second})
-	m.Add("v1", osc)
+	m.Add("v1", DroneBus, osc)
 
 	buf := make([]byte, 4096*frameSize)
 
@@ -398,7 +399,7 @@ func TestNormRampNoStepOnVoiceRelease(t *testing.T) {
 	}
 
 	ghost := &countSource{val: 0, limit: 10}
-	m.Add("ghost", ghost)
+	m.Add("ghost", DroneBus, ghost)
 
 	for range 8 {
 		m.Read(buf)
@@ -429,8 +430,8 @@ func TestNormRampNoStepMidBufferDone(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
 
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
-	m.Add("ghost", &countSource{val: 0, limit: 1})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
+	m.Add("ghost", DroneBus, &countSource{val: 0, limit: 1})
 
 	buf := make([]byte, 2*maxScratchFrames*frameSize)
 	m.Read(buf)
@@ -448,12 +449,12 @@ func TestNormRampNoStepMidBufferDone(t *testing.T) {
 func TestNormRampSteadyStateMatchesUnrampedCurve(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.4, r: 0.4})
+	m.Add("a", DroneBus, &constSource{l: 0.4, r: 0.4})
 
 	large := make([]byte, 16384*frameSize)
 	m.Read(large)
 
-	m.Add("b", &constSource{l: 0.4, r: 0.4})
+	m.Add("b", DroneBus, &constSource{l: 0.4, r: 0.4})
 
 	m.Read(large)
 
@@ -483,7 +484,7 @@ func recoverGain(p []byte, level float64) []float64 {
 func TestGainDropRampsInsteadOfSteppingTheWaveform(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("v", NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second}))
+	m.Add("v", DroneBus, NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second}))
 	m.SetGain(0.6)
 
 	buf := make([]byte, 4096*frameSize)
@@ -514,7 +515,7 @@ func TestMuteAndUnmuteAreMirrorImages(t *testing.T) {
 	buf := make([]byte, 2048*frameSize)
 
 	down := NewMixer(f)
-	down.Add("a", &constSource{l: level, r: level})
+	down.Add("a", DroneBus, &constSource{l: level, r: level})
 	down.SetGain(volume)
 	down.Read(buf)
 	down.SetGain(0)
@@ -522,7 +523,7 @@ func TestMuteAndUnmuteAreMirrorImages(t *testing.T) {
 	muting := recoverGain(buf, level)
 
 	up := NewMixer(f)
-	up.Add("a", &constSource{l: level, r: level})
+	up.Add("a", DroneBus, &constSource{l: level, r: level})
 	up.SetGain(0)
 	up.Read(buf)
 	up.SetGain(volume)
@@ -553,7 +554,7 @@ func TestGainRampHasNoPlateausInEitherDirection(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := NewMixer(f)
-			m.Add("a", &constSource{l: level, r: level})
+			m.Add("a", DroneBus, &constSource{l: level, r: level})
 			m.SetGain(tc.from)
 			m.Read(buf)
 			m.SetGain(tc.to)
@@ -573,7 +574,7 @@ func TestGainRampHasNoPlateausInEitherDirection(t *testing.T) {
 func TestGainRampSettlesExactlyOnZero(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
 	m.SetGain(0.6)
 
 	buf := make([]byte, 65536*frameSize)
@@ -586,5 +587,43 @@ func TestGainRampSettlesExactlyOnZero(t *testing.T) {
 			t.Fatalf("frame %d of the settled tail is L=%v R=%v, want silence: an asymptotic mute never reaches zero",
 				i, fr[0], fr[1])
 		}
+	}
+}
+
+func settledLevel(m *Mixer) float64 {
+	buf := make([]byte, 8192*frameSize)
+	m.Read(buf)
+	m.Read(buf)
+	frames := decodeFrames(buf)
+	return math.Atanh(frames[len(frames)-1][0])
+}
+
+func TestPhraseVoicesSumIncoherentlyRatherThanLinearly(t *testing.T) {
+	f := DefaultFormat()
+
+	one := NewMixer(f)
+	one.Add("p0", PhraseBus, &constSource{l: 0.25, r: 0.25})
+	single := settledLevel(one)
+
+	four := NewMixer(f)
+	for i := range 4 {
+		four.Add(fmt.Sprintf("p%d", i), PhraseBus, &constSource{l: 0.25, r: 0.25})
+	}
+	quartet := settledLevel(four)
+
+	if ratio := quartet / single; math.Abs(ratio-2) > 0.01 {
+		t.Errorf("four phrase voices are %.3f× one, want 2 (√4): a bus that sums linearly puts sixteen chimes %.1f dB into the clipper",
+			ratio, 20*math.Log10(4/2.0))
+	}
+}
+
+func TestTheBusesAreSummedRatherThanSharedByTheDivisor(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("d", DroneBus, &constSource{l: 0.3, r: 0.3})
+	m.Add("p", PhraseBus, &constSource{l: 0.2, r: 0.2})
+
+	if got, want := settledLevel(m), 0.5; math.Abs(got-want) > 1e-4 {
+		t.Errorf("drone 0.3 plus phrase 0.2 sums to %.6f, want %.2f: one of the buses is carrying the other's divisor", got, want)
 	}
 }

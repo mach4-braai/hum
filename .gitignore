@@ -3,6 +3,7 @@ Thumbs.db
 *.swp
 
 /.gocache/
+/.hum/
 /bin/
 /dist/
 /hum

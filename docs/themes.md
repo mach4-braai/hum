@@ -18,10 +18,10 @@ drone:
 phrases:
   completion_octaves: 1
   completion_duration: 0.2
-  completion_gain: 0.7
+  completion_gain: 0.5
   failure_interval: -3
   failure_duration: 1.2
-  failure_gain: 0.35
+  failure_gain: 0.25
   cancelled_sounds: false
   attack: 0.02
   decay: 0.15
@@ -48,10 +48,10 @@ drone:
 phrases:
   completion_octaves: 1
   completion_duration: 0.2
-  completion_gain: 0.7
+  completion_gain: 0.5
   failure_interval: -3
   failure_duration: 1.2
-  failure_gain: 0.35
+  failure_gain: 0.25
   cancelled_sounds: false
   attack: 0.02
   decay: 0.15
@@ -129,7 +129,9 @@ overflows that conversion into a meaningless value. Sixty seconds is far past an
 musically sensible phrase, so the bound rejects the mistake without constraining
 real themes. The same reasoning applies to `drone.attack` and `drone.release`.
 
-**`completion_octaves` note.** `PRD.md` §8 prose says "one or two octaves higher"; the worked example in §8 shows three octaves. `minimal` ships 1, the low end of the prose. Two was right when the drone sat at octave 2, but `music.octave` now defaults to 3 and harmonies sound up to two octaves above that, so a completing voice at C5 would chime at C7 — around 2 kHz at `completion_gain: 0.7`, which is piercing rather than informative. One octave keeps the whole set inside the register the drone already occupies. The daemon's own `DefaultPhraseSpec` still says 2; it has no production caller, and a theme always supplies the real value.
+**`completion_octaves` note.** `PRD.md` §8 prose says "one or two octaves higher"; the worked example in §8 shows three octaves. `minimal` ships 1, the low end of the prose. Two was right when the drone sat at octave 2, but `music.octave` now defaults to 3 and harmonies sound up to two octaves above that, so a completing voice at C5 would chime at C7 — around 2 kHz, which is piercing rather than informative. One octave keeps the whole set inside the register the drone already occupies. The daemon's own `DefaultPhraseSpec` still says 2; it has no production caller, and a theme always supplies the real value.
+
+**`completion_gain` and `failure_gain` note.** They ship at 0.5 and 0.25, down a factor of 5/7 (-2.92 dB) from 0.7 and 0.35 when the phrase bus was separated from the drone bus; failure stays 6 dB below completion either way. Under the shared divisor a chime was scaled by `1/(N+1)` alongside the drones it was ducking, so it raised the total mix level by nothing — an energy result, not an audibility one, since `completion_octaves: 1` keeps the chime an octave above its own drone and spectrally distinct. On its own bus the same value was 6.02 dB louder against one drone. At 0.5 the chime sits level with the drone bed, within 0.05 dB, at any voice count. That shows up as a +3.00 dB lift in combined-mix RMS, which is what two equal uncorrelated sources give; it does not mean the chime is 3 dB above the drones.
 
 **`cancelled_sounds` rationale.** Cancellation is silent by default. Inventing a third audible cadence risks users conflating cancellation with failure. The flag exists as a seam for future themes that want the distinction.
 

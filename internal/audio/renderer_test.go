@@ -2,6 +2,7 @@ package audio
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -524,7 +525,7 @@ func TestSetVolume_WhileMuted(t *testing.T) {
 func TestSetMutedFadesOnTheSampleClockNotAGoroutine(t *testing.T) {
 	f := DefaultFormat()
 	r, m := NewCaptureRenderer(f, testOpts())
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
 
 	buf := make([]byte, 1024*frameSize)
 	m.Read(buf)
@@ -552,7 +553,7 @@ func TestZeroVolumeStartsSilent(t *testing.T) {
 	opts := testOpts()
 	opts.Volume = 0
 	_, m := NewCaptureRenderer(f, opts)
-	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: 0.5})
 
 	buf := make([]byte, 256*frameSize)
 	m.Read(buf)
@@ -630,6 +631,208 @@ func TestNewAudioRenderer_ZeroSampleRate(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNoDevice) {
 		t.Errorf("want ErrNoDevice, got %v", err)
+	}
+}
+
+func renderSummed(t *testing.T, voices []harmony.VoiceState, notes []harmony.Note, frames int) []float64 {
+	t.Helper()
+	f := DefaultFormat()
+	r, m := NewCaptureRenderer(f, testOpts())
+	if len(voices) > 0 {
+		if err := r.Update(harmony.State{Voices: voices}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(notes) > 0 {
+		if err := r.Trigger(harmony.Phrase{Notes: notes}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	buf := make([]byte, frames*frameSize)
+	m.Read(buf)
+	summed := make([]float64, frames)
+	for i, fr := range decodeFrames(buf) {
+		summed[i] = math.Atanh(fr[0])
+	}
+	return summed
+}
+
+func assertDroneUnducked(t *testing.T, voices []harmony.VoiceState, notes []harmony.Note) {
+	t.Helper()
+	const frames = 4096
+	alone := renderSummed(t, voices, nil, frames)
+	chimeOnly := renderSummed(t, nil, notes, frames)
+	together := renderSummed(t, voices, notes, frames)
+
+	var loudest float64
+	for _, v := range chimeOnly {
+		if a := math.Abs(v); a > loudest {
+			loudest = a
+		}
+	}
+	if loudest < 1e-3 {
+		t.Fatalf("the chime peaked at %.6f, so the comparison proves nothing", loudest)
+	}
+
+	for i := range alone {
+		if got := together[i] - chimeOnly[i]; math.Abs(got-alone[i]) > 1e-4 {
+			t.Fatalf("frame %d: the drone contributes %.6f while the chime sounds, against %.6f alone: the chime is ducking it",
+				i, got, alone[i])
+		}
+	}
+}
+
+func chimeNote(class, octave int, gain float64) harmony.Note {
+	return harmony.Note{
+		Pitch:    harmony.Pitch{Class: class, Octave: octave},
+		Duration: 300 * time.Millisecond,
+		Gain:     gain,
+	}
+}
+
+func TestCompletionChimeDoesNotDuckOneDrone(t *testing.T) {
+	assertDroneUnducked(t,
+		[]harmony.VoiceState{voiceState("s1", 0, 4)},
+		[]harmony.Note{chimeNote(7, 5, 0.7)})
+}
+
+func failureCadence(gain float64, dur time.Duration) []harmony.Note {
+	return []harmony.Note{
+		{Pitch: harmony.Pitch{Class: 0, Octave: 4}, Offset: 0, Duration: dur, Gain: gain},
+		{Pitch: harmony.Pitch{Class: 9, Octave: 3}, Offset: dur, Duration: dur, Gain: gain},
+	}
+}
+
+func TestFailureCadenceDoesNotDuckTwoDrones(t *testing.T) {
+	assertDroneUnducked(t,
+		[]harmony.VoiceState{voiceState("s1", 0, 4), voiceState("s2", 7, 4)},
+		failureCadence(0.25, 300*time.Millisecond))
+}
+
+func TestTheTwoFailureNotesSoundAtTheSameLevel(t *testing.T) {
+	f := DefaultFormat()
+	const dur = 300 * time.Millisecond
+	half := int(dur.Seconds() * float64(f.SampleRate))
+
+	for _, block := range []int{1, 64, 997, 1024, 4095, 4096, 4097, 5000, 8192} {
+		t.Run(fmt.Sprintf("%dframes", block), func(t *testing.T) {
+			r, m := NewCaptureRenderer(f, testOpts())
+			if err := r.Trigger(harmony.Phrase{Notes: failureCadence(0.25, dur)}); err != nil {
+				t.Fatal(err)
+			}
+
+			buf := make([]byte, block*frameSize)
+			var sq [2]float64
+			for read := 0; read < half*2; read += block {
+				m.Read(buf)
+				for i, fr := range decodeFrames(buf) {
+					if at := read + i; at < half*2 {
+						sq[at/half] += fr[0] * fr[0]
+					}
+				}
+			}
+			first := math.Sqrt(sq[0] / float64(half))
+			second := math.Sqrt(sq[1] / float64(half))
+
+			if d := 20 * math.Log10(first/second); math.Abs(d) > 0.5 {
+				t.Errorf("the two notes of the failure cadence differ by %.2f dB (%.6f then %.6f) at %d frames per Read: the engine schedules the second note at an offset, and counting it before it sounds attenuates the first",
+					d, first, second, block)
+			}
+		})
+	}
+}
+
+func TestADelayedNoteSoundsTheSameAtAnyBlockSize(t *testing.T) {
+	f := DefaultFormat()
+	const dur = 300 * time.Millisecond
+	half := int(dur.Seconds() * float64(f.SampleRate))
+
+	var reference float64
+	for run, block := range []int{1, 64, 997, 1024, 4095, 4096, 4097, 5000, 8192} {
+		r, m := NewCaptureRenderer(f, testOpts())
+		notes := []harmony.Note{
+			{Pitch: harmony.Pitch{Class: 9, Octave: 3}, Offset: dur, Duration: dur, Gain: 0.25},
+		}
+		if err := r.Trigger(harmony.Phrase{Notes: notes}); err != nil {
+			t.Fatal(err)
+		}
+
+		buf := make([]byte, block*frameSize)
+		var sq float64
+		for read := 0; read < half*2; read += block {
+			m.Read(buf)
+			for i, fr := range decodeFrames(buf) {
+				if at := read + i; at >= half && at < half*2 {
+					sq += fr[0] * fr[0]
+				}
+			}
+		}
+		got := math.Sqrt(sq / float64(half))
+
+		if run == 0 {
+			reference = got
+			continue
+		}
+		if math.Abs(got-reference) > 1e-9 {
+			t.Errorf("a note offset by %v measures %.9f at %d frames per Read against %.9f at one: onset and release must fall on the sample the note names, not on a buffer boundary",
+				dur, got, block, reference)
+		}
+	}
+}
+
+func TestAnOnsetInsideABufferTakesTheDivisorAtThatFrame(t *testing.T) {
+	f := DefaultFormat()
+	const dur = 300 * time.Millisecond
+	onset := int(dur.Seconds() * float64(f.SampleRate))
+
+	const framesFromOnsetWhereALateDivisorShows = 1500
+
+	levelAt := func(block int) float64 {
+		r, m := NewCaptureRenderer(f, testOpts())
+		if err := r.Trigger(harmony.Phrase{Notes: failureCadence(0.25, dur)}); err != nil {
+			t.Fatal(err)
+		}
+		buf := make([]byte, block*frameSize)
+		var sq float64
+		for read := 0; read < onset+framesFromOnsetWhereALateDivisorShows; read += block {
+			m.Read(buf)
+			for i, fr := range decodeFrames(buf) {
+				if at := read + i; at >= onset && at < onset+framesFromOnsetWhereALateDivisorShows {
+					sq += fr[0] * fr[0]
+				}
+			}
+		}
+		return math.Sqrt(sq / float64(framesFromOnsetWhereALateDivisorShows))
+	}
+
+	reference := levelAt(1)
+	for _, block := range []int{997, 1024, 4095, 4096, 4097, 5000, 8192} {
+		got := levelAt(block)
+		if d := 20 * math.Log10(got/reference); math.Abs(d) > 0.25 {
+			t.Errorf("the %d frames after the second note's onset measure %+.2f dB against a one-frame Read at %d frames per Read: the note's onset lands %d frames inside a buffer there, and the divisor must change at that frame rather than at the batch that contains it",
+				framesFromOnsetWhereALateDivisorShows, d, block, onset%block)
+		}
+	}
+}
+
+func TestChimeLevelIsIndependentOfHowManyDronesSound(t *testing.T) {
+	const frames = 4096
+	notes := []harmony.Note{chimeNote(7, 5, 0.7)}
+
+	var crowd []harmony.VoiceState
+	for i := range harmony.MaxVoices {
+		crowd = append(crowd, voiceState(string(rune('a'+i)), (i*7)%12, 3+i/6))
+	}
+
+	alone := renderSummed(t, nil, notes, frames)
+	drones := renderSummed(t, crowd, nil, frames)
+	together := renderSummed(t, crowd, notes, frames)
+
+	for i := range alone {
+		if got := together[i] - drones[i]; math.Abs(got-alone[i]) > 1e-4 {
+			t.Fatalf("frame %d: the chime contributes %.6f against twelve drones, but %.6f on its own: the theme's phrase gain does not mean one level",
+				i, got, alone[i])
+		}
 	}
 }
 

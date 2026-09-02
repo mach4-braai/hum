@@ -315,7 +315,7 @@ func TestDriftKeepsTheEnsembleWithinItsDetuneWindow(t *testing.T) {
 func TestStringsMixDoesNotAllocate(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
-	m.Add("v", stringsOsc(t, f, 220, 0.5, harmony.Expression{Intensity: 1, Tremolo: 1, Width: 1}))
+	m.Add("v", DroneBus, stringsOsc(t, f, 220, 0.5, harmony.Expression{Intensity: 1, Tremolo: 1, Width: 1}))
 	p := make([]byte, 1024*frameSize)
 
 	allocs := testing.AllocsPerRun(100, func() {
