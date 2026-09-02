@@ -48,6 +48,26 @@ func (s *countSource) Mix(buf [][2]float32) bool {
 	return s.calls >= s.limit
 }
 
+type burstSource struct {
+	loud       float32
+	quiet      float32
+	loudFrames int
+	emitted    int
+}
+
+func (s *burstSource) Mix(buf [][2]float32) bool {
+	for i := range buf {
+		v := s.quiet
+		if s.emitted < s.loudFrames {
+			v = s.loud
+		}
+		buf[i][0] += v
+		buf[i][1] += v
+		s.emitted++
+	}
+	return false
+}
+
 func TestMixerKnownSum(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
@@ -58,7 +78,7 @@ func TestMixerKnownSum(t *testing.T) {
 	m.Read(p)
 	frames := decodeFrames(p)
 
-	wantL := math.Tanh((0.4 + 0.4) / 2.0)
+	wantL := (0.4 + 0.4) / math.Sqrt2
 	for i, fr := range frames {
 		if math.Abs(fr[0]-wantL) > 1e-5 {
 			t.Errorf("frame %d L = %.6f, want %.6f", i, fr[0], wantL)
@@ -77,7 +97,7 @@ func TestMixerGainApplied(t *testing.T) {
 	m.Read(p)
 	frames := decodeFrames(p)
 
-	want := math.Tanh(0.5 * 0.5)
+	want := 0.5 * 0.5
 	for _, fr := range frames {
 		if math.Abs(fr[0]-want) > 1e-5 {
 			t.Errorf("L = %.6f, want %.6f", fr[0], want)
@@ -86,7 +106,7 @@ func TestMixerGainApplied(t *testing.T) {
 	}
 }
 
-func TestMixerSoftClip(t *testing.T) {
+func TestMixerNeverLeavesFullScale(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
 	for i := 0; i < 12; i++ {
@@ -217,24 +237,60 @@ func TestMixerEmptyRead(t *testing.T) {
 	}
 }
 
-func TestMixerSoftClipNeverExact(t *testing.T) {
+func TestLimiterIsTransparentBelowItsCeiling(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", DroneBus, &constSource{l: 0.5, r: -0.25})
+
+	p := make([]byte, 256*frameSize)
+	m.Read(p)
+
+	for i, fr := range decodeFrames(p) {
+		if fr[0] != 0.5 || fr[1] != -0.25 {
+			t.Fatalf("frame %d is L=%v R=%v, want the input untouched: a limiter that shapes quiet material is a distortion box",
+				i, fr[0], fr[1])
+		}
+	}
+}
+
+func TestLimiterHoldsTheCeilingRatherThanClipping(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
 	m.Add("a", DroneBus, &constSource{l: 2.0, r: 2.0})
 
 	p := make([]byte, 256*frameSize)
 	m.Read(p)
+
+	for i, fr := range decodeFrames(p) {
+		if math.Abs(fr[0]-limiterCeiling) > 1e-6 || math.Abs(fr[1]-limiterCeiling) > 1e-6 {
+			t.Fatalf("frame %d is L=%.8f R=%.8f, want the ceiling %.2f: an input of 2.0 must be held, not clipped and not shaped",
+				i, fr[0], fr[1], limiterCeiling)
+		}
+	}
+}
+
+func TestLimiterReleasesInsteadOfHoldingTheDuck(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	src := &burstSource{loud: 2.0, quiet: 0.5, loudFrames: 128}
+	m.Add("a", DroneBus, src)
+
+	p := make([]byte, 32768*frameSize)
+	m.Read(p)
 	frames := decodeFrames(p)
 
-	for i, fr := range frames {
-		if fr[0] >= 1.0 || fr[1] >= 1.0 {
-			t.Errorf("frame %d: hard clipping detected (L=%.8f R=%.8f); tanh(2.0)≈0.964 must be < 1.0", i, fr[0], fr[1])
-			break
+	recovering := frames[src.loudFrames:]
+	if first := recovering[0][0]; first >= 0.5 {
+		t.Fatalf("the sample after the burst is %.6f, not still ducked below 0.5: the limiter released instantly, which is a click not a release", first)
+	}
+	for i := 1; i < len(recovering); i++ {
+		if recovering[i][0] < recovering[i-1][0] {
+			t.Fatalf("frame %d recovers to %.6f from %.6f: the release is not monotonic, which is what pumping sounds like",
+				i, recovering[i][0], recovering[i-1][0])
 		}
-		if fr[0] < 0.9 || fr[1] < 0.9 {
-			t.Errorf("frame %d: output unexpectedly low (L=%.6f R=%.6f); expected tanh(2.0)≈0.964", i, fr[0], fr[1])
-			break
-		}
+	}
+	if last := recovering[len(recovering)-1][0]; math.Abs(last-0.5) > 1e-3 {
+		t.Fatalf("the level settles at %.6f rather than the input's 0.5: the limiter never lets go", last)
 	}
 }
 
@@ -438,7 +494,7 @@ func TestNormRampNoStepMidBufferDone(t *testing.T) {
 	frames := decodeFrames(buf)
 	last := frames[len(frames)-1][0]
 
-	want := math.Tanh(0.5 * 0.9)
+	want := 0.5 * 0.9
 	if last < want {
 		t.Errorf("mid-buffer done did not update ramp target: last-frame level %.6f < %.6f; "+
 			"alive and ramp target must update the sample the source reports done",
@@ -462,10 +518,10 @@ func TestNormRampSteadyStateMatchesUnrampedCurve(t *testing.T) {
 	m.Read(buf)
 	frames := decodeFrames(buf)
 
-	want := math.Tanh(0.8 * 0.5)
+	want := 0.8 / math.Sqrt2
 	for i, fr := range frames {
 		if math.Abs(fr[0]-want) > 1e-3 {
-			t.Errorf("frame %d: L=%.6f, want %.6f; steady-state differs from unramped 1/N curve after ramp settled",
+			t.Errorf("frame %d: L=%.6f, want %.6f; steady-state differs from the unramped curve after the ramp settled",
 				i, fr[0], want)
 			break
 		}
@@ -476,7 +532,7 @@ func recoverGain(p []byte, level float64) []float64 {
 	frames := decodeFrames(p)
 	out := make([]float64, len(frames))
 	for i, fr := range frames {
-		out[i] = math.Atanh(fr[0]) / level
+		out[i] = fr[0] / level
 	}
 	return out
 }
@@ -595,7 +651,7 @@ func settledLevel(m *Mixer) float64 {
 	m.Read(buf)
 	m.Read(buf)
 	frames := decodeFrames(buf)
-	return math.Atanh(frames[len(frames)-1][0])
+	return frames[len(frames)-1][0]
 }
 
 func TestPhraseVoicesSumIncoherentlyRatherThanLinearly(t *testing.T) {

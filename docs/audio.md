@@ -44,44 +44,70 @@ The zero-alloc invariant is asserted by `TestMixerReadZeroAlloc` using `testing.
 
 ### Two buses
 
-A source joins either `DroneBus` or `PhraseBus`, named at `Add`. The buses are normalised separately and summed immediately before the clipper.
+A source joins either `DroneBus` or `PhraseBus`, named at `Add`. The buses are normalised separately and summed immediately before the limiter.
 
 They exist because the two kinds of sound answer different questions. A drone is *sustaining*, and what matters is that adding a thirteenth session does not shrink the other twelve. A phrase note is a *transient*, and what matters is that it arrives at the level the theme asked for. One shared divisor cannot serve both: with every source in one count, a `hum complete` took the divisor from N to N+1 and every sustaining drone dropped by `20·log10(N/(N+1))` dB for the length of the chime — 6 dB with one drone. The chime the user was meant to hear arrived on top of an audible dip in everything else.
 
 `Mixer` does not parse id prefixes to work out which is which. `AudioRenderer` already knows, and says so at the call.
 
-`TestCompletionChimeDoesNotDuckOneDrone` and `TestFailureCadenceDoesNotDuckTwoDrones` render the drone alone, the chime alone, and both, then check the drone's contribution to the mix is the same either way. `math.Atanh` recovers the pre-clipper sum, so the two contributions can be separated exactly. `TestChimeLevelIsIndependentOfHowManyDronesSound` is the same measurement from the other side.
+`TestCompletionChimeDoesNotDuckOneDrone` and `TestFailureCadenceDoesNotDuckTwoDrones` render the drone alone, the chime alone, and both, then check the drone's contribution to the mix is the same either way. The subtraction is exact because the limiter is transparent at these levels, so the output *is* the sum. `TestChimeLevelIsIndependentOfHowManyDronesSound` is the same measurement from the other side.
 
 ### Normalisation
 
-Normalisation lives in **the Mixer**, not in the oscillator. The oscillator does not know how many peers are active. After snapshotting active sources, `Read` counts them per bus and sets one target per bus:
+Normalisation lives in **the Mixer**, not in the oscillator. The oscillator does not know how many peers are active. After snapshotting active sources, `Read` counts them per bus and sets one target per bus, from the same curve:
 
 ```
-droneNorm  = masterGain / max(1, droneCount)
-phraseNorm = masterGain / sqrt(max(1, phraseCount))
+norm = masterGain / sqrt(max(1, sourceCount))
 ```
 
-The drone curve holds the *summed* level of twelve coherent drones equal to one, which is what `1/N` corrects for.
+#### Which level `√N` protects
 
-The phrase curve already assumes incoherence, because the measurement forced it. Sixteen notes is `maxPhraseVoices`, the cap a burst of completions hits, and at a fixed per-note gain those sixteen drove the clipper to a pre-`tanh` peak of 3.14 at `volume: 0.6` and 10 dB of gain reduction: not a chime, a crunch. Dividing by `√16` brings that to 1.46 and 4.2 dB. `TestPhraseVoicesSumIncoherentlyRatherThanLinearly` holds the curve.
+Three levels move together and no curve holds more than one of them at solo level. They are spaced by exactly `10·log10(N)`, 10.79 dB at `MaxVoices = 12`, so choosing a curve is choosing which one to protect:
+
+| curve | the mix at 12 | each voice at 12 | a coherent peak at 12 |
+|---|---|---|---|
+| `1/N` | -10.79 dB | -21.58 dB | 0.00 dB |
+| `1/√N` | 0.00 dB | -10.79 dB | +10.79 dB |
+| none | +10.79 dB | 0.00 dB | +21.58 dB |
+
+`√N` protects **the mix**, and the reason is that drones are not coherent. `1/N` corrects for amplitude, which is right only for sources that sum in phase; uncorrelated sources sum in power, so `1/N` overcorrects by exactly `√N`. Twelve drones under `1/N` measured -10.79 dB against one, and each individual drone sat 21.58 dB below the same drone sounding alone — which is why you stopped being able to tell which session was which, and that is the point of the tool.
+
+The column `1/N` did protect is the coherent peak. Both cases are measured at `MaxVoices` with every expression axis at 1, because a scale is the realistic input and unison is the bound:
+
+| twelve drones | `volume: 0.6` | `volume: 1.0` |
+|---|---|---|
+| real scale pitches | peak 0.5792, no limiting | peak 0.9653, no limiting |
+| unison, phase-aligned | peak 0.8899, no limiting | peak 0.9900, -3.51 dB |
+
+So the coherent case does reach the limiter, but only at full volume, and only when twelve sessions happen to hold the same pitch — which the voicing in `internal/harmony` actively spreads apart. `TestTheCoherentWorstCaseStaysInsideFullScale` renders twelve unison drones at `volume: 1.0` and requires the output to stay inside full scale.
+
+Measured after: the mix sits within 0.01 dB across 1, 2, 4 and 12 voices, and one drone measures **-10.79 dB** against the same drone sounding alone.
+
+That per-voice figure is measured, not derived. Dividing the twelve-voice mix RMS by `√12` would assume the very incoherence the curve is built on, and would return `-10.79` by construction whenever the mix is flat — it would pass against any curve. `TestEachDroneStaysAudibleInACrowd` instead renders **one** drone, then the same drone with eleven silent sources sharing its bus, so only the divisor changes between the two renders. `TestTheMixHoldsItsLevelAcrossVoiceCounts` holds the mix, and the per-voice test holds a -12 dB floor.
+
+#### The phrase bus takes the same curve
+
+Sixteen notes is `maxPhraseVoices`, the cap a burst of completions hits, and a fixed per-note gain drove the output stage to a pre-limiter peak of 3.14 at `volume: 0.6`: not a chime, a crunch. `√16` brings that to 1.46. `TestPhraseVoicesSumIncoherentlyRatherThanLinearly` holds the curve.
 
 #### The chime got louder, so the theme gains came down 2.92 dB
 
-A single chime divides by one, so the phrase bus scales it by the master gain alone. The shared divisor scaled it by `masterGain / (N+1)`. Against one drone that is a factor of two: **the chime term is +6.02 dB**, and +22.3 dB against twelve.
+A single chime divides by one, so the phrase bus scales it by the master gain alone. The shared divisor that preceded the split scaled it by `masterGain / (N+1)`. Against one drone that is a factor of two: **the chime term is +6.02 dB**, and +22.3 dB against twelve.
 
 That is not a neutral refactor, so `completion_gain` and `failure_gain` moved from 0.7 and 0.35 to 0.5 and 0.25. Measured as the audible lift of the whole mix — RMS over the chime's 250 ms against the same window of undisturbed drones, `volume: 0.6`:
 
-| drones | shared divisor, gain 0.7 | separate buses, gain 0.7 | separate buses, gain 0.5 |
+| drones | shared divisor and `1/N`, gain 0.7 | separate buses and `√N`, gain 0.7 | shipped: gain 0.5 |
 |---|---|---|---|
-| 1 | -0.03 dB | +4.37 dB | +2.79 dB |
-| 2 | +0.12 dB | +6.67 dB | +4.62 dB |
-| 12 | +0.08 dB | +13.68 dB | +11.02 dB |
+| 1 | -0.03 dB | +4.67 dB | **+2.97 dB** |
+| 2 | +0.12 dB | +4.70 dB | **+3.00 dB** |
+| 12 | +0.08 dB | +4.70 dB | **+3.00 dB** |
 
 The first column is the bug in one number: a chime raised the total mix level by nothing, because the duck removed as much energy as the chime added. That is an energy measurement and not an audibility one — `completion_octaves: 1` puts the chime an octave above the drone it belongs to, so it stays spectrally distinct and a listener separates it regardless. What the column shows is that the chime bought no headroom in the mix, not that nobody could hear it.
 
 Read the columns as combined-mix RMS lift, which is not the chime's level against the drone bed. Measured directly, bus against bus, the chime sits **-0.02 dB against the bed** at the shipped gain and +2.9 dB at the old one. Two equal uncorrelated sources give a +3.01 dB lift, which is exactly why a +3.00 dB figure reads as "3 dB above the drones" and means the opposite. The gains themselves moved by a factor of 5/7, or -2.92 dB, not by half; what is halved is failure against completion, in both the old pair and the new one.
 
-The last column is still voice-count dependent, because the drone bus keeps `1/N` at this point. Flattening it is the drone curve's job, not the phrase gain's, and the gains were chosen against the flat figure the next change produces.
+The shipped column is flat, which is the property worth having: a completion is equally prominent whether one session is running or twelve. Under the drone bus's interim `1/N` the same gain gave +2.79, +4.62 and +11.02 dB, so flatness comes from the drone curve rather than from the phrase gain.
+
+That +3.00 dB lift is a chosen number, not a derived one. There is no curve that reproduces the old balance, because the old balance varied with voice count and this one does not.
 
 #### The divisor counts sounding sources, not scheduled ones
 
@@ -99,7 +125,7 @@ Three tests divide that claim up, and the split matters because two of them cann
 
 `TestAnOnsetInsideABufferTakesTheDivisorAtThatFrame` is the one that does. The cadence's second note begins at frame 14 400, so the sweep lands its onset 442, 64, 2 115, 2 112, 2 109, 4 400 and 6 208 frames into a buffer, the last two inside the *second* scratch batch since `maxScratchFrames` is 4 096. Measuring only the 1 500 frames from the onset, where the error lives rather than where it dilutes, a count taken before `Mix` reads 0.52 to 0.74 dB hot at every one of those sizes.
 
-An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal. Measured against a single-bus `Read`, `BenchmarkMixerRead/minimal` at twelve voices is unchanged inside the run-to-run spread.
+An empty phrase bus costs nothing: `Read` skips clearing its scratch buffer and drops the multiply-add from the sample loop, and snaps the phrase ramp to its target rather than stepping it. Nothing can click through a bus carrying no signal.
 
 ### The output gain ramp
 
@@ -115,9 +141,34 @@ Two consequences are load-bearing.
 
 `Mixer.Gain` returns the target, not `current`. It answers "what is the volume set to", which is what status and the config file mean by volume; the instantaneous value is an artefact of the fade and is observable from the output samples, which is how the tests read it.
 
-### Soft-clipping
+### Limiting
 
-After normalisation, each sample is passed through `math.Tanh`. This is a smooth, differentiable limiter: at input 1.0 it outputs ≈ 0.76; at input 3.0 it outputs ≈ 0.995. It can never produce a value outside (−1, 1), preventing hard clipping regardless of transient overdrive from simultaneous phrase triggers. `tanh` was chosen over a hard limiter because it introduces no discontinuity and over a lookahead limiter because it requires no look-ahead buffer (which would add latency and an allocation).
+The summed buses pass through `limiter.apply`, a peak limiter with an instantaneous attack and a 100 ms exponential release, holding `limiterCeiling = 0.99`.
+
+It replaced `math.Tanh`, and the reason is that **`tanh` is not a limiter**. It attenuates every input, not only peaks: it has no threshold and no knee, so a single voice at `volume: 1.0` was already shaped. Measured on a 439.45 Hz sine — chosen for a whole number of cycles in the 32 768-sample window, so nothing leaks between bins — `tanh` produced 1.44% THD at `volume: 0.6` and 3.71% at `volume: 1.0`. The limiter produces none: below the ceiling its gain is exactly 1 and the samples pass through untouched, which `TestLimiterIsTransparentBelowItsCeiling` asserts by comparing against the input bit for bit.
+
+That distinction is what let the normalisation curve change at all. Raising the level into a permanent waveshaper raises its distortion with it, so "the limiter catches the peak" is not an argument available to `tanh`.
+
+Three properties, in the order they matter:
+
+**The bound is exact and needs no look-ahead.** The gain permitted by the current sample is `ceiling / peak`, and the attack is instantaneous: gain can drop between two samples but only rises through the release. Whichever branch runs, the applied gain is at most the permitted one, so `|out| ≤ ceiling` holds sample by sample with no delay line, no added latency and no allocation. A look-ahead limiter would buy a smoother attack for a buffer's worth of latency; this one is not trying to be a mastering tool.
+
+**Release is what stops it pumping.** An instantaneous release would return to unity the sample after a transient, which is a step in gain and therefore a click. 100 ms is slow enough that a burst of chimes recovers as a fade. `TestLimiterReleasesInsteadOfHoldingTheDuck` drives a loud burst into a quiet tail and asserts the recovery is monotonic and settles back on the input level.
+
+**It is stereo-linked.** One gain is computed from `max(|l|, |r|)` and applied to both channels. Limiting the channels independently moves the stereo image whenever one side is louder.
+
+Measured gain reduction, at the shipped `completion_gain: 0.5`:
+
+| case | `volume: 0.6` | `volume: 1.0` |
+|---|---|---|
+| 1 voice | none | none |
+| 12 drones, scale pitches | none | none |
+| 12 drones, unison | none | -3.51 dB |
+| 12 drones + 16 phrases | -2.71 dB | -7.14 dB |
+
+The bottom row is sixteen notes — `maxPhraseVoices` — all landing on the same sample, which is a genuine overload rather than a bookkeeping artefact; the alternative is clipping. The reduction ducks the drones for as long as it lasts, so a burst of that size does briefly cost what § Two buses otherwise prevents.
+
+Those two figures have to be sampled once per **frame**. Reading the limiter's gain once per buffer understates them: the attack is instantaneous, so a transient's true minimum happens inside a block, and 256 frames of 100 ms release lift the gain about 5% of the way back to unity before a block-boundary read sees it. Measured that way the same case reported -2.59 and -6.76 dB. The steady rows are unaffected, because a sustained tone settles the limiter and every sample of the settled region reads the same.
 
 ---
 
@@ -270,6 +321,14 @@ And the stack is **cheaper** than the sine it replaces, by 36% at twelve voices,
 because the sine path calls `math.Sin` four times per frame (two channels,
 fundamental and second harmonic) while the strings path calls it once for the
 tremolo and otherwise interpolates six table entries, three copies per channel.
+
+The output stage got cheaper when the limiter replaced `tanh`. `MixerRead/minimal`
+at twelve voices measures 579 140 ns/op against the 611 321 above, and
+`orchestra` 374 848 against 386 309, on the same machine and the same benchmark:
+two `math.Tanh` calls per frame cost more than a peak comparison, a divide taken
+only above the ceiling and one multiply. Splitting the mixer into two buses is
+inside that same measurement and did not show up, because an empty phrase bus is
+skipped rather than summed.
 
 ### Voice-count normalisation placement
 
