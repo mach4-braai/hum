@@ -470,3 +470,121 @@ func TestNormRampSteadyStateMatchesUnrampedCurve(t *testing.T) {
 		}
 	}
 }
+
+func recoverGain(p []byte, level float64) []float64 {
+	frames := decodeFrames(p)
+	out := make([]float64, len(frames))
+	for i, fr := range frames {
+		out[i] = math.Atanh(fr[0]) / level
+	}
+	return out
+}
+
+func TestGainDropRampsInsteadOfSteppingTheWaveform(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("v", NewOsc(f, 440, 0.8, Envelope{Attack: 0, Release: 10 * time.Second}))
+	m.SetGain(0.6)
+
+	buf := make([]byte, 4096*frameSize)
+	m.Read(buf)
+	m.Read(buf)
+	ss := decodeFrames(buf)
+	var sustaining float64
+	for i := 1; i < len(ss); i++ {
+		if d := math.Abs(ss[i][0] - ss[i-1][0]); d > sustaining {
+			sustaining = d
+		}
+	}
+	last := ss[len(ss)-1][0]
+
+	m.SetGain(0.05)
+	m.Read(buf)
+	got := maxBufferDelta(decodeFrames(buf), last)
+
+	if got > sustaining {
+		t.Errorf("volume 0.6 to 0.05 stepped by %.6f, above the sustaining waveform's own %.6f: the gain change is audible as a click",
+			got, sustaining)
+	}
+}
+
+func TestMuteAndUnmuteAreMirrorImages(t *testing.T) {
+	f := DefaultFormat()
+	const level, volume = 0.5, 0.6
+	buf := make([]byte, 2048*frameSize)
+
+	down := NewMixer(f)
+	down.Add("a", &constSource{l: level, r: level})
+	down.SetGain(volume)
+	down.Read(buf)
+	down.SetGain(0)
+	down.Read(buf)
+	muting := recoverGain(buf, level)
+
+	up := NewMixer(f)
+	up.Add("a", &constSource{l: level, r: level})
+	up.SetGain(0)
+	up.Read(buf)
+	up.SetGain(volume)
+	up.Read(buf)
+	unmuting := recoverGain(buf, level)
+
+	for i := range muting {
+		if math.Abs(muting[i]+unmuting[i]-volume) > 1e-4 {
+			t.Fatalf("frame %d: mute %.6f and unmute %.6f sum to %.6f, want %.2f: the two ramps are not symmetric",
+				i, muting[i], unmuting[i], muting[i]+unmuting[i], volume)
+		}
+	}
+}
+
+func TestGainRampHasNoPlateausInEitherDirection(t *testing.T) {
+	f := DefaultFormat()
+	const level = 0.5
+	buf := make([]byte, 512*frameSize)
+
+	for _, tc := range []struct {
+		name       string
+		from, to   float64
+		monotonic  func(prev, cur float64) bool
+		difference string
+	}{
+		{"mute", 0.6, 0, func(prev, cur float64) bool { return cur < prev }, "fall below"},
+		{"unmute", 0, 0.6, func(prev, cur float64) bool { return cur > prev }, "rise above"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewMixer(f)
+			m.Add("a", &constSource{l: level, r: level})
+			m.SetGain(tc.from)
+			m.Read(buf)
+			m.SetGain(tc.to)
+			m.Read(buf)
+			trajectory := recoverGain(buf, level)
+
+			for i := 1; i < len(trajectory); i++ {
+				if !tc.monotonic(trajectory[i-1], trajectory[i]) {
+					t.Fatalf("frame %d: gain %.9f did not %s %.9f: a plateau is a step boundary, which is what zipper noise is",
+						i, trajectory[i], tc.difference, trajectory[i-1])
+				}
+			}
+		})
+	}
+}
+
+func TestGainRampSettlesExactlyOnZero(t *testing.T) {
+	f := DefaultFormat()
+	m := NewMixer(f)
+	m.Add("a", &constSource{l: 0.5, r: 0.5})
+	m.SetGain(0.6)
+
+	buf := make([]byte, 65536*frameSize)
+	m.Read(buf)
+	m.SetGain(0)
+	m.Read(buf)
+
+	for i, fr := range decodeFrames(buf[len(buf)-256*frameSize:]) {
+		if fr[0] != 0 || fr[1] != 0 {
+			t.Fatalf("frame %d of the settled tail is L=%v R=%v, want silence: an asymptotic mute never reaches zero",
+				i, fr[0], fr[1])
+		}
+	}
+}

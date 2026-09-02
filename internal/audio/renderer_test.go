@@ -35,7 +35,6 @@ func newTestRenderer(t *testing.T) *AudioRenderer {
 	f := DefaultFormat()
 	m := NewMixer(f)
 	r := newRendererWithMixer(m, f, testOpts())
-	r.rampDuration = 0
 	return r
 }
 
@@ -424,41 +423,6 @@ func TestDroneEnvelope_Fallbacks(t *testing.T) {
 	}
 }
 
-func TestDoRamp_EarlyExitOnStaleGen(t *testing.T) {
-	r := newTestRenderer(t)
-	r.mixer.SetGain(0.8)
-
-	r.mu.Lock()
-	r.rampGen = 42
-	r.mu.Unlock()
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		r.doRamp(0.8, 0, 0, 1)
-	}()
-	<-done
-
-	if got := r.mixer.Gain(); got != 0.8 {
-		t.Errorf("stale doRamp must not change gain: got %v, want 0.8", got)
-	}
-}
-
-func TestDoRamp_NormalCompletion(t *testing.T) {
-	r := newTestRenderer(t)
-	r.mixer.SetGain(0.8)
-
-	r.mu.Lock()
-	r.rampGen = 7
-	r.mu.Unlock()
-
-	r.doRamp(0.8, 0, 0, 7)
-
-	if got := r.mixer.Gain(); got > 0.05 {
-		t.Errorf("doRamp completed: gain = %v, want near 0", got)
-	}
-}
-
 func TestClose_WithEngine(t *testing.T) {
 	f := DefaultFormat()
 	m := NewMixer(f)
@@ -541,7 +505,6 @@ func TestSetVolume_WhileMuted(t *testing.T) {
 	opts := testOpts()
 	opts.Muted = true
 	r := newRendererWithMixer(m, f, opts)
-	r.rampDuration = 0
 
 	if err := r.SetVolume(0.4); err != nil {
 		t.Fatal(err)
@@ -555,6 +518,49 @@ func TestSetVolume_WhileMuted(t *testing.T) {
 	}
 	if got := m.Gain(); got != 0.4 {
 		t.Errorf("gain after unmute = %v, want 0.4", got)
+	}
+}
+
+func TestSetMutedFadesOnTheSampleClockNotAGoroutine(t *testing.T) {
+	f := DefaultFormat()
+	r, m := NewCaptureRenderer(f, testOpts())
+	m.Add("a", &constSource{l: 0.5, r: 0.5})
+
+	buf := make([]byte, 1024*frameSize)
+	m.Read(buf)
+	sounding := decodeFrames(buf)
+	before := sounding[len(sounding)-1][0]
+
+	if err := r.SetMuted(true); err != nil {
+		t.Fatal(err)
+	}
+	m.Read(buf)
+	fading := decodeFrames(buf)
+
+	if fading[0][0] >= before {
+		t.Fatalf("first frame after mute is %.6f, not below %.6f: the fade is waiting on a clock other than the sample clock",
+			fading[0][0], before)
+	}
+	if last := fading[len(fading)-1][0]; last > before*0.7 {
+		t.Fatalf("21 ms after mute the level is %.6f against %.6f: the fade is too slow to feel immediate",
+			last, before)
+	}
+}
+
+func TestZeroVolumeStartsSilent(t *testing.T) {
+	f := DefaultFormat()
+	opts := testOpts()
+	opts.Volume = 0
+	_, m := NewCaptureRenderer(f, opts)
+	m.Add("a", &constSource{l: 0.5, r: 0.5})
+
+	buf := make([]byte, 256*frameSize)
+	m.Read(buf)
+	for i, fr := range decodeFrames(buf) {
+		if fr[0] != 0 || fr[1] != 0 {
+			t.Fatalf("frame %d is L=%v R=%v with volume 0: a user who configured silence is hearing something",
+				i, fr[0], fr[1])
+		}
 	}
 }
 

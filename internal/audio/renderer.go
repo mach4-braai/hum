@@ -36,11 +36,9 @@ func init() {
 }
 
 const (
-	muteRampDuration = 50 * time.Millisecond
-	maxPhraseVoices  = 16
-	fallbackAttack   = 100 * time.Millisecond
-	fallbackRelease  = 200 * time.Millisecond
-	muteRampSteps    = 20
+	maxPhraseVoices = 16
+	fallbackAttack  = 100 * time.Millisecond
+	fallbackRelease = 200 * time.Millisecond
 )
 
 type activeVoice struct {
@@ -50,21 +48,19 @@ type activeVoice struct {
 }
 
 type AudioRenderer struct {
-	mu           sync.Mutex
-	mixer        *Mixer
-	engine       *Engine
-	format       Format
-	active       map[string]*activeVoice
-	volume       float64
-	muted        bool
-	th           theme.Theme
-	closed       bool
-	seq          uint64
-	phraseIDs    []string
-	phraseSeq    uint64
-	dropped      int
-	rampGen      uint64
-	rampDuration time.Duration
+	mu        sync.Mutex
+	mixer     *Mixer
+	engine    *Engine
+	format    Format
+	active    map[string]*activeVoice
+	volume    float64
+	muted     bool
+	th        theme.Theme
+	closed    bool
+	seq       uint64
+	phraseIDs []string
+	phraseSeq uint64
+	dropped   int
 }
 
 var (
@@ -76,20 +72,23 @@ var (
 
 func newRendererWithMixer(m *Mixer, f Format, opts renderer.Options) *AudioRenderer {
 	r := &AudioRenderer{
-		mixer:        m,
-		format:       f,
-		active:       make(map[string]*activeVoice),
-		volume:       opts.Volume,
-		muted:        opts.Muted,
-		th:           opts.Theme,
-		rampDuration: muteRampDuration,
+		mixer:  m,
+		format: f,
+		active: make(map[string]*activeVoice),
+		volume: opts.Volume,
+		muted:  opts.Muted,
+		th:     opts.Theme,
 	}
-	if !opts.Muted {
-		m.SetGain(opts.Volume)
-	} else {
-		m.SetGain(0)
-	}
+	r.applyGain()
 	return r
+}
+
+func (r *AudioRenderer) applyGain() {
+	if r.muted {
+		r.mixer.SetGain(0)
+		return
+	}
+	r.mixer.SetGain(r.volume)
 }
 
 func (r *AudioRenderer) Name() string { return "audio" }
@@ -216,50 +215,18 @@ func (r *AudioRenderer) SetVolume(v float64) error {
 		return fmt.Errorf("audio: volume %v out of range [0, 1]", v)
 	}
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.volume = v
-	muted := r.muted
-	r.mu.Unlock()
-	if !muted {
-		r.mixer.SetGain(v)
-	}
+	r.applyGain()
 	return nil
 }
 
 func (r *AudioRenderer) SetMuted(m bool) error {
 	r.mu.Lock()
-	if r.muted == m {
-		r.mu.Unlock()
-		return nil
-	}
+	defer r.mu.Unlock()
 	r.muted = m
-	r.rampGen++
-	gen := r.rampGen
-	rampDur := r.rampDuration
-	if m {
-		from := r.mixer.Gain()
-		r.mu.Unlock()
-		go r.doRamp(from, 0, rampDur, gen)
-	} else {
-		target := r.volume
-		r.mu.Unlock()
-		r.mixer.SetGain(target)
-	}
+	r.applyGain()
 	return nil
-}
-
-func (r *AudioRenderer) doRamp(from, to float64, dur time.Duration, gen uint64) {
-	stepDur := dur / muteRampSteps
-	for i := 1; i <= muteRampSteps; i++ {
-		time.Sleep(stepDur)
-		r.mu.Lock()
-		if r.rampGen != gen {
-			r.mu.Unlock()
-			return
-		}
-		frac := float64(i) / muteRampSteps
-		r.mixer.SetGain(from + (to-from)*frac)
-		r.mu.Unlock()
-	}
 }
 
 func (r *AudioRenderer) Close() error {
@@ -270,7 +237,6 @@ func (r *AudioRenderer) Close() error {
 		return nil
 	}
 	r.closed = true
-	r.rampGen++
 
 	if r.engine != nil {
 		return r.engine.Close()
