@@ -75,6 +75,13 @@ func releaseWaitFor(th theme.Theme) time.Duration {
 	return time.Duration(th.Drone.Release*float64(time.Second)) + shutdownMargin
 }
 
+func (d *daemon) fadeDeadline() time.Duration {
+	if d.render.Name() == nopRendererName {
+		return 0
+	}
+	return d.releaseWait
+}
+
 func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.Renderer, requested, globalFile string) (*daemon, error) {
 	root, scale, err := daemonTuning(cfg)
 	if err != nil {

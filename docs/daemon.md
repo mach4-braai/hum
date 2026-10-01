@@ -128,14 +128,16 @@ run the daemon and still answer `hum status`.
 1. Stop accepting connections; in-flight requests drain against the still-running
    event goroutine.
 2. Release every drone by pushing an empty harmony state to the renderer.
-3. Wait out the theme's release envelope plus 500 ms.
+3. Wait out the theme's release envelope plus 500 ms. The `nop` renderer
+   has nothing to fade and skips this step.
 4. Close the renderer, which closes the audio device.
 5. Unlink the socket and the pidfile.
 
 Killing the device mid-drone clicks or leaves a stuck buffer, which is exactly
 the jarring behaviour Hum exists to avoid, so the wait is not optional. It is
 bounded, and a **second** signal abandons it and exits non-zero: an operator must
-always be able to force the issue.
+always be able to force the issue. A `nop` daemon has no wait to abandon and
+exits 0.
 
 Voices are released strictly before the renderer closes. The reverse order would
 close the device while a fade was still owed, which is the click the envelope

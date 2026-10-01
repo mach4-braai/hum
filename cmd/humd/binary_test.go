@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"net"
@@ -9,7 +8,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,7 +38,6 @@ var buildHumd = sync.OnceValues(func() (string, error) {
 type process struct {
 	cmd    *exec.Cmd
 	socket string
-	lines  chan string
 }
 
 func startProcess(t *testing.T, args ...string) *process {
@@ -58,12 +55,8 @@ func startProcess(t *testing.T, args ...string) *process {
 	t.Cleanup(func() { os.RemoveAll(home) })
 	socket := filepath.Join(home, "humd.sock")
 
-	cmd := exec.Command(binary, append([]string{"--no-audio", "--log-level", "debug", "--socket", socket}, args...)...)
+	cmd := exec.Command(binary, append([]string{"--no-audio", "--socket", socket}, args...)...)
 	cmd.Env = append(os.Environ(), "HUM_HOME="+home)
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		t.Fatalf("stderr pipe: %v", err)
-	}
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start humd: %v", err)
 	}
@@ -74,36 +67,8 @@ func startProcess(t *testing.T, args ...string) *process {
 		}
 	})
 
-	lines := make(chan string, 4096)
-	go func() {
-		defer close(lines)
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			lines <- scanner.Text()
-		}
-	}()
-
 	waitForSocket(t, socket)
-	return &process{cmd: cmd, socket: socket, lines: lines}
-}
-
-func (p *process) waitForLog(t *testing.T, substring string, within time.Duration) {
-	t.Helper()
-
-	deadline := time.After(within)
-	for {
-		select {
-		case line, ok := <-p.lines:
-			if !ok {
-				t.Fatalf("humd stderr closed before logging %q", substring)
-			}
-			if strings.Contains(line, substring) {
-				return
-			}
-		case <-deadline:
-			t.Fatalf("humd did not log %q within %v", substring, within)
-		}
-	}
+	return &process{cmd: cmd, socket: socket}
 }
 
 func waitExit(t *testing.T, cmd *exec.Cmd, within time.Duration) int {

@@ -469,6 +469,30 @@ func TestSecondSignalShortCircuitsTheFade(t *testing.T) {
 	}
 }
 
+func TestASilentDaemonStopsWithoutWaitingForAFade(t *testing.T) {
+	d, _ := testDaemon(t)
+	silent := renderer.NewNop(renderer.Options{})
+	d.render = silent
+	d.releaseWait = time.Hour
+
+	signals := make(chan os.Signal, 1)
+	signals <- syscall.SIGTERM
+	done := make(chan int, 1)
+	go func() { done <- d.drain(signals, quietLogger()) }()
+
+	select {
+	case code := <-done:
+		if code != exitOK {
+			t.Errorf("drain returned %d, want %d: a nop renderer has no fade for a second signal to cut short", code, exitOK)
+		}
+	case <-time.After(daemonStopGrace):
+		t.Fatal("a nop daemon waited for a fade that cannot sound")
+	}
+	if silent.Closes() != 1 {
+		t.Errorf("renderer closed %d times, want exactly 1", silent.Closes())
+	}
+}
+
 func TestRequestsAfterTheEventLoopStopsAreRefused(t *testing.T) {
 	d, _ := testDaemon(t)
 	close(d.stopped)

@@ -244,14 +244,17 @@ func (d *daemon) drain(signals <-chan os.Signal, log *slog.Logger) int {
 		log.Error("cannot release voices", "error", err)
 	}
 
-	log.Debug("waiting for voices to fade", "deadline", d.releaseWait)
+	fade := d.fadeDeadline()
+	log.Debug("waiting for voices to fade", "deadline", fade)
 
-	select {
-	case <-time.After(d.releaseWait):
-	case sig := <-signals:
-		log.Warn("second signal, exiting immediately", "signal", sig.String())
-		d.render.Close()
-		return exitInterrupted
+	if fade > 0 {
+		select {
+		case <-time.After(fade):
+		case sig := <-signals:
+			log.Warn("second signal, exiting immediately", "signal", sig.String())
+			d.render.Close()
+			return exitInterrupted
+		}
 	}
 
 	if err := d.render.Close(); err != nil {

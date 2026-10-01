@@ -345,9 +345,12 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   returns on an event, not on the clock. The bound is only reached when the thing
   under test has already stopped, so a larger one costs a working run nothing and
   a smaller one buys a red build on a loaded runner. They are not slow tests.
-- The runtime coalesces rapid duplicate signals. A test that sends two `SIGTERM`s
-  back to back sees one; wait for the daemon's "waiting for voices to fade" line
-  in between.
+- `drain` skips the fade wait for the `nop` renderer, and every daemon a test
+  starts runs `--no-audio`. So no binary test can show a second `SIGTERM` exiting
+  130: there is no wait to interrupt, and the daemon exits 0.
+  `TestSecondSignalShortCircuitsTheFade` covers the 130 path in-process with a
+  recorder renderer. Restoring the wait for `nop` puts 3.5 s back on every test
+  that stops a real daemon.
 - `humd` installs its signal handler before it opens the renderer or the socket.
   Notifying after the listener leaves a window where `SIGTERM` kills the process
   with the default disposition — no drain, no fade, socket left behind — and a
