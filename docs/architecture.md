@@ -213,6 +213,10 @@ and calls `d.drain`:
    before the device is closed. Closing the device mid-drone produces a
    click; the wait exists to prevent exactly that.
 
+   The `nop` renderer has no envelope to wait for, so `fadeDeadline`
+   returns 0 for it and `drain` goes straight to step 4. The debug line
+   still reads "waiting for voices to fade", with `deadline=0s`.
+
 4. **Close the renderer.** `d.render.Close()` tears down the audio device.
    Voices are released strictly before the renderer closes; reversing the
    order would close the device while a fade was still owed.
@@ -222,7 +226,8 @@ and calls `d.drain`:
 
 A **second signal** during the wait causes `drain` to abandon the fade,
 close the renderer immediately, and return `exitInterrupted` (130). An
-operator must always be able to force the issue.
+operator must always be able to force the issue. A `nop` daemon never
+waits, so a second signal changes nothing and it exits 0.
 
 ---
 
