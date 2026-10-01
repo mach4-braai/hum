@@ -20,7 +20,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -52,7 +57,12 @@ jobs:
       matrix:
         os: [windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -93,7 +103,12 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -119,6 +134,8 @@ jobs:
       id-token: write # authenticates the Codecov upload, which a protected branch requires
       statuses: write # posts the coverage/total commit status
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -197,7 +214,12 @@ jobs:
   vuln:
     name: vuln
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -222,7 +244,12 @@ jobs:
   fuzz:
     name: fuzz
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
+      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
