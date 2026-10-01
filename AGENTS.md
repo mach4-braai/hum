@@ -107,13 +107,18 @@ behaviour, boundaries and error paths — not plumbing.
   the Homebrew formula gets an assertion there, because those three cannot share
   a definition and will otherwise drift apart silently.
 - Workflows pin actions to commits, not tags, so a moved tag cannot swap the code
-  a release runs. `pinnedActions` in `internal/infra` is the one place the commit
-  and its version are written down, since a bare SHA cannot say which release it
-  is. Bumping one is two edits, and the assertion fails until they agree:
-  `gh api repos/<action>/releases/latest --jq .tag_name` then
-  `gh api repos/<action>/commits/<tag> --jq .sha`. Dependabot only makes the first
-  edit, so its `github-actions` pull requests arrive red on purpose and cannot merge
-  until `pinnedActions` records the commit it moved to.
+  a release runs. Every `uses:` carries a `# vX.Y.Z` comment because a bare SHA
+  cannot say which release it is. `mise run zizmor`, run in the `vuln` job, fails
+  on a tag ref (`unpinned-uses`, set to `hash-pin` for every action in
+  `.github/zizmor.yml`), on a comment that names a different commit
+  (`ref-version-mismatch`), and on a SHA from a fork (`impostor-commit`).
+  Dependabot rewrites the SHA and the comment together, so its pull requests
+  arrive green. The last two audits query GitHub, so a local run without
+  `GH_TOKEN` skips them; `GH_TOKEN=$(gh auth token) mise run zizmor` does not.
+- zizmor 1.30 resolves its config from the git root and does not follow a
+  submodule or worktree to it, so this checkout finds no `.github/zizmor.yml`.
+  The task passes `--config` for that reason. Dropping it lets the
+  `self-repository` findings back in locally while CI stays green.
 - The release job installs its Linux packages from a cached deb archive, keyed on
   the runner image. `apt-get` downloads only what an image lacks, so a set
   assembled on one image can carry exact versions `dpkg -i` cannot reconcile on
@@ -470,7 +475,9 @@ Things the code cannot say, that will be "fixed" back if forgotten.
 
 - `mise run junit` runs the test suite independently of `mise run coverage`. Both produce test results; the coverage job runs them in sequence. `junit.xml` is written by gotestsum even when tests fail, which is why the upload step uses `if: ${{ !cancelled() }}` — the flake data is most valuable precisely when tests are red. `continue-on-error: true` on the run step keeps the job status authoritative.
 - Every job in `ci.yml` must include `./.github/actions/go-cache`. `TestEveryCIJobRestoresTheGoCaches` counts `runs-on:` and go-cache references and fails if they differ. Adding a job without the composite makes the count mismatch fail that test.
-- Adding an action to a workflow without recording it in `pinnedActions` (in `internal/infra/ci_test.go`) fails `TestWorkflowsPinEveryActionToAReviewedCommit`. The lead records the pin; the workflow author reports it as `owner/repo version sha`.
+- `self-repository` is disabled in `.github/zizmor.yml`. Its fix, `uses: $/...`,
+  is a GitHub syntax from July 2026 that actionlint 1.7.12 still rejects. Enable
+  the audit and switch the eight local `uses:` once actionlint accepts it.
 - `scorecard.yml` puts write permissions (`security-events: write`, `id-token: write`) at the **job** level, not the workflow level. zizmor `--pedantic` flags workflow-level write permissions as `excessive-permissions`. The workflow level carries only `contents: read`.
 - `errSocketMissing` and `errSocketStale` in `cmd/hum/client.go` are declared as
   `fmt.Errorf("%w", errNoDaemon)`, not `errors.New(...)`. The wrap is load-bearing:

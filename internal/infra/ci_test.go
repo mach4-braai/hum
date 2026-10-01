@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -300,81 +299,6 @@ func TestCILinuxAudioStepReferencesItsRemovalIssue(t *testing.T) {
 
 	if !strings.Contains(workflow, "#39") {
 		t.Error("the Linux audio dependency step does not reference issue #39, which removes it")
-	}
-}
-
-var pinnedActions = map[string]struct {
-	version  string
-	minMajor int
-	commit   string
-}{
-	"actions/attest-build-provenance":   {"v4.2.2", 3, "4d101475d8b20a2381f78447822ac1eab6504dd8"},
-	"actions/cache":                     {"v6.1.0", 5, "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"},
-	"actions/checkout":                  {"v7.0.1", 5, "3d3c42e5aac5ba805825da76410c181273ba90b1"},
-	"actions/create-github-app-token":   {"v3.2.0", 3, "bcd2ba49218906704ab6c1aa796996da409d3eb1"},
-	"codecov/codecov-action":            {"v7.0.0", 5, "fb8b3582c8e4def4969c97caa2f19720cb33a72f"},
-	"codecov/test-results-action":       {"v1.2.1", 1, "0fa95f0e1eeaafde2c782583b36b28ad0d8c77d3"},
-	"github/codeql-action/upload-sarif": {"v4.37.6", 4, "5595ccaf912efad79be6eef63a5619ff05969be3"},
-	"jdx/mise-action":                   {"v4.2.4", 4, "7e36c90d9ab29c415a2384db3006f3ec8a8cc654"},
-	"ossf/scorecard-action":             {"v2.4.4", 2, "2d1146689b8cda280b9bc96326124645441f03bc"},
-}
-
-func TestWorkflowsPinEveryActionToAReviewedCommit(t *testing.T) {
-	uses := regexp.MustCompile(`uses:\s*([\w.-]+/[\w.-]+(?:/[\w.-]+)*)@(\S+)`)
-	seen := make(map[string]bool, len(pinnedActions))
-
-	var manifests []string
-	for _, pattern := range []string{
-		filepath.Join(".github", "workflows", "*.yml"),
-		filepath.Join(".github", "workflows", "*.yaml"),
-		filepath.Join(".github", "actions", "*", "action.yml"),
-		filepath.Join(".github", "actions", "*", "action.yaml"),
-	} {
-		matches, err := filepath.Glob(filepath.Join(repoRoot(t), pattern))
-		if err != nil {
-			t.Fatalf("glob %s: %v", pattern, err)
-		}
-		manifests = append(manifests, matches...)
-	}
-	if len(manifests) == 0 {
-		t.Fatal("no workflows or actions found, so this asserts nothing")
-	}
-
-	for _, path := range manifests {
-		file, err := filepath.Rel(repoRoot(t), path)
-		if err != nil {
-			t.Fatalf("relativise %s: %v", path, err)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", file, err)
-		}
-		for _, m := range uses.FindAllStringSubmatch(string(data), -1) {
-			action, ref := m[1], m[2]
-			pin, tracked := pinnedActions[action]
-			if !tracked {
-				t.Errorf("%s uses %s, which pinnedActions does not record", file, action)
-				continue
-			}
-			seen[action] = true
-			if ref != pin.commit {
-				t.Errorf("%s pins %s at %s, want %s (%s): a tag can be moved onto code nobody reviewed", file, action, ref, pin.commit, pin.version)
-			}
-		}
-	}
-
-	for action, pin := range pinnedActions {
-		if !seen[action] {
-			t.Errorf("no workflow uses %s; drop it from pinnedActions or restore it", action)
-			continue
-		}
-		major, err := strconv.Atoi(strings.SplitN(strings.TrimPrefix(pin.version, "v"), ".", 2)[0])
-		if err != nil {
-			t.Fatalf("parse major of %s %s: %v", action, pin.version, err)
-		}
-		if major < pin.minMajor {
-			t.Errorf("%s is recorded at %s, want at least v%d: earlier majors run on the deprecated node20 runtime", action, pin.version, pin.minMajor)
-		}
 	}
 }
 

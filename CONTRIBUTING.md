@@ -53,9 +53,8 @@ the shape in use here.
 ## Pull requests
 
 Open against `master`. CI runs `check` on ubuntu, macos and windows; `coverage`;
-`e2e` on posix; `vuln`; `fuzz`; and a Windows binary smoke test. A Dependabot PR
-for a GitHub Actions version arrives red on purpose — it needs a SHA recorded in
-`internal/infra` before it can merge; see the `pinnedActions` trap in `AGENTS.md`.
+`e2e` on posix; `vuln`, which also runs `mise run zizmor`; `fuzz`; and a Windows
+binary smoke test.
 
 Windows support is best-effort. The suite runs there on every PR, but a failure
 on a platform the change does not touch is not your bug to fix.

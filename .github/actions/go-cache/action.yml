@@ -14,7 +14,7 @@ runs:
         } >>"$GITHUB_ENV"
 
     - name: Cache the module downloads
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .gocache/mod
         key: go-mod-${{ hashFiles('go.sum') }}
@@ -22,7 +22,7 @@ runs:
         enableCrossOsArchive: true
 
     - name: Cache the compiler output
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: .gocache/build
         key: ${{ runner.os }}-go-build-${{ hashFiles('go.sum') }}

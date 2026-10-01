@@ -5,6 +5,7 @@ gotestsum = "1.13.0"
 syft = "1.50.0"
 "go:github.com/avito-tech/go-mutesting/cmd/go-mutesting" = "0.0.0-20251226130216-48d0401f00fb"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
+zizmor = "1.30.1"
 
 [tasks.build]
 description = "Build hum and humd into bin/"
@@ -76,6 +77,10 @@ run = "go vet ./..."
 [tasks.vuln]
 description = "Scan the call graph for known vulnerabilities"
 run = "govulncheck ./..."
+
+[tasks.zizmor]
+description = "Audit the workflows and actions, including that every action is pinned to the commit its version comment names"
+run = "zizmor --pedantic --config .github/zizmor.yml .github"
 
 [tasks.fuzz]
 description = "Fuzz the protocol decoder against untrusted input"

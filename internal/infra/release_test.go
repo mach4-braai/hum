@@ -236,12 +236,6 @@ func TestWorkflowsSurviveTheZizmorAudits(t *testing.T) {
 	for _, file := range []string{"ci.yml", "promote.yml", "release.yml"} {
 		workflow := readRepoFile(t, ".github", "workflows", file)
 
-		checkouts := strings.Count(workflow, "uses: actions/checkout@")
-		guarded := strings.Count(workflow, "persist-credentials: false") + strings.Count(workflow, "zizmor: ignore[artipacked]")
-		if checkouts != guarded {
-			t.Errorf("%s has %d checkouts but %d that say what becomes of the token: artipacked persists it for everything later in the job", file, checkouts, guarded)
-		}
-
 		_, body, found := strings.Cut(workflow, "\njobs:\n")
 		if !found {
 			t.Fatalf("%s declares no jobs", file)
