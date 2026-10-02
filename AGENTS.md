@@ -115,6 +115,9 @@ behaviour, boundaries and error paths — not plumbing.
   Dependabot rewrites the SHA and the comment together, so its pull requests
   arrive green. The last two audits query GitHub, so a local run without
   `GH_TOKEN` skips them; `GH_TOKEN=$(gh auth token) mise run zizmor` does not.
+  The step runs `if: ${{ !cancelled() }}`, so a govulncheck failure earlier in
+  the job does not skip the pin audit, and `vuln` is a required check so a red
+  audit blocks the merge.
 - zizmor 1.30 resolves its config from the git root and does not follow a
   submodule or worktree to it, so this checkout finds no `.github/zizmor.yml`.
   The task passes `--config` for that reason. Dropping it lets the
@@ -254,7 +257,7 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   only; requiring it would block every external contribution.
 - Every job carries `name:` spelled exactly like its id, because `zizmor --pedantic`
   wants jobs named and the `master` ruleset requires `check (ubuntu-latest)`,
-  `check (macos-latest)` and `coverage` — contexts GitHub derives from the id when no
+  `check (macos-latest)`, `coverage` and `vuln` — contexts GitHub derives from the id when no
   name is given. Renaming a job to something prettier renames its status check, and
   every pull request then waits forever for one that never reports.
 - A push to `master` runs `mise run snapshot` in `release.yml`, builds every target
