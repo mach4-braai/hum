@@ -139,6 +139,14 @@ type ReapCandidate struct {
 	Reason string
 }
 
+type ownerState int
+
+const (
+	ownerExited ownerState = iota
+	ownerRunning
+	ownerUnknown
+)
+
 func (r *Registry) ActiveToCancel(maxLease time.Duration, daemonHost string) []ReapCandidate {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -150,15 +158,16 @@ func (r *Registry) ActiveToCancel(maxLease time.Duration, daemonHost string) []R
 			continue
 		}
 		if s.OwnerPID > 0 && s.OwnerHost != "" && s.OwnerHost == daemonHost {
-			if !pidAlive(s.OwnerPID) {
+			switch probeOwner(s.OwnerPID) {
+			case ownerExited:
 				out = append(out, ReapCandidate{ID: s.ID, Reason: "owner process exited"})
+				continue
+			case ownerRunning:
+				continue
 			}
-			continue
 		}
-		if maxLease > 0 && s.OwnerPID == 0 {
-			if !s.UpdatedAt.IsZero() && s.UpdatedAt.Add(maxLease).Before(current) {
-				out = append(out, ReapCandidate{ID: s.ID, Reason: "session lease expired"})
-			}
+		if maxLease > 0 && !s.UpdatedAt.IsZero() && s.UpdatedAt.Add(maxLease).Before(current) {
+			out = append(out, ReapCandidate{ID: s.ID, Reason: "session lease expired"})
 		}
 	}
 	return out

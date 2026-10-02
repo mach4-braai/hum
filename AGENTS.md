@@ -493,7 +493,8 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   `ActiveToCancel` requires both fields and a hostname match. `hum start
   --owner-pid N` populates both automatically. Raw senders using `nc` or `socat`
   must include `"owner_host":"$(hostname)"` alongside `owner_pid`, or the pid is
-  silently ignored and the session relies on traps for termination.
+  silently ignored and the session relies on traps, or on `session.max_lease` if
+  one is set, for termination.
 
 ## Protocol
 

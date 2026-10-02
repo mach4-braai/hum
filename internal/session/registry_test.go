@@ -350,10 +350,15 @@ func startEventWithOwner(id, host string, pid int) protocol.Event {
 	return protocol.Event{Event: protocol.SessionStarted, ID: id, OwnerPID: pid, OwnerHost: host}
 }
 
+func stubProbe(t *testing.T, state ownerState) {
+	t.Helper()
+	old := probeOwner
+	t.Cleanup(func() { probeOwner = old })
+	probeOwner = func(int) ownerState { return state }
+}
+
 func TestActiveCancelDeadOwner(t *testing.T) {
-	old := pidAlive
-	t.Cleanup(func() { pidAlive = old })
-	pidAlive = func(int) bool { return false }
+	stubProbe(t, ownerExited)
 
 	r := New()
 	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {
@@ -373,9 +378,7 @@ func TestActiveCancelDeadOwner(t *testing.T) {
 }
 
 func TestActiveCancelAliveOwner(t *testing.T) {
-	old := pidAlive
-	t.Cleanup(func() { pidAlive = old })
-	pidAlive = func(int) bool { return true }
+	stubProbe(t, ownerRunning)
 
 	r := New()
 	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {
@@ -389,9 +392,7 @@ func TestActiveCancelAliveOwner(t *testing.T) {
 }
 
 func TestActiveCancelHostMismatch(t *testing.T) {
-	old := pidAlive
-	t.Cleanup(func() { pidAlive = old })
-	pidAlive = func(int) bool { return false }
+	stubProbe(t, ownerExited)
 
 	r := New()
 	if _, err := r.Apply(startEventWithOwner("s1", "otherhost", 12345)); err != nil {
@@ -484,10 +485,54 @@ func TestActiveCancelLeaseRefreshedByUpdate(t *testing.T) {
 	}
 }
 
+func TestActiveCancelLeaseCoversOwnersTheProbeCannotVouchFor(t *testing.T) {
+	const lease = time.Hour
+	cases := []struct {
+		name   string
+		host   string
+		probe  ownerState
+		lease  time.Duration
+		after  time.Duration
+		reason string
+	}{
+		{name: "a running owner outlasts the lease", host: "myhost", probe: ownerRunning, lease: lease, after: 2 * time.Hour},
+		{name: "an unsignalable owner expires with the lease", host: "myhost", probe: ownerUnknown, lease: lease, after: 2 * time.Hour, reason: "session lease expired"},
+		{name: "an unsignalable owner inside the lease is kept", host: "myhost", probe: ownerUnknown, lease: lease, after: 30 * time.Minute},
+		{name: "an unsignalable owner is kept with the lease off", host: "myhost", probe: ownerUnknown, after: 2 * time.Hour},
+		{name: "an owner on another host expires with the lease", host: "otherhost", probe: ownerExited, lease: lease, after: 2 * time.Hour, reason: "session lease expired"},
+		{name: "an owner without a host expires with the lease", host: "", probe: ownerExited, lease: lease, after: 2 * time.Hour, reason: "session lease expired"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+			current := base
+			old := now
+			t.Cleanup(func() { now = old })
+			now = func() time.Time { return current }
+			stubProbe(t, tc.probe)
+
+			r := New()
+			if _, err := r.Apply(startEventWithOwner("s1", tc.host, 12345)); err != nil {
+				t.Fatal(err)
+			}
+
+			current = base.Add(tc.after)
+			candidates := r.ActiveToCancel(tc.lease, "myhost")
+			if tc.reason == "" {
+				if len(candidates) != 0 {
+					t.Errorf("ActiveToCancel = %+v, want the session kept", candidates)
+				}
+				return
+			}
+			if len(candidates) != 1 || candidates[0].Reason != tc.reason {
+				t.Errorf("ActiveToCancel = %+v, want s1 cancelled with reason %q", candidates, tc.reason)
+			}
+		})
+	}
+}
+
 func TestActiveCancelTerminalSessionSkipped(t *testing.T) {
-	old := pidAlive
-	t.Cleanup(func() { pidAlive = old })
-	pidAlive = func(int) bool { return false }
+	stubProbe(t, ownerExited)
 
 	r := New()
 	if _, err := r.Apply(startEventWithOwner("s1", "myhost", 12345)); err != nil {

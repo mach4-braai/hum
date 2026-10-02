@@ -81,10 +81,14 @@ machine is ignored rather than matched against an unrelated local process.
 on other event types. Zero and absent are equivalent: both mean the session
 has no declared owner. A negative value is rejected by `Validate`.
 
-A session without an `owner_pid` is never reaped by pid. If the daemon is
-configured with a maximum lease duration, ownerless sessions are cancelled
-once `session.updated` (or `session.started`, if never updated) is older
-than the lease. The default lease is off; reaping a legitimately long build
+A session without an `owner_pid` is never reaped by pid, and neither is one
+whose `owner_host` is missing or names another machine. If the daemon is
+configured with a maximum lease duration, it cancels every active session
+whose owner it cannot probe once `session.updated` (or `session.started`, if
+never updated) is older than the lease. That covers sessions with no
+`owner_pid`, sessions whose pid is ignored for a host mismatch, and sessions
+whose pid belongs to another user. The lease never cuts short a session whose
+owner is running. The default lease is off; reaping a legitimately long build
 mid-run is worse than the leak.
 
 `root` is the client's canonical absolute path to the project root, sent on
