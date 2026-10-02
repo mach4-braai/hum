@@ -109,6 +109,28 @@ The daemon's own working directory never determines musical context. Under
 `brew services` that directory is `$HOME`, so deriving anything from it would
 silently give every Homebrew user global configuration only.
 
+## Resolving project context
+
+`config.ResolveForSession` and `config.CanonicalRoot` run `os.Stat`,
+`filepath.EvalSymlinks` and an ancestor walk on the session's `root`, and the
+theme the project names is read from `$HUM_HOME/themes/`. None of that has a
+deadline, so a root or a theme file on a stale network mount blocks for as long
+as the kernel blocks the call.
+
+All of it runs on the connection goroutine, in `handle`, before the request is
+queued. The event goroutine receives the config, context owner and theme
+already loaded and does no filesystem work for a `session.started`, so a slow
+root stalls only the connection that sent it. `hum theme use` is different: it
+still loads its theme file on the event goroutine.
+
+Resolution is bounded at 500 ms. Past the bound, the `session.started` fails
+with an error naming the root and the bound, and no session starts.
+
+A goroutine blocked in `stat` cannot be cancelled, so a timed-out resolution
+keeps running and keeps its slot until the kernel returns. At most four
+resolutions run at once. A fifth concurrent `session.started` fails straight
+away with an error naming the limit instead of queuing behind the stuck ones.
+
 ## Startup
 
 1. Resolve global configuration, then load the theme it names.

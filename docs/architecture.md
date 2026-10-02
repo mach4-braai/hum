@@ -253,7 +253,7 @@ cannot bind the socket closes the renderer cleanly before exiting.
 
 The daemon holds one musical context (root, scale, theme) at a time.
 Context adoption on `session.started` is conditional: the event goroutine
-calls `adoptContext` only when no sessions are currently sounding. A
+applies the session's resolved context only when no sessions are sounding. A
 joining session therefore inherits the established context rather than
 overriding it. `hum status` reports `context_owner` so which project set
 the context is always visible.
