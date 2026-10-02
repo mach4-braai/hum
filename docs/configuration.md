@@ -141,13 +141,17 @@ user-extensible files under `$HUM_HOME/themes/`, so the full set of valid
 names is not known to this package; `internal/theme` reports an unknown
 theme when it fails to load one.
 
-`session.max_lease` sets the maximum duration an ownerless active session
-may go without a `session.updated` event before the daemon cancels it and
-releases its drone. The value is a Go duration string (`"24h"`, `"30m"`).
+`session.max_lease` sets the maximum duration an active session the daemon
+cannot vouch for may go without a `session.updated` event before the daemon
+cancels it and releases its drone. The daemon vouches for a session only
+while its `owner_pid` is running, can be signalled, and its `owner_host`
+matches the daemon's hostname. A session with no `owner_pid`, a missing or
+foreign `owner_host`, or a pid owned by another user falls under the lease.
+The value is a Go duration string (`"24h"`, `"30m"`).
 The default is `""`, which disables the lease entirely. A negative value
-is rejected. Use this when integrations that cannot declare an `owner_pid`
-are known to be bounded in duration and the risk of a leaked drone
-outweighs the risk of an early cancellation.
+is rejected. Use this when integrations that cannot declare a probeable
+`owner_pid` are known to be bounded in duration and the risk of a leaked
+drone outweighs the risk of an early cancellation.
 
 ## Worked example
 

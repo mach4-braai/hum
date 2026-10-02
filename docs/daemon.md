@@ -196,8 +196,10 @@ accumulate every session the machine ever ran.
 
 An active session is cancelled when its declared `owner_pid` is gone. The
 probe runs `Kill(pid, 0)` on POSIX; on Windows it uses `OpenProcess` and
-`GetExitCodeProcess`. Both treat `EPERM` (live process owned by another
-user) as alive. The cancellation follows the normal event path, so
+`GetExitCodeProcess`. A pid the daemon may not signal (`EPERM` on POSIX,
+`ERROR_ACCESS_DENIED` from `OpenProcess` on Windows) is neither alive nor
+gone. The daemon cannot vouch for it, so the session is left to the lease
+below. The cancellation follows the normal event path, so
 `AudioRenderer.Update` releases the drone exactly as it does for an
 explicit `session.cancelled` event. Every cancellation is logged at `warn`
 with the session id and the reason.
@@ -208,9 +210,12 @@ carries the remote machine's hostname and is never probed, because its pid
 means nothing in the daemon's process namespace. A session with no
 `owner_pid` is never probed.
 
-If a maximum lease duration is configured, ownerless sessions are cancelled
-once `session.updated` (or `session.started`, if never updated) is older
-than the lease. The default is off. Terminal sessions already reap
+If a maximum lease duration is configured, every active session the daemon
+cannot vouch for is cancelled once `session.updated` (or `session.started`,
+if never updated) is older than the lease. That is a session with no
+`owner_pid`, one whose `owner_host` is missing or does not match, and one
+whose pid the daemon may not signal. A session whose owner is running is kept
+whatever the lease says. The default is off. Terminal sessions already reap
 themselves through the reap window; the lease only applies to sessions
 that remain active.
 

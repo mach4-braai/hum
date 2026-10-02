@@ -7,12 +7,15 @@ import (
 	"syscall"
 )
 
-var pidAlive = realPidAlive
+var probeOwner = realProbeOwner
 
-func realPidAlive(pid int) bool {
+func realProbeOwner(pid int) ownerState {
 	err := syscall.Kill(pid, 0)
 	if err == nil {
-		return true
+		return ownerRunning
 	}
-	return errors.Is(err, syscall.EPERM)
+	if errors.Is(err, syscall.EPERM) {
+		return ownerUnknown
+	}
+	return ownerExited
 }

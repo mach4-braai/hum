@@ -172,7 +172,8 @@ printf '{"event":"session.started","id":"a1","title":"build","owner_pid":%d,"own
 
 The daemon checks `owner_host` against its own hostname before probing the
 pid. If the two differ (forwarded socket, container), the pid is ignored
-and the session falls back to normal trap-based termination.
+and the session falls back to normal trap-based termination, or to
+`session.max_lease` if one is configured.
 
 ### Session id generation
 
