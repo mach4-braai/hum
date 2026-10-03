@@ -285,8 +285,12 @@ func TestAdoptingAProjectThemeMovesTheFadeDeadline(t *testing.T) {
 	writeUserTheme(t, "sluggish", 9.0)
 	proj := project(t, "music:\n  theme: sluggish\n")
 
-	if err := d.adoptContext(proj); err != nil {
-		t.Fatalf("adoptContext(%q): %v", proj, err)
+	resolution := d.resolveForEvent(protocol.Event{Event: protocol.SessionStarted, ID: "s", Root: proj})
+	if resolution.err != nil {
+		t.Fatalf("resolve %q: %v", proj, resolution.err)
+	}
+	if err := d.applyResolvedContext(resolution); err != nil {
+		t.Fatalf("applyResolvedContext(%q): %v", proj, err)
 	}
 
 	if d.theme.Name != "sluggish" {

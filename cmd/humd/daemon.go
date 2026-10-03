@@ -18,18 +18,54 @@ import (
 )
 
 const (
-	defaultReapEvery  = time.Minute
-	defaultReapAfter  = 5 * time.Minute
-	audioTestDuration = 2 * time.Second
-	audioTestGain     = 0.6
+	defaultReapEvery         = time.Minute
+	defaultReapAfter         = 5 * time.Minute
+	audioTestDuration        = 2 * time.Second
+	audioTestGain            = 0.6
+	defaultResolveTimeout    = 500 * time.Millisecond
+	maxConcurrentResolutions = 4
 )
 
 var daemonTuning = tuning
 var engineRetune = (*harmony.Engine).Retune
 
+type contextResolution struct {
+	cfg      *config.Config
+	owner    string
+	theme    theme.Theme
+	themeErr error
+	err      error
+}
+
+func resolveProjectContext(globalFile, root string) (*config.Config, string, error) {
+	cfg, _, err := config.ResolveForSession(globalFile, root)
+	if err != nil {
+		return nil, "", err
+	}
+	owner := root
+	if root != "" {
+		if canonical, err := config.CanonicalRoot(root); err == nil {
+			owner = canonical
+		}
+	}
+	return cfg, owner, nil
+}
+
+var resolveSessionContext = resolveProjectContext
+
+func resolveContext(globalFile, root string) contextResolution {
+	cfg, owner, err := resolveSessionContext(globalFile, root)
+	if err != nil {
+		return contextResolution{err: err}
+	}
+	th, themeErr := theme.Load(cfg.Music.Theme)
+	return contextResolution{cfg: cfg, owner: owner, theme: th, themeErr: themeErr}
+}
+
 type call struct {
-	request protocol.Request
-	reply   chan protocol.Response
+	request    protocol.Request
+	resolution contextResolution
+	reply      chan protocol.Response
 }
 
 type daemon struct {
@@ -53,6 +89,9 @@ type daemon struct {
 	daemonHost   string
 	volume       float64
 	muted        bool
+
+	resolveTimeout time.Duration
+	resolveSlots   chan struct{}
 
 	calls    chan call
 	stopped  chan struct{}
@@ -94,25 +133,27 @@ func newDaemon(log *slog.Logger, cfg *config.Config, th theme.Theme, r renderer.
 		maxLease, _ = time.ParseDuration(cfg.Session.MaxLease)
 	}
 	return &daemon{
-		log:          log,
-		registry:     session.New(),
-		engine:       harmony.NewEngine(root, scale, th.PhraseSpec()),
-		render:       r,
-		requested:    requested,
-		theme:        th,
-		globalFile:   globalFile,
-		releaseWait:  releaseWaitFor(th),
-		reapEvery:    defaultReapEvery,
-		reapAfter:    defaultReapAfter,
-		maxLease:     maxLease,
-		summaryEvery: defaultSummaryEvery,
-		throttle:     newThrottle(defaultLogWindow),
-		daemonHost:   host,
-		volume:       cfg.Audio.Volume,
-		muted:        cfg.Audio.Muted,
-		calls:        make(chan call),
-		stopped:      make(chan struct{}),
-		shutdown:     make(chan struct{}),
+		log:            log,
+		registry:       session.New(),
+		engine:         harmony.NewEngine(root, scale, th.PhraseSpec()),
+		render:         r,
+		requested:      requested,
+		theme:          th,
+		globalFile:     globalFile,
+		releaseWait:    releaseWaitFor(th),
+		reapEvery:      defaultReapEvery,
+		reapAfter:      defaultReapAfter,
+		maxLease:       maxLease,
+		summaryEvery:   defaultSummaryEvery,
+		throttle:       newThrottle(defaultLogWindow),
+		daemonHost:     host,
+		volume:         cfg.Audio.Volume,
+		muted:          cfg.Audio.Muted,
+		calls:          make(chan call),
+		stopped:        make(chan struct{}),
+		shutdown:       make(chan struct{}),
+		resolveTimeout: defaultResolveTimeout,
+		resolveSlots:   make(chan struct{}, maxConcurrentResolutions),
 	}, nil
 }
 func (d *daemon) serveEvents(ctx context.Context) {
@@ -126,7 +167,7 @@ func (d *daemon) serveEvents(ctx context.Context) {
 	for {
 		select {
 		case c := <-d.calls:
-			c.reply <- d.dispatch(c.request)
+			c.reply <- d.dispatch(c.request, c.resolution)
 		case <-reap.C:
 			if dropped := d.registry.Reap(d.reapAfter); dropped > 0 {
 				d.reaped += dropped
@@ -144,15 +185,24 @@ func (d *daemon) serveEvents(ctx context.Context) {
 func (d *daemon) reapActive() {
 	for _, c := range d.registry.ActiveToCancel(d.maxLease, d.daemonHost) {
 		d.log.Warn("reaping active session", "id", c.ID, "reason", c.Reason)
-		d.applyEvent(protocol.Event{Event: protocol.SessionCancelled, ID: c.ID})
+		d.applyEvent(protocol.Event{Event: protocol.SessionCancelled, ID: c.ID}, contextResolution{})
 		d.reaped++
 	}
 }
 
 func (d *daemon) handle(request protocol.Request) protocol.Response {
+	if err := request.Validate(); err != nil {
+		return failure(err)
+	}
+
+	var resolution contextResolution
+	if request.Event != nil && request.Event.Event == protocol.SessionStarted {
+		resolution = d.boundedResolveForEvent(*request.Event)
+	}
+
 	reply := make(chan protocol.Response, 1)
 	select {
-	case d.calls <- call{request: request, reply: reply}:
+	case d.calls <- call{request: request, resolution: resolution, reply: reply}:
 	case <-d.stopped:
 		return protocol.Response{OK: false, Error: "daemon is shutting down"}
 	}
@@ -164,19 +214,22 @@ func (d *daemon) handle(request protocol.Request) protocol.Response {
 	}
 }
 
-func (d *daemon) dispatch(request protocol.Request) protocol.Response {
+func (d *daemon) dispatch(request protocol.Request, resolution contextResolution) protocol.Response {
 	if err := request.Validate(); err != nil {
 		return failure(err)
 	}
 	if request.Event != nil {
-		return d.applyEvent(*request.Event)
+		return d.applyEvent(*request.Event, resolution)
 	}
 	return d.applyCommand(request.Command, request.Value)
 }
 
-func (d *daemon) applyEvent(event protocol.Event) protocol.Response {
+func (d *daemon) applyEvent(event protocol.Event, resolution contextResolution) protocol.Response {
 	if event.Event == protocol.SessionStarted {
-		if err := d.adoptContext(event.Root); err != nil {
+		if resolution.err != nil {
+			return failure(resolution.err)
+		}
+		if err := d.applyResolvedContext(resolution); err != nil {
 			return failure(err)
 		}
 	}
@@ -210,18 +263,35 @@ func (d *daemon) applyEvent(event protocol.Event) protocol.Response {
 	return protocol.Response{OK: true}
 }
 
-func (d *daemon) adoptContext(root string) error {
-	cfg, _, err := config.ResolveForSession(d.globalFile, root)
-	if err != nil {
-		return err
+func (d *daemon) boundedResolveForEvent(event protocol.Event) contextResolution {
+	select {
+	case d.resolveSlots <- struct{}{}:
+	default:
+		return contextResolution{err: fmt.Errorf("too many project roots are still resolving (max %d)", maxConcurrentResolutions)}
 	}
+
+	done := make(chan contextResolution, 1)
+	go func() {
+		defer func() { <-d.resolveSlots }()
+		done <- resolveContext(d.globalFile, event.Root)
+	}()
+
+	select {
+	case resolution := <-done:
+		return resolution
+	case <-time.After(d.resolveTimeout):
+		return contextResolution{err: fmt.Errorf("resolving project root %q timed out after %s", event.Root, d.resolveTimeout)}
+	}
+}
+
+func (d *daemon) applyResolvedContext(resolution contextResolution) error {
 	if d.sounding() {
 		return nil
 	}
 
 	previousRoot, previousScale := d.engine.Tuning()
 
-	tune, scale, err := daemonTuning(cfg)
+	tune, scale, err := daemonTuning(resolution.cfg)
 	if err != nil {
 		return err
 	}
@@ -229,22 +299,21 @@ func (d *daemon) adoptContext(root string) error {
 		return err
 	}
 
-	owner := root
-	if root != "" {
-		if canonical, err := config.CanonicalRoot(root); err == nil {
-			owner = canonical
-		}
-	}
+	owner := resolution.owner
 
-	if cfg.Music.Theme != d.theme.Name {
-		if err := d.useTheme(cfg.Music.Theme); err != nil {
-			d.throttled(slog.LevelWarn, "keeping the current theme", err, "requested", cfg.Music.Theme)
+	if resolution.cfg.Music.Theme != d.theme.Name {
+		err := resolution.themeErr
+		if err == nil {
+			err = d.applyTheme(resolution.theme)
+		}
+		if err != nil {
+			d.throttled(slog.LevelWarn, "keeping the current theme", err, "requested", resolution.cfg.Music.Theme)
 		}
 	}
 	changed := owner != d.contextOwner || tune != previousRoot || scale.Name != previousScale.Name
 	d.contextOwner = owner
 
-	d.logContext(changed, cfg.Music.Root, scale.Name, owner)
+	d.logContext(changed, resolution.cfg.Music.Root, scale.Name, owner)
 	return nil
 }
 
@@ -262,6 +331,10 @@ func (d *daemon) useTheme(name string) error {
 	if err != nil {
 		return err
 	}
+	return d.applyTheme(th)
+}
+
+func (d *daemon) applyTheme(th theme.Theme) error {
 	if setter, ok := d.render.(renderer.Themeable); ok {
 		if err := setter.SetTheme(th); err != nil {
 			return err

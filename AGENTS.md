@@ -495,6 +495,15 @@ Things the code cannot say, that will be "fixed" back if forgotten.
   must include `"owner_host":"$(hostname)"` alongside `owner_pid`, or the pid is
   silently ignored and the session relies on traps, or on `session.max_lease` if
   one is set, for termination.
+- `resolveContext` runs on the connection goroutine, inside `handle`, and never
+  inside `dispatch` or `applyEvent`. It also loads the project's theme, which is
+  why `applyResolvedContext` calls `applyTheme` and not `useTheme`. Moving either
+  back puts `os.Stat`, `filepath.EvalSymlinks` or a theme `os.ReadFile` on the
+  goroutine every other client queues behind (#136).
+- A timed-out resolution's goroutine is not cancelled and keeps its
+  `resolveSlots` slot until its `stat` returns. A stuck `stat` cannot be
+  interrupted, so releasing the slot on timeout would let a flood of dead roots
+  pile up OS threads without limit.
 
 ## Protocol
 

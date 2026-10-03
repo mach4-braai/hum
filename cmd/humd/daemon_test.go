@@ -601,12 +601,13 @@ func TestActiveReapWithDeadOwnerReachesRenderer(t *testing.T) {
 
 	const impossiblePID = 1<<31 - 1
 
-	resp := d.applyEvent(protocol.Event{
+	startEvent := protocol.Event{
 		Event:     protocol.SessionStarted,
 		ID:        "reap-test",
 		OwnerPID:  impossiblePID,
 		OwnerHost: d.daemonHost,
-	})
+	}
+	resp := d.applyEvent(startEvent, d.resolveForEvent(startEvent))
 	if !resp.OK {
 		t.Fatalf("start session: %v", resp.Error)
 	}
@@ -628,12 +629,13 @@ func TestActiveReapWithDeadOwnerReachesRenderer(t *testing.T) {
 func TestActiveReapWithAliveOwnerLeavesRenderer(t *testing.T) {
 	d, rec := testDaemon(t)
 
-	resp := d.applyEvent(protocol.Event{
+	startEvent := protocol.Event{
 		Event:     protocol.SessionStarted,
 		ID:        "alive-test",
 		OwnerPID:  os.Getpid(),
 		OwnerHost: d.daemonHost,
-	})
+	}
+	resp := d.applyEvent(startEvent, d.resolveForEvent(startEvent))
 	if !resp.OK {
 		t.Fatalf("start session: %v", resp.Error)
 	}
@@ -653,12 +655,13 @@ func TestActiveReapIsLoggedAtWarn(t *testing.T) {
 
 	const impossiblePID = 1<<31 - 1
 
-	resp := d.applyEvent(protocol.Event{
+	startEvent := protocol.Event{
 		Event:     protocol.SessionStarted,
 		ID:        "log-test",
 		OwnerPID:  impossiblePID,
 		OwnerHost: d.daemonHost,
-	})
+	}
+	resp := d.applyEvent(startEvent, d.resolveForEvent(startEvent))
 	if !resp.OK {
 		t.Fatalf("start session: %v", resp.Error)
 	}
@@ -677,10 +680,11 @@ func TestActiveReapIsLoggedAtWarn(t *testing.T) {
 func TestActiveReapWithNoOwnerNotReaped(t *testing.T) {
 	d, rec := testDaemon(t)
 
-	resp := d.applyEvent(protocol.Event{
+	startEvent := protocol.Event{
 		Event: protocol.SessionStarted,
 		ID:    "no-owner-test",
-	})
+	}
+	resp := d.applyEvent(startEvent, d.resolveForEvent(startEvent))
 	if !resp.OK {
 		t.Fatalf("start session: %v", resp.Error)
 	}
@@ -697,10 +701,11 @@ func TestActiveReapWithExpiredLeaseReachesRenderer(t *testing.T) {
 	d, rec := testDaemon(t)
 	d.maxLease = time.Nanosecond
 
-	resp := d.applyEvent(protocol.Event{
+	startEvent := protocol.Event{
 		Event: protocol.SessionStarted,
 		ID:    "lease-test",
-	})
+	}
+	resp := d.applyEvent(startEvent, d.resolveForEvent(startEvent))
 	if !resp.OK {
 		t.Fatalf("start session: %v", resp.Error)
 	}

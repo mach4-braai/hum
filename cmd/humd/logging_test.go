@@ -41,7 +41,7 @@ func linesWith(buf *bytes.Buffer, want string) []string {
 
 func drive(t *testing.T, d *daemon, event protocol.Event) {
 	t.Helper()
-	if resp := d.applyEvent(event); !resp.OK {
+	if resp := d.applyEvent(event, d.resolveForEvent(event)); !resp.OK {
 		t.Fatalf("%s %s: %s", event.Event, event.ID, resp.Error)
 	}
 }
@@ -122,9 +122,11 @@ func TestAPersistentRendererFaultIsDeduplicated(t *testing.T) {
 	clock := time.Unix(0, 0)
 	d.throttle.now = func() time.Time { return clock }
 
-	d.applyEvent(protocol.Event{Event: protocol.SessionStarted, ID: "s"})
+	startEvent := protocol.Event{Event: protocol.SessionStarted, ID: "s"}
+	d.applyEvent(startEvent, d.resolveForEvent(startEvent))
+	updateEvent := protocol.Event{Event: protocol.SessionUpdated, ID: "s"}
 	for range 600 {
-		d.applyEvent(protocol.Event{Event: protocol.SessionUpdated, ID: "s"})
+		d.applyEvent(updateEvent, d.resolveForEvent(updateEvent))
 		clock = clock.Add(100 * time.Millisecond)
 	}
 
@@ -133,7 +135,7 @@ func TestAPersistentRendererFaultIsDeduplicated(t *testing.T) {
 		t.Fatalf("601 failures inside one window produced %d lines, want 1:\n%s", len(faults), buf)
 	}
 
-	d.applyEvent(protocol.Event{Event: protocol.SessionUpdated, ID: "s"})
+	d.applyEvent(updateEvent, d.resolveForEvent(updateEvent))
 
 	faults = linesWith(buf, "renderer update failed")
 	if len(faults) != 2 {
@@ -228,9 +230,11 @@ func TestSummaryReportsSuppressedFaults(t *testing.T) {
 	clock := time.Unix(0, 0)
 	d.throttle.now = func() time.Time { return clock }
 
-	d.applyEvent(protocol.Event{Event: protocol.SessionStarted, ID: "s"})
+	startEvent := protocol.Event{Event: protocol.SessionStarted, ID: "s"}
+	d.applyEvent(startEvent, d.resolveForEvent(startEvent))
+	updateEvent := protocol.Event{Event: protocol.SessionUpdated, ID: "s"}
 	for range 5 {
-		d.applyEvent(protocol.Event{Event: protocol.SessionUpdated, ID: "s"})
+		d.applyEvent(updateEvent, d.resolveForEvent(updateEvent))
 	}
 	d.logSummary()
 

@@ -129,7 +129,7 @@ func TestDispatchRejectsInvalidRequest(t *testing.T) {
 	t.Setenv("HUM_HOME", t.TempDir())
 	d, _ := testDaemon(t)
 
-	resp := d.dispatch(protocol.Request{Command: protocol.Command("badcmd")})
+	resp := d.dispatch(protocol.Request{Command: protocol.Command("badcmd")}, contextResolution{})
 	if resp.OK {
 		t.Errorf("dispatch(invalid) = %+v, want failure", resp)
 	}
@@ -654,7 +654,11 @@ func TestServeEventsTickerReapsTerminalSessions(t *testing.T) {
 		event(protocol.SessionCompleted, "tick-reaped"),
 	} {
 		reply := make(chan protocol.Response, 1)
-		d.calls <- call{request: ev, reply: reply}
+		var resolution contextResolution
+		if ev.Event != nil {
+			resolution = d.resolveForEvent(*ev.Event)
+		}
+		d.calls <- call{request: ev, resolution: resolution, reply: reply}
 		if resp := <-reply; !resp.OK {
 			t.Fatalf("%+v = %+v, want ok", ev.Event, resp)
 		}
@@ -693,7 +697,7 @@ func TestSummaryTickerFiresInEventLoop(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go d.serveEvents(ctx)
 
-	d.calls <- call{request: protocol.Request{Event: &ev}, reply: reply}
+	d.calls <- call{request: protocol.Request{Event: &ev}, resolution: d.resolveForEvent(ev), reply: reply}
 	if resp := <-reply; !resp.OK {
 		t.Fatalf("session start: %s", resp.Error)
 	}
