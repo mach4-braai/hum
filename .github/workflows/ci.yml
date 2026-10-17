@@ -24,13 +24,13 @@ jobs:
       contents: read
       id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
@@ -61,13 +61,13 @@ jobs:
       contents: read
       id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
@@ -107,13 +107,13 @@ jobs:
       contents: read
       id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
@@ -134,13 +134,13 @@ jobs:
       id-token: write # authenticates the Codecov upload, which a protected branch requires
       statuses: write # posts the coverage/total commit status
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
@@ -218,13 +218,13 @@ jobs:
       contents: read
       id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
@@ -249,13 +249,13 @@ jobs:
       contents: read
       id-token: write # joins the tailnet and authenticates to gauger-server
     steps:
-      - uses: mach4-braai/gauger@b7c160a75e3d9e635f28a6bff32d5024bc99381a # v0.1.1
+      - uses: mach4-braai/gauger@9e6515bd03f2109029be92582a11a1c3c8947be9 # v0.2.0
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      - uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Cache the Go modules and the compiler output
         uses: ./.github/actions/go-cache
